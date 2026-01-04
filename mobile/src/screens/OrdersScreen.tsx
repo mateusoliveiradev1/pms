@@ -26,6 +26,15 @@ const OrdersScreen = () => {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
 
+  const STATUS_OPTIONS = [
+    { label: 'Todos', value: null as string | null, icon: 'list' as const },
+    { label: 'Novo', value: 'NEW' as const, icon: 'document-text' as const },
+    { label: 'Enviado ao fornecedor', value: 'SENT_TO_SUPPLIER' as const, icon: 'send' as const },
+    { label: 'Em transporte', value: 'SHIPPING' as const, icon: 'cube' as const },
+    { label: 'Entregue', value: 'DELIVERED' as const, icon: 'checkmark-circle' as const },
+    { label: 'Cancelado', value: 'CANCELLED' as const, icon: 'close-circle' as const },
+  ];
+
   useEffect(() => {
     if (isFocused) {
         loadOrders();
@@ -61,6 +70,16 @@ const OrdersScreen = () => {
         default: return '#6c757d';
     }
   };
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'NEW': return 'Novo';
+      case 'SENT_TO_SUPPLIER': return 'Enviado ao fornecedor';
+      case 'SHIPPING': return 'Em transporte';
+      case 'DELIVERED': return 'Entregue';
+      case 'CANCELLED': return 'Cancelado';
+      default: return status;
+    }
+  };
 
   const renderItem = ({ item }: { item: Order }) => (
     <TouchableOpacity onPress={() => (navigation as any).navigate('OrderDetails', { order: item })}>
@@ -68,7 +87,7 @@ const OrdersScreen = () => {
         <View style={styles.cardHeader}>
           <Text style={styles.customerName}>{item.customerName || 'Cliente Anônimo'}</Text>
           <Badge
-            text={item.status}
+            text={getStatusLabel(item.status)}
             color="#FFF"
             backgroundColor={getStatusColor(item.status)}
           />
@@ -88,11 +107,13 @@ const OrdersScreen = () => {
       <Header showLogo logoSize={32} animateLogo={isFocused} animateKey={animateTick} logoDuration={700} rightIcon="refresh" onRightPress={() => loadOrders()} />
 
       <View style={styles.filterBar}>
-        {['ALL','NEW','SENT_TO_SUPPLIER','SHIPPING','DELIVERED','CANCELLED'].map(st => {
-          const active = (selectedStatus || 'ALL') === st;
+        {STATUS_OPTIONS.map(opt => {
+          const active = (selectedStatus ?? null) === opt.value;
+          const color = opt.value ? getStatusColor(String(opt.value)) : '#007bff';
           return (
-            <TouchableOpacity key={st} style={[styles.filterPill, active ? styles.filterPillActive : null]} onPress={() => { setSelectedStatus(st === 'ALL' ? null : st); loadOrders(); }}>
-              <Text style={[styles.filterText, active ? styles.filterTextActive : null]}>{st === 'ALL' ? 'Todos' : st}</Text>
+            <TouchableOpacity key={String(opt.value)} style={[styles.filterPill, active ? [styles.filterPillActive, { borderColor: color, backgroundColor: '#fff' }] : null]} onPress={() => { setSelectedStatus(opt.value); loadOrders(); }}>
+              <Ionicons name={opt.icon} size={14} color={active ? color : '#777'} />
+              <Text style={[styles.filterText, active ? { color } : null]}>{opt.label}</Text>
             </TouchableOpacity>
           );
         })}
