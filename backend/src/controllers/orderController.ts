@@ -21,11 +21,12 @@ export const getOrderStatusStats = async (req: Request, res: Response) => {
   try {
     const grouped = await prisma.order.groupBy({
       by: ['status'],
-      _count: { status: true }
+      _count: { _all: true }
     });
     const map: Record<string, number> = {};
     for (const g of grouped) {
-      map[g.status] = (g as any)._count.status || 0;
+      // @ts-ignore
+      map[g.status] = g._count._all || 0;
     }
     const all = await prisma.order.count();
     res.json({
