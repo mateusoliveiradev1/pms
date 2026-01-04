@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,13 +19,14 @@ const ProductsListScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [animateTick, setAnimateTick] = useState(0);
+  const [query, setQuery] = useState('');
   const navigation = useNavigation();
   const isFocused = useIsFocused();
 
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/products');
+      const response = await api.get('/products', { params: query ? { query } : undefined });
       setProducts(response.data);
     } catch (error) {
       console.log('Error loading products', error);
@@ -63,6 +64,23 @@ const ProductsListScreen = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <Header onBack={() => navigation.goBack()} showLogo logoSize={32} animateLogo={isFocused} animateKey={animateTick} logoDuration={700} rightIcon="refresh" onRightPress={() => loadProducts()} />
 
+      <View style={styles.searchBar}>
+        <Ionicons name="search" size={18} color="#666" />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Buscar por nome ou SKU"
+          style={styles.searchInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          onSubmitEditing={() => loadProducts()}
+        />
+        <TouchableOpacity style={styles.searchButton} onPress={() => loadProducts()}>
+          <Text style={styles.searchButtonText}>Buscar</Text>
+        </TouchableOpacity>
+      </View>
+
       {loading && !refreshing ? (
         <ActivityIndicator size="large" color="#007bff" style={{ marginTop: 20 }} />
       ) : (
@@ -85,6 +103,35 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: 16,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 8,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#eee'
+  },
+  searchInput: {
+    flex: 1,
+    marginHorizontal: 8,
+    fontSize: 14,
+    color: '#333',
+  },
+  searchButton: {
+    backgroundColor: '#1976d2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  searchButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
   card: {
     backgroundColor: '#FFF',

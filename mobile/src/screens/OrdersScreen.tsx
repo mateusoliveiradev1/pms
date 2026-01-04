@@ -22,6 +22,7 @@ const OrdersScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [animateTick, setAnimateTick] = useState(0);
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const navigation = useNavigation();
   const isFocused = useIsFocused();
 
@@ -34,7 +35,7 @@ const OrdersScreen = () => {
   const loadOrders = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/orders');
+      const response = await api.get('/orders', { params: selectedStatus ? { status: selectedStatus } : undefined });
       setOrders(response.data);
     } catch (error) {
       console.log('Error loading orders', error);
@@ -86,6 +87,17 @@ const OrdersScreen = () => {
     <SafeAreaView style={styles.container} edges={['top']}>
       <Header showLogo logoSize={32} animateLogo={isFocused} animateKey={animateTick} logoDuration={700} rightIcon="refresh" onRightPress={() => loadOrders()} />
 
+      <View style={styles.filterBar}>
+        {['ALL','NEW','SENT_TO_SUPPLIER','SHIPPING','DELIVERED','CANCELLED'].map(st => {
+          const active = (selectedStatus || 'ALL') === st;
+          return (
+            <TouchableOpacity key={st} style={[styles.filterPill, active ? styles.filterPillActive : null]} onPress={() => { setSelectedStatus(st === 'ALL' ? null : st); loadOrders(); }}>
+              <Text style={[styles.filterText, active ? styles.filterTextActive : null]}>{st === 'ALL' ? 'Todos' : st}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {loading && !refreshing ? (
         <ActivityIndicator size="large" color="#007bff" style={{ marginTop: 20 }} />
       ) : (
@@ -122,6 +134,35 @@ const styles = StyleSheet.create({
   list: {
     padding: spacing.md,
     paddingBottom: 80,
+  },
+  filterBar: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: spacing.md,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  filterPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginRight: 8,
+    marginBottom: 8,
+    backgroundColor: '#fff',
+  },
+  filterPillActive: {
+    borderColor: '#007bff',
+    backgroundColor: '#e6f0ff',
+  },
+  filterText: {
+    fontSize: 12,
+    color: '#555',
+    fontWeight: 'bold',
+  },
+  filterTextActive: {
+    color: '#007bff',
   },
   cardHeader: {
     flexDirection: 'row',

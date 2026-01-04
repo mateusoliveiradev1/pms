@@ -3,7 +3,17 @@ import prisma from '../prisma';
 
 export const getProducts = async (req: Request, res: Response) => {
   try {
+    const { query } = req.query as { query?: string };
+    const where = query
+      ? {
+          OR: [
+            { name: { contains: String(query), mode: 'insensitive' } },
+            { sku: { contains: String(query), mode: 'insensitive' } },
+          ],
+        }
+      : undefined;
     const products = await prisma.product.findMany({
+      where,
       include: { suppliers: { include: { supplier: true } } },
     });
     res.json(products);
@@ -148,4 +158,40 @@ export const updateProduct = async (req: Request, res: Response) => {
         console.log(error);
         res.status(500).json({ message: 'Error updating product', error });
     }
+};
+
+export const exportProductsCsv = async (req: Request, res: Response) => {
+  try {
+    const { query } = req.query as { query?: string };
+    const where = query
+      ? {
+          OR: [
+            { name: { contains: String(query), mode: 'insensitive' } },
+            { sku: { contains: String(query), mode: 'insensitive' } },
+          ],
+        }
+      : undefined;
+    const products = await prisma.product.findMany({
+      where,
+      include: { suppliers: true }
+    });
+    const header = ['id','name','sku','finalPrice','stockAvailable','suppliersCount'].join(',');
+    const rows = products.map(p => {
+      const cols = [
+        p.id,
+        p.name,
+        p.sku,
+        String(p.finalPrice ?? 0),
+        String(p.stockAvailable ?? 0),
+        String(p.suppliers.length)
+      ];
+      return cols.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+    });
+    const csv = [header, ...rows].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=\"products.csv\"');
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ message: 'Error exporting products CSV', error });
+  }
 };

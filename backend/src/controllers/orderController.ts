@@ -4,13 +4,46 @@ import { createNotification } from './notificationController';
 
 export const getOrders = async (req: Request, res: Response) => {
   try {
+    const { status } = req.query as { status?: string };
+    const where = status ? { status: String(status) } : undefined;
     const orders = await prisma.order.findMany({
+      where,
       include: { items: { include: { product: true } } },
       orderBy: { createdAt: 'desc' }
     });
     res.json(orders);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching orders', error });
+  }
+};
+
+export const exportOrdersCsv = async (req: Request, res: Response) => {
+  try {
+    const { status } = req.query as { status?: string };
+    const where = status ? { status: String(status) } : undefined;
+    const orders = await prisma.order.findMany({
+      where,
+      include: { items: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    const header = ['id','customerName','status','totalAmount','itemsCount','createdAt'].join(',');
+    const rows = orders.map(o => {
+      const cols = [
+        o.id,
+        o.customerName || '',
+        o.status,
+        String(o.totalAmount ?? 0),
+        String(o.items.length),
+        o.createdAt.toISOString()
+      ];
+      return cols.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+    });
+    const csv = [header, ...rows].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename=\"orders.csv\"');
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ message: 'Error exporting orders CSV', error });
   }
 };
 
