@@ -87,7 +87,7 @@ const OrderDetailsScreen = () => {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Status</Text>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(currentOrder.status) }]}>
-            <Text style={styles.statusText}>{currentOrder.status}</Text>
+            <Text style={styles.statusText}>{getStatusLabel(currentOrder.status)}</Text>
           </View>
           {currentOrder.trackingCode && (
              <View style={styles.trackingContainer}>
@@ -182,6 +182,17 @@ const getStatusColor = (status: string) => {
         case 'DELIVERED': return '#28a745';
         case 'CANCELLED': return '#dc3545';
         default: return '#6c757d';
+    }
+};
+
+const getStatusLabel = (status: string) => {
+    switch (status) {
+        case 'NEW': return 'Novo';
+        case 'SENT_TO_SUPPLIER': return 'Enviado ao fornecedor';
+        case 'SHIPPING': return 'Em transporte';
+        case 'DELIVERED': return 'Entregue';
+        case 'CANCELLED': return 'Cancelado';
+        default: return status;
     }
 };
 

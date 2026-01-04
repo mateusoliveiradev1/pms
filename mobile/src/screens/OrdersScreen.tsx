@@ -64,15 +64,21 @@ const OrdersScreen = () => {
     try {
       const response = await api.get('/orders/stats');
       setCounts(response.data || {});
-    } catch (e) {
-      const local = { ALL: orders.length, NEW: 0, SENT_TO_SUPPLIER: 0, SHIPPING: 0, DELIVERED: 0, CANCELLED: 0 };
-      for (const o of orders) {
-        if (local[o.status as keyof typeof local] !== undefined) {
-          // @ts-ignore
-          local[o.status] += 1;
+    } catch (err) {
+      try {
+        const response = await api.get('/orders');
+        const list: Order[] = response.data || [];
+        const local: Record<string, number> = { ALL: list.length, NEW: 0, SENT_TO_SUPPLIER: 0, SHIPPING: 0, DELIVERED: 0, CANCELLED: 0 };
+        for (const o of list) {
+          const key = o.status;
+          if (local[key] !== undefined) {
+            local[key] += 1;
+          }
         }
+        setCounts(local);
+      } catch {
+        setCounts({});
       }
-      setCounts(local);
     }
   };
 
@@ -85,6 +91,7 @@ const OrdersScreen = () => {
       setRefreshing(true);
       setAnimateTick(t => t + 1);
       loadOrders();
+      loadCounts();
   };
 
   const getStatusColor = (status: string) => {
