@@ -1,0 +1,113 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("OPERATOR") // ADMIN, OPERATOR
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Supplier {
+  id             String    @id @default(uuid())
+  name           String
+  integrationType String   // MANUAL, API
+  shippingDeadline Int?    // Days
+  status         String    @default("ACTIVE") // ACTIVE, PAUSED
+  products       ProductSupplier[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Product {
+  id               String   @id @default(uuid())
+  name             String
+  sku              String   @unique
+  description      String?
+  imageUrl         String?
+  
+  // Agregated fields
+  stockAvailable   Int      @default(0) // Sum of (virtualStock - safetyStock) from all suppliers
+  
+  suppliers        ProductSupplier[]
+
+  marginType       String   @default("FIXED") // FIXED, DYNAMIC
+  marginValue      Float    @default(0) 
+  finalPrice       Float
+  
+  mercadoLivreId   String?  // ID do anúncio no ML
+  mercadoLivreStatus String? // active, paused, closed
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  OrderItem        OrderItem[]
+}
+
+model ProductSupplier {
+  id             String   @id @default(uuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+  supplierId     String
+  supplier       Supplier @relation(fields: [supplierId], references: [id])
+  
+  supplierPrice  Float
+  virtualStock   Int      @default(0)
+  safetyStock    Int      @default(0)
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([productId, supplierId])
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  mercadoLivreId  String?     @unique
+  status          String      @default("NEW") // NEW, SENT_TO_SUPPLIER, SHIPPING, DELIVERED, CANCELLED
+  totalAmount     Float
+  trackingCode    String?
+  customerName    String?
+  customerAddress String?
+  items           OrderItem[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  type      String   // STOCK, ORDER, INFO
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Log {
+  id        String   @id @default(uuid())
+  level     String   // INFO, ERROR, WARN
+  message   String
+  context   String?  // JSON string for details
+  createdAt DateTime @default(now())
+}
