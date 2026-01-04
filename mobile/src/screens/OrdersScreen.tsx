@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../services/api';
@@ -65,9 +65,21 @@ const OrdersScreen = () => {
       const response = await api.get('/orders/stats');
       setCounts(response.data || {});
     } catch (e) {
-      // noop
+      const local = { ALL: orders.length, NEW: 0, SENT_TO_SUPPLIER: 0, SHIPPING: 0, DELIVERED: 0, CANCELLED: 0 };
+      for (const o of orders) {
+        if (local[o.status as keyof typeof local] !== undefined) {
+          // @ts-ignore
+          local[o.status] += 1;
+        }
+      }
+      setCounts(local);
     }
   };
+
+  const visibleOrders = useMemo(() => {
+    if (!selectedStatus) return orders;
+    return orders.filter(o => o.status === selectedStatus);
+  }, [orders, selectedStatus]);
 
   const onRefresh = () => {
       setRefreshing(true);
@@ -140,7 +152,7 @@ const OrdersScreen = () => {
         <ActivityIndicator size="large" color="#007bff" style={{ marginTop: 20 }} />
       ) : (
         <FlatList
-          data={orders}
+          data={visibleOrders}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
