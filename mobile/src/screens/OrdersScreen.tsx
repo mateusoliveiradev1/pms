@@ -23,6 +23,7 @@ const OrdersScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [animateTick, setAnimateTick] = useState(0);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [counts, setCounts] = useState<Record<string, number>>({});
   const navigation = useNavigation();
   const isFocused = useIsFocused();
 
@@ -38,8 +39,13 @@ const OrdersScreen = () => {
   useEffect(() => {
     if (isFocused) {
         loadOrders();
+        loadCounts();
     }
   }, [isFocused]);
+
+  useEffect(() => {
+    loadOrders();
+  }, [selectedStatus]);
 
   const loadOrders = async () => {
     try {
@@ -51,6 +57,15 @@ const OrdersScreen = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const loadCounts = async () => {
+    try {
+      const response = await api.get('/orders/stats');
+      setCounts(response.data || {});
+    } catch (e) {
+      // noop
     }
   };
 
@@ -110,10 +125,12 @@ const OrdersScreen = () => {
         {STATUS_OPTIONS.map(opt => {
           const active = (selectedStatus ?? null) === opt.value;
           const color = opt.value ? getStatusColor(String(opt.value)) : '#007bff';
+          const key = opt.value ?? 'ALL';
+          const count = counts[String(key)] ?? 0;
           return (
-            <TouchableOpacity key={String(opt.value)} style={[styles.filterPill, active ? [styles.filterPillActive, { borderColor: color, backgroundColor: '#fff' }] : null]} onPress={() => { setSelectedStatus(opt.value); loadOrders(); }}>
+            <TouchableOpacity key={String(opt.value)} style={[styles.filterPill, active ? [styles.filterPillActive, { borderColor: color, backgroundColor: '#fff' }] : null]} onPress={() => { setSelectedStatus(opt.value); }}>
               <Ionicons name={opt.icon} size={14} color={active ? color : '#777'} />
-              <Text style={[styles.filterText, active ? { color } : null]}>{opt.label}</Text>
+              <Text style={[styles.filterText, active ? { color } : null]}>{opt.label}{typeof count === 'number' ? ` (${count})` : ''}</Text>
             </TouchableOpacity>
           );
         })}

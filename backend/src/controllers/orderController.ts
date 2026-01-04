@@ -17,6 +17,30 @@ export const getOrders = async (req: Request, res: Response) => {
   }
 };
 
+export const getOrderStatusStats = async (req: Request, res: Response) => {
+  try {
+    const grouped = await prisma.order.groupBy({
+      by: ['status'],
+      _count: { status: true }
+    });
+    const map: Record<string, number> = {};
+    for (const g of grouped) {
+      map[g.status] = (g as any)._count.status || 0;
+    }
+    const all = await prisma.order.count();
+    res.json({
+      ALL: all,
+      NEW: map['NEW'] || 0,
+      SENT_TO_SUPPLIER: map['SENT_TO_SUPPLIER'] || 0,
+      SHIPPING: map['SHIPPING'] || 0,
+      DELIVERED: map['DELIVERED'] || 0,
+      CANCELLED: map['CANCELLED'] || 0
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching order status stats', error });
+  }
+};
+
 export const exportOrdersCsv = async (req: Request, res: Response) => {
   try {
     const { status } = req.query as { status?: string };
