@@ -54,7 +54,16 @@ Sistema completo de gestão para operação de Dropshipping sem estoque físico,
    ```
    *Login:* `admin@pms.com` | *Senha:* `123456`
 
-4. Inicie o servidor:
+4. Configure as variáveis de ambiente no arquivo `.env` (crie se não existir):
+   ```env
+   DATABASE_URL="file:./dev.db"
+   JWT_SECRET="seu_segredo_jwt"
+   ML_CLIENT_ID="seu_app_id_ml"
+   ML_CLIENT_SECRET="seu_secret_ml"
+   ML_REDIRECT_URI="http://localhost:3000/api/mercadolivre/callback"
+   ```
+
+5. Inicie o servidor:
    ```bash
    npm run dev
    ```

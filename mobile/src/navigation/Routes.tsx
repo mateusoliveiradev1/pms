@@ -18,6 +18,7 @@ import SuppliersListScreen from '../screens/Suppliers/SuppliersListScreen';
 import SupplierFormScreen from '../screens/Suppliers/SupplierFormScreen';
 import ProductFormScreen from '../screens/Products/ProductFormScreen';
 import ProductsListScreen from '../screens/Products/ProductsListScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -48,6 +49,8 @@ function AppTabs() {
             iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Notificações') {
             iconName = focused ? 'notifications' : 'notifications-outline';
+          } else if (route.name === 'Ajustes') {
+            iconName = focused ? 'settings' : 'settings-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -60,6 +63,7 @@ function AppTabs() {
       <Tab.Screen name="Pedidos" component={OrdersScreen} />
       <Tab.Screen name="Fornecedores" component={SuppliersStack} />
       <Tab.Screen name="Notificações" component={NotificationsScreen} />
+      <Tab.Screen name="Ajustes" component={SettingsScreen} />
     </Tab.Navigator>
   );
 }

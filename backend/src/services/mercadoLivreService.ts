@@ -66,3 +66,22 @@ export const mapMlStatusToPms = (mlStatus: string): string => {
   };
   return map[mlStatus] || 'NEW';
 };
+
+export const fetchItemsBySeller = async (accessToken: string, sellerId: string) => {
+  // Busca IDs dos anúncios ativos
+  const response = await axios.get(`${ML_API_URL}/users/${sellerId}/items/search?status=active`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return response.data; 
+};
+
+export const getItemsDetails = async (accessToken: string, itemIds: string[]) => {
+  if (itemIds.length === 0) return [];
+  // ML allows up to 20 items per request usually, but let's assume ids list is chunked by caller or small enough
+  // Or simply comma separated
+  const ids = itemIds.join(',');
+  const response = await axios.get(`${ML_API_URL}/items?ids=${ids}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return response.data; // Array of objects like { code: 200, body: {...} }
+};

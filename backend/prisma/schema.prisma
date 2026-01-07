@@ -104,6 +104,17 @@ model Notification {
   createdAt DateTime @default(now())
 }
 
+model Integration {
+  id           String   @id @default(uuid())
+  provider     String   @unique // "MERCADOLIVRE"
+  accessToken  String
+  refreshToken String
+  expiresIn    Int
+  userId       String   // External User ID (Seller ID)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 model Log {
   id        String   @id @default(uuid())
   level     String   // INFO, ERROR, WARN
