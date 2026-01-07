@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
+import { sendPushToAdmins } from '../services/notificationService';
 
 export const getNotifications = async (req: Request, res: Response) => {
   try {
@@ -31,6 +32,9 @@ export const createNotification = async (title: string, message: string, type: s
         await prisma.notification.create({
             data: { title, message, type }
         });
+        
+        // Send Push Notification
+        await sendPushToAdmins(title, message, { type });
     } catch (e) {
         console.error('Failed to create notification', e);
     }

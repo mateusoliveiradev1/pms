@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import api from '../services/api';
+import { registerForPushNotificationsAsync } from '../services/PushNotificationService';
 
 interface AuthContextData {
   signed: boolean;
@@ -24,6 +25,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (storagedUser && storagedToken) {
         api.defaults.headers['Authorization'] = `Bearer ${storagedToken}`;
         setUser(JSON.parse(storagedUser));
+        // Refresh push token on app load if logged in
+        registerForPushNotificationsAsync().catch(console.log);
       }
       setLoading(false);
     }
@@ -44,6 +47,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     api.defaults.headers['Authorization'] = `Bearer ${token}`;
     setUser(user);
+    
+    // Register for push notifications
+    registerForPushNotificationsAsync().catch(console.log);
   }
 
   async function signOut() {
