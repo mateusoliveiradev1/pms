@@ -59,6 +59,11 @@ const DashboardScreen = () => {
     }
   };
 
+  const navigateToReports = () => {
+      // @ts-ignore
+      navigation.navigate('Reports');
+  };
+
   const onRefresh = () => {
       setRefreshing(true);
       setAnimateTick(t => t + 1);
@@ -141,6 +146,11 @@ const DashboardScreen = () => {
                     <Text style={styles.statLabelSmall}>Estoque Baixo</Text>
                 </Card>
               </View>
+
+              <TouchableOpacity style={styles.reportsButton} onPress={navigateToReports}>
+                <Ionicons name="bar-chart" size={20} color="#fff" />
+                <Text style={styles.reportsButtonText}>Ver Relatórios Detalhados</Text>
+              </TouchableOpacity>
           </View>
 
           <View style={styles.sectionHeader}>
@@ -265,6 +275,21 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
+  },
+  reportsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  reportsButtonText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginLeft: 8,
   },
 });
 

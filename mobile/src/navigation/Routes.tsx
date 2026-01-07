@@ -13,6 +13,7 @@ import OrdersScreen from '../screens/OrdersScreen';
 import OrderFormScreen from '../screens/Orders/OrderFormScreen';
 import OrderDetailsScreen from '../screens/Orders/OrderDetailsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import ReportsScreen from '../screens/ReportsScreen';
 
 import SuppliersListScreen from '../screens/Suppliers/SuppliersListScreen';
 import SupplierFormScreen from '../screens/Suppliers/SupplierFormScreen';
@@ -85,6 +86,7 @@ const Routes = () => {
             <Stack.Screen name="ProductsList" component={ProductsListScreen} />
             <Stack.Screen name="OrderForm" component={OrderFormScreen} />
             <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
+            <Stack.Screen name="Reports" component={ReportsScreen} options={{ headerShown: true, title: 'Relatórios' }} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
