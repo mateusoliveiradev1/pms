@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import api from '../../services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Header from '../../ui/components/Header';
+import { colors, shadow } from '../../ui/theme';
 
 const SupplierFormScreen = () => {
   const [name, setName] = useState('');
@@ -38,73 +40,79 @@ const SupplierFormScreen = () => {
     }
   };
 
+  const renderOption = (label: string, value: string, currentValue: string, onSelect: (val: string) => void) => {
+      const isSelected = currentValue === value;
+      return (
+          <TouchableOpacity 
+            style={[styles.optionButton, isSelected && styles.optionSelected]}
+            onPress={() => onSelect(value)}
+          >
+            <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{label}</Text>
+          </TouchableOpacity>
+      );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Novo Fornecedor</Text>
-      </View>
+      <Header title="Novo Fornecedor" onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.form}>
-        <Text style={styles.label}>Nome do Fornecedor *</Text>
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder="Ex: Fornecedor SP"
-        />
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.form}>
+            <View style={styles.section}>
+                <Text style={styles.label}>Nome do Fornecedor *</Text>
+                <View style={styles.inputContainer}>
+                    <Ionicons name="business-outline" size={20} color="#999" style={styles.inputIcon} />
+                    <TextInput
+                    style={styles.input}
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="Ex: Fornecedor SP"
+                    placeholderTextColor="#999"
+                    />
+                </View>
 
-        <Text style={styles.label}>Tipo de Integração</Text>
-        <View style={styles.row}>
-          <TouchableOpacity 
-            style={[styles.optionButton, integrationType === 'MANUAL' && styles.optionSelected]}
-            onPress={() => setIntegrationType('MANUAL')}
-          >
-            <Text style={[styles.optionText, integrationType === 'MANUAL' && styles.optionTextSelected]}>Manual</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.optionButton, integrationType === 'API' && styles.optionSelected]}
-            onPress={() => setIntegrationType('API')}
-          >
-            <Text style={[styles.optionText, integrationType === 'API' && styles.optionTextSelected]}>API</Text>
-          </TouchableOpacity>
-        </View>
+                <Text style={styles.label}>Prazo de Envio (dias) *</Text>
+                <View style={styles.inputContainer}>
+                    <Ionicons name="time-outline" size={20} color="#999" style={styles.inputIcon} />
+                    <TextInput
+                    style={styles.input}
+                    value={shippingDeadline}
+                    onChangeText={setShippingDeadline}
+                    placeholder="Ex: 2"
+                    placeholderTextColor="#999"
+                    keyboardType="numeric"
+                    />
+                </View>
+            </View>
 
-        <Text style={styles.label}>Prazo de Envio (dias) *</Text>
-        <TextInput
-          style={styles.input}
-          value={shippingDeadline}
-          onChangeText={setShippingDeadline}
-          placeholder="Ex: 2"
-          keyboardType="numeric"
-        />
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Configurações</Text>
+                
+                <Text style={styles.label}>Tipo de Integração</Text>
+                <View style={styles.row}>
+                    {renderOption('Manual', 'MANUAL', integrationType, setIntegrationType)}
+                    {renderOption('API', 'API', integrationType, setIntegrationType)}
+                </View>
 
-        <Text style={styles.label}>Status</Text>
-        <View style={styles.row}>
-          <TouchableOpacity 
-            style={[styles.optionButton, status === 'ACTIVE' && styles.optionSelected]}
-            onPress={() => setStatus('ACTIVE')}
-          >
-            <Text style={[styles.optionText, status === 'ACTIVE' && styles.optionTextSelected]}>Ativo</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.optionButton, status === 'PAUSED' && styles.optionSelected]}
-            onPress={() => setStatus('PAUSED')}
-          >
-            <Text style={[styles.optionText, status === 'PAUSED' && styles.optionTextSelected]}>Pausado</Text>
-          </TouchableOpacity>
-        </View>
+                <Text style={styles.label}>Status</Text>
+                <View style={styles.row}>
+                    {renderOption('Ativo', 'ACTIVE', status, setStatus)}
+                    {renderOption('Pausado', 'PAUSED', status, setStatus)}
+                </View>
+            </View>
 
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
-            {loading ? (
-                <ActivityIndicator color="#FFF" />
-            ) : (
-                <Text style={styles.saveButtonText}>Salvar Fornecedor</Text>
-            )}
-        </TouchableOpacity>
-      </ScrollView>
+            <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
+                {loading ? (
+                    <ActivityIndicator color="#FFF" />
+                ) : (
+                    <Text style={styles.saveButtonText}>Salvar Fornecedor</Text>
+                )}
+            </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -114,71 +122,80 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
   form: {
     padding: 20,
+    paddingBottom: 40,
+  },
+  section: {
+      backgroundColor: '#fff',
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 20,
+      ...shadow.card,
+  },
+  sectionTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#333',
+      marginBottom: 16,
   },
   label: {
-    fontSize: 16,
-    color: '#333',
+    fontSize: 14,
+    color: '#666',
     marginBottom: 8,
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#f9f9f9',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#eee',
+      marginBottom: 20,
+      paddingHorizontal: 12,
+  },
+  inputIcon: {
+      marginRight: 8,
   },
   input: {
-    backgroundColor: '#FFF',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
+    flex: 1,
+    paddingVertical: 12,
     fontSize: 16,
-    marginBottom: 20,
+    color: '#333',
   },
   row: {
     flexDirection: 'row',
     marginBottom: 20,
+    gap: 12,
   },
   optionButton: {
     flex: 1,
-    padding: 12,
+    paddingVertical: 12,
     borderWidth: 1,
     borderColor: '#ddd',
     alignItems: 'center',
-    marginRight: 8,
-    borderRadius: 8,
-    backgroundColor: '#FFF',
+    borderRadius: 12,
+    backgroundColor: '#fff',
   },
   optionSelected: {
-    backgroundColor: '#007bff',
-    borderColor: '#007bff',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   optionText: {
-    color: '#333',
-    fontWeight: '500',
+    color: '#666',
+    fontWeight: '600',
   },
   optionTextSelected: {
     color: '#FFF',
   },
   saveButton: {
-    backgroundColor: '#28a745',
+    backgroundColor: colors.success,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 16,
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 10,
+    ...shadow.card,
   },
   saveButtonText: {
     color: '#FFF',

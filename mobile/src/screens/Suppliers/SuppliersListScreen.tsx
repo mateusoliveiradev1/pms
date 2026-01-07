@@ -5,6 +5,8 @@ import api from '../../services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import Header from '../../ui/components/Header';
+import { colors, shadow, spacing } from '../../ui/theme';
 
 type Supplier = {
   id: string;
@@ -69,42 +71,51 @@ const SuppliersListScreen = () => {
   const renderItem = ({ item }: { item: Supplier }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{item.name}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={styles.headerLeft}>
+            <View style={[styles.iconContainer, { backgroundColor: item.status === 'ACTIVE' ? '#e8f5e9' : '#ffebee' }]}>
+                <Ionicons name="business-outline" size={20} color={item.status === 'ACTIVE' ? colors.success : colors.danger} />
+            </View>
+            <View>
+                <Text style={styles.cardTitle}>{item.name}</Text>
+                <Text style={styles.cardSubtitle}>Integração: {item.integrationType}</Text>
+            </View>
+        </View>
+        
+        {isAdmin && (
+            <TouchableOpacity onPress={() => handleDelete(item.id)} accessibilityLabel="Excluir fornecedor" style={styles.deleteButton}>
+              <Ionicons name="trash-outline" size={20} color={colors.danger} />
+            </TouchableOpacity>
+        )}
+      </View>
+      
+      <View style={styles.cardFooter}>
           <View style={[
             styles.statusBadge, 
-            { backgroundColor: item.status === 'ACTIVE' ? '#d4edda' : '#f8d7da' }
+            { backgroundColor: item.status === 'ACTIVE' ? '#e8f5e9' : '#ffebee' }
           ]}>
             <Text style={[
               styles.statusText,
-              { color: item.status === 'ACTIVE' ? '#155724' : '#721c24' }
+              { color: item.status === 'ACTIVE' ? colors.success : colors.danger }
             ]}>
               {item.status === 'ACTIVE' ? 'Ativo' : 'Pausado'}
             </Text>
           </View>
-          {isAdmin && (
-            <TouchableOpacity onPress={() => handleDelete(item.id)} accessibilityLabel="Excluir fornecedor">
-              <Ionicons name="trash" size={22} color="#c62828" />
-            </TouchableOpacity>
-          )}
-        </View>
       </View>
-      <Text style={styles.cardSubtitle}>Integração: {item.integrationType}</Text>
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Fornecedores</Text>
-        <TouchableOpacity onPress={fetchSuppliers}>
-            <Ionicons name="refresh" size={24} color="#333" />
-        </TouchableOpacity>
-      </View>
+      <Header 
+        title="Fornecedores" 
+        onBack={() => navigation.goBack()}
+        rightIcon="refresh"
+        onRightPress={fetchSuppliers}
+      />
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#007bff" />
+          <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <FlatList
@@ -114,6 +125,7 @@ const SuppliersListScreen = () => {
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
+              <Ionicons name="business-outline" size={64} color="#ccc" />
               <Text style={styles.emptyText}>Nenhum fornecedor cadastrado.</Text>
             </View>
           }
@@ -135,20 +147,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-  },
   center: {
     flex: 1,
     justifyContent: 'center',
@@ -156,35 +154,53 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: 16,
+    paddingBottom: 80,
   },
   card: {
     backgroundColor: '#FFF',
-    borderRadius: 8,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...shadow.card,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+  },
+  iconContainer: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
   },
   cardSubtitle: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
+    marginTop: 2,
+  },
+  deleteButton: {
+      padding: 8,
+  },
+  cardFooter: {
+      flexDirection: 'row',
+      justifyContent: 'flex-start',
   },
   statusBadge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
@@ -195,26 +211,28 @@ const styles = StyleSheet.create({
   emptyContainer: {
     padding: 40,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyText: {
     color: '#999',
+    marginTop: 16,
     fontSize: 16,
   },
   fab: {
     position: 'absolute',
-    bottom: 24,
-    right: 24,
-    backgroundColor: '#007bff',
+    right: 20,
+    bottom: 20,
+    backgroundColor: colors.primary,
     width: 56,
     height: 56,
     borderRadius: 28,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
 });
 

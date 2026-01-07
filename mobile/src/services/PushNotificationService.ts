@@ -16,18 +16,21 @@ Notifications.setNotificationHandler({
 
 export async function registerForPushNotificationsAsync() {
   if (Platform.OS === 'android') {
-    Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
-    });
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    } catch (error) {
+      // Ignore error in Expo Go
+      console.log('Error setting notification channel (likely Expo Go limitation):', error);
+    }
   }
 
   if (!Device.isDevice) {
-    // console.log('Must use physical device for Push Notifications');
-    // return null;
-    // For Simulator testing, we might just return null or handle gracefully
+    return null;
   }
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -39,15 +42,18 @@ export async function registerForPushNotificationsAsync() {
   }
   
   if (finalStatus !== 'granted') {
-    // console.log('Failed to get push token for push notification!');
     return null;
   }
 
-  // Learn more about projectId:
-  // https://docs.expo.dev/push-notifications/push-notifications-setup/#configure-projectid
   const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
   
   try {
+    // Check if running in Expo Go to avoid "functionality removed" error
+    if (Constants.appOwnership === 'expo') {
+        console.log('Skipping Push Notification registration in Expo Go.');
+        return null;
+    }
+
     const tokenData = await Notifications.getExpoPushTokenAsync({
         projectId: projectId, 
     });

@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Modal, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import api from '../../services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Header from '../../ui/components/Header';
+import { colors, shadow } from '../../ui/theme';
 
 type Product = {
     id: string;
     name: string;
     finalPrice: number;
     sku: string;
+    stockAvailable: number;
 };
 
 const OrderFormScreen = () => {
@@ -63,9 +66,15 @@ const OrderFormScreen = () => {
       });
       Alert.alert('Sucesso', 'Pedido criado com sucesso!');
       navigation.goBack();
-    } catch (error) {
+    } catch (error: any) {
       console.log(error);
-      Alert.alert('Erro', 'Falha ao criar pedido.');
+      const msg = error.response?.data?.message || 'Falha ao criar pedido.';
+      // Check for specific error message about stock
+      if (msg.includes('Insufficient stock')) {
+          Alert.alert('Estoque Insuficiente', 'Não há estoque suficiente para este produto.');
+      } else {
+          Alert.alert('Erro', msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -73,86 +82,115 @@ const OrderFormScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Novo Pedido Manual</Text>
-      </View>
+      <Header title="Novo Pedido Manual" onBack={() => navigation.goBack()} />
+      
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.form}>
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Dados do Cliente</Text>
+                <Text style={styles.label}>Nome do Cliente *</Text>
+                <View style={styles.inputContainer}>
+                    <Ionicons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
+                    <TextInput
+                        style={styles.input}
+                        value={customerName}
+                        onChangeText={setCustomerName}
+                        placeholder="Ex: João da Silva"
+                        placeholderTextColor="#999"
+                    />
+                </View>
 
-      <ScrollView contentContainerStyle={styles.form}>
-        <Text style={styles.label}>Nome do Cliente *</Text>
-        <TextInput
-          style={styles.input}
-          value={customerName}
-          onChangeText={setCustomerName}
-          placeholder="Ex: João da Silva"
-        />
-
-        <Text style={styles.label}>Endereço de Entrega</Text>
-        <TextInput
-          style={styles.input}
-          value={customerAddress}
-          onChangeText={setCustomerAddress}
-          placeholder="Ex: Rua das Flores, 123"
-        />
-
-        <Text style={styles.label}>Produto *</Text>
-        <TouchableOpacity 
-            style={styles.selector} 
-            onPress={() => setModalVisible(true)}
-        >
-            <Text style={{ color: selectedProduct ? '#000' : '#999' }}>
-                {selectedProduct ? selectedProduct.name : 'Selecione um produto'}
-            </Text>
-            <Ionicons name="chevron-down" size={20} color="#666" />
-        </TouchableOpacity>
-
-        {selectedProduct && (
-            <View style={styles.productInfo}>
-                <Text style={styles.infoText}>SKU: {selectedProduct.sku}</Text>
-                <Text style={styles.infoText}>Preço Unit.: R$ {selectedProduct.finalPrice.toFixed(2)}</Text>
+                <Text style={styles.label}>Endereço de Entrega</Text>
+                <View style={styles.inputContainer}>
+                    <Ionicons name="location-outline" size={20} color="#999" style={styles.inputIcon} />
+                    <TextInput
+                        style={styles.input}
+                        value={customerAddress}
+                        onChangeText={setCustomerAddress}
+                        placeholder="Ex: Rua das Flores, 123"
+                        placeholderTextColor="#999"
+                    />
+                </View>
             </View>
-        )}
 
-        <Text style={styles.label}>Quantidade</Text>
-        <TextInput
-          style={styles.input}
-          value={quantity}
-          onChangeText={setQuantity}
-          placeholder="1"
-          keyboardType="numeric"
-        />
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Detalhes do Pedido</Text>
+                <Text style={styles.label}>Produto *</Text>
+                <TouchableOpacity 
+                    style={styles.selector} 
+                    onPress={() => setModalVisible(true)}
+                >
+                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                        <Ionicons name="cube-outline" size={20} color={selectedProduct ? colors.primary : '#999'} style={{marginRight: 8}} />
+                        <Text style={{ color: selectedProduct ? '#333' : '#999', fontSize: 16 }}>
+                            {selectedProduct ? selectedProduct.name : 'Selecione um produto'}
+                        </Text>
+                    </View>
+                    <Ionicons name="chevron-down" size={20} color="#666" />
+                </TouchableOpacity>
 
-        {selectedProduct && (
-            <View style={styles.totalContainer}>
-                <Text style={styles.totalLabel}>Total Estimado:</Text>
-                <Text style={styles.totalValue}>
-                    R$ {(selectedProduct.finalPrice * (parseInt(quantity) || 1)).toFixed(2)}
-                </Text>
+                {selectedProduct && (
+                    <View style={styles.productInfo}>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>SKU:</Text>
+                            <Text style={styles.infoValue}>{selectedProduct.sku}</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Preço Unit.:</Text>
+                            <Text style={styles.infoValue}>R$ {selectedProduct.finalPrice.toFixed(2)}</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Estoque:</Text>
+                            <Text style={[styles.infoValue, { color: selectedProduct.stockAvailable > 0 ? colors.success : colors.error }]}>
+                                {selectedProduct.stockAvailable} un
+                            </Text>
+                        </View>
+                    </View>
+                )}
+
+                <Text style={styles.label}>Quantidade</Text>
+                <View style={styles.inputContainer}>
+                    <Ionicons name="calculator-outline" size={20} color="#999" style={styles.inputIcon} />
+                    <TextInput
+                        style={styles.input}
+                        value={quantity}
+                        onChangeText={setQuantity}
+                        placeholder="1"
+                        placeholderTextColor="#999"
+                        keyboardType="numeric"
+                    />
+                </View>
+
+                {selectedProduct && (
+                    <View style={styles.totalContainer}>
+                        <Text style={styles.totalLabel}>Total Estimado</Text>
+                        <Text style={styles.totalValue}>
+                            R$ {(selectedProduct.finalPrice * (parseInt(quantity) || 1)).toFixed(2)}
+                        </Text>
+                    </View>
+                )}
             </View>
-        )}
 
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
-            {loading ? (
-                <ActivityIndicator color="#FFF" />
-            ) : (
-                <Text style={styles.saveButtonText}>Criar Pedido</Text>
-            )}
-        </TouchableOpacity>
-      </ScrollView>
+            <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
+                {loading ? (
+                    <ActivityIndicator color="#FFF" />
+                ) : (
+                    <Text style={styles.saveButtonText}>Criar Pedido</Text>
+                )}
+            </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <Modal visible={modalVisible} animationType="slide">
-        <SafeAreaView style={{ flex: 1 }}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => setModalVisible(false)}>
-                    <Ionicons name="close" size={24} color="#333" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Selecionar Produto</Text>
-            </View>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+            <Header title="Selecionar Produto" onBack={() => setModalVisible(false)} rightIcon="close" onRightPress={() => setModalVisible(false)} />
             <FlatList
                 data={products}
                 keyExtractor={item => item.id}
+                contentContainerStyle={{ padding: 16 }}
                 renderItem={({ item }) => (
                     <TouchableOpacity 
                         style={styles.modalItem}
@@ -161,8 +199,17 @@ const OrderFormScreen = () => {
                             setModalVisible(false);
                         }}
                     >
-                        <Text style={styles.modalItemTitle}>{item.name}</Text>
-                        <Text style={styles.modalItemSubtitle}>{item.sku} - R$ {item.finalPrice.toFixed(2)}</Text>
+                        <View style={styles.modalIconContainer}>
+                             <Ionicons name="cube" size={24} color={colors.primary} />
+                        </View>
+                        <View style={{flex: 1}}>
+                            <Text style={styles.modalItemTitle}>{item.name}</Text>
+                            <Text style={styles.modalItemSubtitle}>
+                                SKU: {item.sku} | Estoque: {item.stockAvailable}
+                            </Text>
+                            <Text style={styles.modalItemPrice}>R$ {item.finalPrice.toFixed(2)}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#ccc" />
                     </TouchableOpacity>
                 )}
             />
@@ -177,98 +224,135 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
   form: {
-    padding: 20,
+    padding: 16,
+  },
+  section: {
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    ...shadow.card,
+  },
+  sectionTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#333',
+      marginBottom: 16,
   },
   label: {
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '600',
     color: '#333',
     marginBottom: 8,
-    fontWeight: '500',
+    marginTop: 8,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 50,
+  },
+  inputIcon: {
+      marginRight: 8,
   },
   input: {
-    backgroundColor: '#FFF',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
+    flex: 1,
     fontSize: 16,
-    marginBottom: 20,
+    color: '#333',
   },
   selector: {
-    backgroundColor: '#FFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9f9f9',
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 50,
+  },
+  productInfo: {
+    marginTop: 12,
     padding: 12,
-    marginBottom: 10,
+    backgroundColor: '#f0f7ff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d0e3ff',
+  },
+  infoRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 4,
+  },
+  infoLabel: {
+      fontSize: 14,
+      color: '#666',
+  },
+  infoValue: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#333',
+  },
+  infoText: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 4,
+  },
+  totalContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  productInfo: {
-      backgroundColor: '#e9ecef',
-      padding: 10,
-      borderRadius: 8,
-      marginBottom: 20,
-  },
-  infoText: {
-      color: '#495057',
-      marginBottom: 4,
-  },
-  totalContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginTop: 10,
-      marginBottom: 30,
-      padding: 15,
-      backgroundColor: '#fff',
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: '#28a745',
-  },
   totalLabel: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: '#333',
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
   },
   totalValue: {
-      fontSize: 20,
-      fontWeight: 'bold',
-      color: '#28a745',
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.primary,
   },
   saveButton: {
-    backgroundColor: '#007bff',
+    backgroundColor: colors.primary,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 16,
     alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 24,
+    ...shadow.card,
   },
   saveButtonText: {
     color: '#FFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   modalItem: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    ...shadow.card,
+  },
+  modalIconContainer: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: '#e3f2fd',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
   },
   modalItemTitle: {
     fontSize: 16,
@@ -276,8 +360,15 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   modalItemSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 2,
+  },
+  modalItemPrice: {
       fontSize: 14,
-      color: '#666',
+      fontWeight: 'bold',
+      color: colors.primary,
+      marginTop: 2,
   },
 });
 

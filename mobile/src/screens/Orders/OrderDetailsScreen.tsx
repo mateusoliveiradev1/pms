@@ -4,11 +4,35 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
+import Header from '../../ui/components/Header';
+import { colors, shadow } from '../../ui/theme';
 
 const OrderDetailsScreen = () => {
   const route = useRoute();
   const navigation = useNavigation();
   const { order } = route.params as { order: any }; // Assuming we pass the full order object, or fetch it if needed
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+        case 'NEW': return '#007bff';
+        case 'SENT_TO_SUPPLIER': return '#fd7e14';
+        case 'SHIPPING': return '#17a2b8';
+        case 'DELIVERED': return '#28a745';
+        case 'CANCELLED': return '#dc3545';
+        default: return '#6c757d';
+    }
+  };
+  
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'NEW': return 'Novo';
+      case 'SENT_TO_SUPPLIER': return 'Enviado ao Fornecedor';
+      case 'SHIPPING': return 'Em Transporte';
+      case 'DELIVERED': return 'Entregue';
+      case 'CANCELLED': return 'Cancelado';
+      default: return status;
+    }
+  };
 
   const [currentOrder, setCurrentOrder] = useState(order);
   const [loading, setLoading] = useState(false);
@@ -45,6 +69,7 @@ const OrderDetailsScreen = () => {
             onPress={() => handleStatusUpdate('SENT_TO_SUPPLIER')}
             disabled={loading}
           >
+            <Ionicons name="send" size={20} color="#FFF" style={{marginRight: 8}} />
             <Text style={styles.actionButtonText}>Enviar ao Fornecedor</Text>
           </TouchableOpacity>
         );
@@ -55,6 +80,7 @@ const OrderDetailsScreen = () => {
             onPress={() => setTrackingModalVisible(true)}
             disabled={loading}
           >
+            <Ionicons name="bus" size={20} color="#FFF" style={{marginRight: 8}} />
             <Text style={styles.actionButtonText}>Informar Rastreio</Text>
           </TouchableOpacity>
         );
@@ -65,6 +91,7 @@ const OrderDetailsScreen = () => {
             onPress={() => handleStatusUpdate('DELIVERED')}
             disabled={loading}
           >
+            <Ionicons name="checkmark-circle" size={20} color="#FFF" style={{marginRight: 8}} />
             <Text style={styles.actionButtonText}>Marcar como Entregue</Text>
           </TouchableOpacity>
         );
@@ -75,13 +102,7 @@ const OrderDetailsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Pedido #{currentOrder.id.substring(0, 8)}</Text>
-        <View style={{ width: 24 }} />
-      </View>
+      <Header title={`Pedido #${currentOrder.id.substring(0, 8)}`} onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
@@ -117,6 +138,7 @@ const OrderDetailsScreen = () => {
               <Text style={styles.itemPrice}>R$ {(item.price * item.quantity).toFixed(2)}</Text>
             </View>
           ))}
+          <View style={styles.separator} />
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={styles.totalValue}>R$ {currentOrder.totalAmount.toFixed(2)}</Text>
@@ -131,6 +153,7 @@ const OrderDetailsScreen = () => {
                 onPress={() => handleStatusUpdate('CANCELLED')}
                 disabled={loading}
             >
+                <Ionicons name="close-circle" size={20} color="#FFF" style={{marginRight: 8}} />
                 <Text style={styles.actionButtonText}>Cancelar Pedido</Text>
             </TouchableOpacity>
         )}
@@ -199,60 +222,31 @@ const getStatusLabel = (status: string) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F0F2F5',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    backgroundColor: '#f5f5f5',
   },
   content: {
     padding: 16,
+    paddingBottom: 40,
   },
   card: {
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    ...shadow.card,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#333',
     marginBottom: 12,
-    color: '#333',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    paddingBottom: 8,
-  },
-  label: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 8,
-  },
-  value: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
   },
   statusBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
+    marginBottom: 8,
   },
   statusText: {
     color: '#FFF',
@@ -260,10 +254,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   trackingContainer: {
-      marginTop: 12,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: '#f0f0f0',
+      marginTop: 8,
+  },
+  label: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 2,
+  },
+  value: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 12,
   },
   itemRow: {
     flexDirection: 'row',
@@ -272,43 +273,48 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   itemName: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#333',
     fontWeight: '500',
   },
   itemSku: {
     fontSize: 12,
-    color: '#999',
+    color: '#666',
   },
   itemPrice: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+  },
+  separator: {
+    height: 1,
+    backgroundColor: '#eee',
+    marginVertical: 12,
   },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
   },
   totalLabel: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
   },
   totalValue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#28a745',
+    color: colors.primary,
   },
   actionButton: {
+    flexDirection: 'row',
+    backgroundColor: colors.primary,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'center',
+    marginBottom: 12,
+    ...shadow.card,
   },
   actionButtonText: {
     color: '#FFF',
@@ -325,47 +331,45 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderRadius: 16,
     padding: 20,
+    elevation: 5,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 16,
-    textAlign: 'center',
+    color: '#333',
   },
   input: {
-    backgroundColor: '#f9f9f9',
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
     padding: 12,
-    marginBottom: 20,
     fontSize: 16,
+    marginBottom: 20,
   },
   modalButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
+    gap: 12,
   },
   modalButton: {
-    flex: 1,
-    padding: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     borderRadius: 8,
-    alignItems: 'center',
   },
   cancelButton: {
     backgroundColor: '#eee',
-    marginRight: 8,
   },
   confirmButton: {
-    backgroundColor: '#007bff',
-    marginLeft: 8,
+    backgroundColor: colors.primary,
   },
   cancelButtonText: {
     color: '#333',
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   confirmButtonText: {
     color: '#FFF',
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
 });
 

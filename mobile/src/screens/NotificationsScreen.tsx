@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import api from '../services/api';
 import Header from '../ui/components/Header';
+import { colors, shadow } from '../ui/theme';
 
 interface Notification {
   id: string;
@@ -16,7 +17,6 @@ interface Notification {
 }
 
 const NotificationsScreen = () => {
-  const navigation = useNavigation();
   const isFocused = useIsFocused();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -37,8 +37,10 @@ const NotificationsScreen = () => {
   };
 
   useEffect(() => {
-    loadNotifications();
-  }, []);
+    if (isFocused) {
+        loadNotifications();
+    }
+  }, [isFocused]);
 
   const handleMarkAsRead = async (id: string) => {
     try {
@@ -50,7 +52,7 @@ const NotificationsScreen = () => {
     }
   };
 
-  const getIcon = (type: string) => {
+  const getIcon = (type: string): keyof typeof Ionicons.glyphMap => {
     switch (type) {
         case 'STOCK': return 'alert-circle';
         case 'ORDER': return 'cart';
@@ -60,9 +62,9 @@ const NotificationsScreen = () => {
 
   const getColor = (type: string) => {
     switch (type) {
-        case 'STOCK': return '#dc3545';
-        case 'ORDER': return '#28a745';
-        default: return '#007bff';
+        case 'STOCK': return colors.error;
+        case 'ORDER': return colors.success;
+        default: return colors.primary;
     }
   };
 
@@ -72,7 +74,7 @@ const NotificationsScreen = () => {
       onPress={() => handleMarkAsRead(item.id)}
     >
       <View style={styles.iconContainer}>
-         <Ionicons name={getIcon(item.type) as any} size={24} color={getColor(item.type)} />
+         <Ionicons name={getIcon(item.type)} size={24} color={getColor(item.type)} />
       </View>
       <View style={styles.textContainer}>
           <Text style={styles.title}>{item.title}</Text>
@@ -85,7 +87,15 @@ const NotificationsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Header onBack={() => navigation.goBack()} showLogo logoSize={32} animateLogo={isFocused} animateKey={animateTick} logoDuration={700} />
+      <Header 
+        showLogo 
+        logoSize={32} 
+        animateLogo={isFocused} 
+        animateKey={animateTick} 
+        logoDuration={700} 
+        rightIcon="refresh"
+        onRightPress={() => { setRefreshing(true); setAnimateTick(t => t + 1); loadNotifications(); }}
+      />
 
       <FlatList
         data={notifications}
@@ -109,7 +119,7 @@ const NotificationsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F0F2F5',
+    backgroundColor: '#f5f5f5',
   },
   list: {
     padding: 16,
@@ -117,18 +127,16 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    ...shadow.card,
   },
   unreadCard: {
       backgroundColor: '#e8f0fe',
+      borderLeftWidth: 4,
+      borderLeftColor: colors.primary,
   },
   iconContainer: {
       marginRight: 12,
@@ -137,35 +145,35 @@ const styles = StyleSheet.create({
       flex: 1,
   },
   title: {
-      fontWeight: 'bold',
-      fontSize: 14,
-      color: '#333',
-      marginBottom: 4,
+    fontWeight: 'bold',
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 4,
   },
   message: {
-      fontSize: 14,
-      color: '#666',
-      marginBottom: 4,
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
   },
   date: {
-      fontSize: 10,
-      color: '#999',
+    fontSize: 10,
+    color: '#999',
   },
   dot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: '#007bff',
-      marginLeft: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+    marginLeft: 8,
   },
   emptyContainer: {
-      alignItems: 'center',
-      marginTop: 50,
+    alignItems: 'center',
+    marginTop: 50,
   },
   emptyText: {
-      marginTop: 10,
-      color: '#999',
-      fontSize: 16,
+    marginTop: 10,
+    color: '#999',
+    fontSize: 16,
   }
 });
 

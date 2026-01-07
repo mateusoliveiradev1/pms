@@ -21,6 +21,12 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response) {
+        console.log(`API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, error.response.status, error.response.data);
+    } else {
+        console.log(`API Connection Error: ${error.message}`);
+    }
+
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
       Alert.alert(
         'Sessão Expirada',

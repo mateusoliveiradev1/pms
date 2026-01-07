@@ -62,7 +62,12 @@ export const login = async (req: Request, res: Response) => {
 
 export const updatePushToken = async (req: Request, res: Response) => {
     const { token } = req.body;
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user?.userId;
+
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
 
     if (!token) {
         res.status(400).json({ message: 'Token is required' });

@@ -78,95 +78,77 @@ export const createOrder = async (req: Request, res: Response) => {
   // items should be an array of { productId, quantity, price }
 
   try {
-    const order = await prisma.order.create({
-      data: {
-        customerName,
-        customerAddress,
-        totalAmount,
-        mercadoLivreId,
-        items: {
-          create: items.map((item: any) => ({
-            product: { connect: { id: item.productId } },
-            quantity: item.quantity,
-            price: item.price
-          }))
+    const order = await prisma.$transaction(async (tx) => {
+        // 1. Check stock and update
+        for (const item of items) {
+            const product = await tx.product.findUnique({ 
+                where: { id: item.productId },
+                include: { suppliers: true }
+            });
+            if (!product) throw new Error(`Product ${item.productId} not found`);
+            
+            const currentStock = product.stockAvailable ?? 0;
+            if (currentStock < item.quantity) {
+                throw new Error(`Insufficient stock for product ${product.name} (Requested: ${item.quantity}, Available: ${currentStock})`);
+            }
+
+            // Deduct stock from Supplier (Virtual Stock)
+            if (product.suppliers && product.suppliers.length > 0) {
+                // For MVP, we deduct from the first supplier found.
+                // In a real scenario, we'd pick based on logic (cheapest, fastest, etc.)
+                const supplierRel = product.suppliers[0];
+                await tx.productSupplier.update({
+                    where: { id: supplierRel.id },
+                    data: { virtualStock: { decrement: item.quantity } }
+                });
+            }
+
+            // Deduct stock from Product (Available Stock)
+            await tx.product.update({
+                where: { id: item.productId },
+                data: { stockAvailable: { decrement: item.quantity } }
+            });
+
+            // Log movement
+            await tx.inventoryLog.create({
+                data: {
+                    productId: item.productId,
+                    quantity: -item.quantity,
+                    type: 'SALE',
+                    reason: `Order`
+                }
+            });
         }
-      },
-      include: { items: true }
+
+        // 2. Create Order
+        return await tx.order.create({
+            data: {
+                customerName,
+                customerAddress,
+                totalAmount,
+                mercadoLivreId,
+                items: {
+                    create: items.map((item: any) => ({
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        price: item.price
+                    }))
+                }
+            },
+            include: { items: true }
+        });
     });
     
     // Notification Logic
     await createNotification(
         'Novo Pedido', 
-        `Pedido #${order.id.substring(0,8)} criado no valor de R$ ${totalAmount}`, 
+        `Pedido #${order.id.slice(0, 8)} criado com sucesso.`,
         'ORDER'
     );
 
-    // Update Stock Logic (Simple decrement from Available)
-    // In a multi-supplier world, we should choose which supplier to decrement.
-    // For MVP, we decrement the global 'stockAvailable' and 'virtualStock' of the primary supplier.
-    
-    for (const item of items) {
-        const product = await prisma.product.findUnique({
-            where: { id: item.productId },
-            include: { suppliers: true }
-        });
-
-        if (!product) continue;
-
-        // If product has suppliers, decrement from the primary supplier and recompute consolidated stock
-        if (product.suppliers.length > 0) {
-            const supplierRel = product.suppliers[0];
-            const newVirtualStock = Math.max(0, supplierRel.virtualStock - item.quantity);
-
-            await prisma.productSupplier.update({
-                where: { id: supplierRel.id },
-                data: { virtualStock: newVirtualStock }
-            });
-
-            const suppliers = await prisma.productSupplier.findMany({
-                where: { productId: item.productId }
-            });
-
-            const totalAvailable = suppliers.reduce((sum, s) => {
-                const available = Math.max(0, s.virtualStock - s.safetyStock);
-                return sum + available;
-            }, 0);
-
-            await prisma.product.update({
-                where: { id: item.productId },
-                data: { stockAvailable: totalAvailable }
-            });
-
-            if (totalAvailable < 5) {
-                await createNotification(
-                    'Estoque Baixo',
-                    `Produto ${product.name} está com estoque baixo (${totalAvailable})`,
-                    'STOCK'
-                );
-            }
-        } else {
-            // Fallback: products created sem relação de fornecedor
-            const newAvailable = Math.max(0, (product.stockAvailable || 0) - item.quantity);
-            await prisma.product.update({
-                where: { id: item.productId },
-                data: { stockAvailable: newAvailable }
-            });
-
-            if (newAvailable < 5) {
-                await createNotification(
-                    'Estoque Baixo',
-                    `Produto ${product.name} está com estoque baixo (${newAvailable})`,
-                    'STOCK'
-                );
-            }
-        }
-    }
-
     res.status(201).json(order);
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: 'Error creating order', error });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error creating order', error: error.message || error });
   }
 };
 
@@ -200,6 +182,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                         data: { virtualStock: newVirtualStock }
                     });
 
+                    // Recalculate global stock
                     const suppliers = await prisma.productSupplier.findMany({
                         where: { productId: item.productId }
                     });
@@ -211,11 +194,31 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                         where: { id: item.productId },
                         data: { stockAvailable: totalAvailable }
                     });
+
+                    // Log Return
+                    await prisma.inventoryLog.create({
+                        data: {
+                            productId: item.productId,
+                            quantity: item.quantity,
+                            type: 'RETURN',
+                            reason: `Order #${id.substring(0,8)} Cancelled`
+                        }
+                    });
                 } else {
                     const newAvailable = (product.stockAvailable || 0) + item.quantity;
                     await prisma.product.update({
                         where: { id: item.productId },
                         data: { stockAvailable: newAvailable }
+                    });
+
+                    // Log Return
+                    await prisma.inventoryLog.create({
+                        data: {
+                            productId: item.productId,
+                            quantity: item.quantity,
+                            type: 'RETURN',
+                            reason: `Order #${id.substring(0,8)} Cancelled`
+                        }
                     });
                 }
             }

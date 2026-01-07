@@ -22,6 +22,20 @@ export const getProducts = async (req: Request, res: Response) => {
   }
 };
 
+export const getProductById = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        const product = await prisma.product.findUnique({
+            where: { id },
+            include: { suppliers: { include: { supplier: true } } }
+        });
+        if (!product) return res.status(404).json({ message: 'Product not found' });
+        res.json(product);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching product', error });
+    }
+};
+
 export const createProduct = async (req: Request, res: Response) => {
   const { 
     name, sku, description, imageUrl, 
@@ -64,6 +78,13 @@ export const createProduct = async (req: Request, res: Response) => {
                     safetyStock: sStock
                 }
             ]
+        },
+        InventoryLog: {
+            create: {
+                quantity: available,
+                type: 'RESTOCK',
+                reason: 'Initial Stock'
+            }
         }
       },
       include: { suppliers: true }
@@ -153,6 +174,20 @@ export const updateProduct = async (req: Request, res: Response) => {
             },
             include: { suppliers: true }
         });
+
+        // Log if stock changed
+        const diff = totalStock - existingProduct.stockAvailable;
+        if (diff !== 0) {
+            await prisma.inventoryLog.create({
+                data: {
+                    productId: id,
+                    quantity: diff,
+                    type: 'ADJUSTMENT',
+                    reason: 'Manual Update'
+                }
+            });
+        }
+
         res.json(product);
     } catch (error) {
         console.log(error);
@@ -194,4 +229,17 @@ export const exportProductsCsv = async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({ message: 'Error exporting products CSV', error });
   }
+};
+
+export const getProductHistory = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+        const logs = await prisma.inventoryLog.findMany({
+            where: { productId: id },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(logs);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching history', error });
+    }
 };

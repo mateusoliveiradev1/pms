@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import Header from '../../ui/components/Header';
+import { colors, shadow, radius, spacing } from '../../ui/theme';
 
 type Product = {
   id: string;
@@ -18,14 +19,24 @@ const ProductsListScreen = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [animateTick, setAnimateTick] = useState(0);
   const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<'ALL' | 'LOW_STOCK'>('ALL');
   const navigation = useNavigation();
-  const isFocused = useIsFocused();
+  const route = useRoute();
+
+  useEffect(() => {
+    // @ts-ignore
+    if (route.params?.filter) {
+        // @ts-ignore
+        setFilter(route.params.filter);
+        // Clear params to avoid stuck state if we want to reset? 
+        // Actually, for now it's fine.
+    }
+  }, [route.params]);
 
   const loadProducts = async () => {
     try {
-      setLoading(true);
+      if (!refreshing) setLoading(true);
       const response = await api.get('/products', { params: query ? { query } : undefined });
       setProducts(response.data);
     } catch (error) {
@@ -36,60 +47,110 @@ const ProductsListScreen = () => {
     }
   };
 
-  useEffect(() => {
-    if (isFocused) {
-      loadProducts();
-    }
-  }, [isFocused]);
+  useFocusEffect(
+    useCallback(() => {
+        loadProducts();
+    }, [query])
+  );
+
+  const getFilteredProducts = () => {
+      if (filter === 'LOW_STOCK') {
+          return products.filter(p => p.stockAvailable < 5);
+      }
+      return products;
+  };
 
   const renderItem = ({ item }: { item: Product }) => (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.cardTitle}>{item.name}</Text>
-        <Text style={[styles.badge, { color: item.stockAvailable < 5 ? '#c62828' : '#1976d2' }]}>
-          {item.stockAvailable < 5 ? 'BAIXO' : 'OK'}
-        </Text>
+    <TouchableOpacity 
+      style={styles.card}
+      // @ts-ignore
+      onPress={() => navigation.navigate('ProductDetails', { productId: item.id })}
+    >
+      <View style={styles.cardIconContainer}>
+         <Ionicons name="cube-outline" size={24} color={colors.primary} />
       </View>
-      <Text style={styles.cardSubtitle}>SKU: {item.sku}</Text>
-      <View style={styles.row}>
-        <Text style={styles.price}>R$ {item.finalPrice?.toFixed(2) || '0.00'}</Text>
-        <Text style={[styles.stock, item.stockAvailable < 5 ? styles.stockLow : null]}>
-          Estoque: {item.stockAvailable}
-        </Text>
+      <View style={styles.cardContent}>
+        <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
+            {item.stockAvailable < 5 && (
+                <View style={styles.lowStockBadge}>
+                    <Text style={styles.lowStockText}>Baixo</Text>
+                </View>
+            )}
+        </View>
+        <Text style={styles.cardSubtitle}>SKU: {item.sku}</Text>
+        <View style={styles.row}>
+            <Text style={styles.price}>R$ {item.finalPrice?.toFixed(2) || '0.00'}</Text>
+            <Text style={[styles.stock, item.stockAvailable < 5 ? styles.stockLow : null]}>
+            Estoque: {item.stockAvailable}
+            </Text>
+        </View>
       </View>
-    </View>
+      <Ionicons name="chevron-forward" size={20} color="#ccc" />
+    </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Header onBack={() => navigation.goBack()} showLogo logoSize={32} animateLogo={isFocused} animateKey={animateTick} logoDuration={700} rightIcon="refresh" onRightPress={() => loadProducts()} />
+      <Header 
+        onBack={() => navigation.goBack()} 
+        title="Produtos"
+        rightIcon="add" 
+        // @ts-ignore
+        onRightPress={() => navigation.navigate('ProductForm')} 
+      />
 
-      <View style={styles.searchBar}>
-        <Ionicons name="search" size={18} color="#666" />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Buscar por nome ou SKU"
-          style={styles.searchInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-          onSubmitEditing={() => loadProducts()}
-        />
-        <TouchableOpacity style={styles.searchButton} onPress={() => loadProducts()}>
-          <Text style={styles.searchButtonText}>Buscar</Text>
-        </TouchableOpacity>
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+            <Ionicons name="search" size={20} color="#999" />
+            <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Buscar produto..."
+            style={styles.searchInput}
+            autoCapitalize="none"
+            returnKeyType="search"
+            onSubmitEditing={() => loadProducts()}
+            />
+            {query.length > 0 && (
+                <TouchableOpacity onPress={() => setQuery('')}>
+                    <Ionicons name="close-circle" size={18} color="#999" />
+                </TouchableOpacity>
+            )}
+        </View>
+      </View>
+
+      <View style={styles.filterContainer}>
+          <TouchableOpacity 
+            style={[styles.filterChip, filter === 'ALL' && styles.filterChipActive]}
+            onPress={() => setFilter('ALL')}
+          >
+              <Text style={[styles.filterText, filter === 'ALL' && styles.filterTextActive]}>Todos</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.filterChip, filter === 'LOW_STOCK' && styles.filterChipActive]}
+            onPress={() => setFilter('LOW_STOCK')}
+          >
+              <Text style={[styles.filterText, filter === 'LOW_STOCK' && styles.filterTextActive]}>Estoque Baixo</Text>
+          </TouchableOpacity>
       </View>
 
       {loading && !refreshing ? (
-        <ActivityIndicator size="large" color="#007bff" style={{ marginTop: 20 }} />
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
       ) : (
         <FlatList
-          data={products}
+          data={getFilteredProducts()}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setAnimateTick(t => t + 1); loadProducts(); }} />}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadProducts(); }} />}
+          ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                  <Ionicons name="search-outline" size={48} color="#ccc" />
+                  <Text style={styles.emptyText}>Nenhum produto encontrado</Text>
+              </View>
+          }
         />
       )}
     </SafeAreaView>
@@ -99,60 +160,108 @@ const ProductsListScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
   },
   list: {
     padding: 16,
+    paddingTop: 8,
+  },
+  searchContainer: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: '#fff',
+      borderBottomWidth: 1,
+      borderBottomColor: '#f0f0f0',
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 8,
-    borderRadius: 10,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: '#eee'
+    height: 44,
   },
   searchInput: {
     flex: 1,
-    marginHorizontal: 8,
-    fontSize: 14,
+    marginLeft: 8,
+    fontSize: 16,
     color: '#333',
   },
-  searchButton: {
-    backgroundColor: '#1976d2',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+  filterContainer: {
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
   },
-  searchButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+  filterChip: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: '#fff',
+      marginRight: 8,
+      borderWidth: 1,
+      borderColor: '#e0e0e0',
+  },
+  filterChipActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+  },
+  filterText: {
+      fontSize: 14,
+      color: '#666',
+      fontWeight: '500',
+  },
+  filterTextActive: {
+      color: '#fff',
   },
   card: {
+    flexDirection: 'row',
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
+    alignItems: 'center',
+    ...shadow.card,
+  },
+  cardIconContainer: {
+      width: 48,
+      height: 48,
+      borderRadius: 12,
+      backgroundColor: '#e3f2fd',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 16,
+  },
+  cardContent: {
+      flex: 1,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 2,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+    flex: 1,
+    marginRight: 8,
+  },
+  lowStockBadge: {
+      backgroundColor: '#ffebee',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 8,
+  },
+  lowStockText: {
+      color: colors.danger,
+      fontSize: 10,
+      fontWeight: 'bold',
   },
   cardSubtitle: {
-    color: '#666',
-    marginTop: 4,
-    marginBottom: 10,
+    color: '#888',
+    fontSize: 13,
+    marginBottom: 6,
   },
   row: {
     flexDirection: 'row',
@@ -162,20 +271,25 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.success,
   },
   stock: {
-    fontSize: 14,
-    color: '#1976d2',
-    fontWeight: 'bold',
+    fontSize: 13,
+    color: '#666',
   },
   stockLow: {
-    color: '#c62828',
-  },
-  badge: {
-    fontSize: 12,
+    color: colors.danger,
     fontWeight: 'bold',
   },
+  emptyContainer: {
+      alignItems: 'center',
+      marginTop: 60,
+  },
+  emptyText: {
+      marginTop: 12,
+      color: '#999',
+      fontSize: 16,
+  }
 });
 
 export default ProductsListScreen;

@@ -9,7 +9,7 @@ import SplashScreen from '../screens/SplashScreen';
 
 import LoginScreen from '../screens/LoginScreen';
 import DashboardScreen from '../screens/DashboardScreen';
-import OrdersScreen from '../screens/OrdersScreen';
+import OrdersListScreen from '../screens/Orders/OrdersListScreen';
 import OrderFormScreen from '../screens/Orders/OrderFormScreen';
 import OrderDetailsScreen from '../screens/Orders/OrderDetailsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
@@ -19,6 +19,7 @@ import SuppliersListScreen from '../screens/Suppliers/SuppliersListScreen';
 import SupplierFormScreen from '../screens/Suppliers/SupplierFormScreen';
 import ProductFormScreen from '../screens/Products/ProductFormScreen';
 import ProductsListScreen from '../screens/Products/ProductsListScreen';
+import ProductDetailsScreen from '../screens/Products/ProductDetailsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
@@ -61,7 +62,7 @@ function AppTabs() {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
-      <Tab.Screen name="Pedidos" component={OrdersScreen} />
+      <Tab.Screen name="Pedidos" component={OrdersListScreen} />
       <Tab.Screen name="Fornecedores" component={SuppliersStack} />
       <Tab.Screen name="Notificações" component={NotificationsScreen} />
       <Tab.Screen name="Ajustes" component={SettingsScreen} />
@@ -84,9 +85,10 @@ const Routes = () => {
             <Stack.Screen name="AppTabs" component={AppTabs} />
             <Stack.Screen name="ProductForm" component={ProductFormScreen} />
             <Stack.Screen name="ProductsList" component={ProductsListScreen} />
+            <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
             <Stack.Screen name="OrderForm" component={OrderFormScreen} />
             <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
-            <Stack.Screen name="Reports" component={ReportsScreen} options={{ headerShown: true, title: 'Relatórios' }} />
+            <Stack.Screen name="Reports" component={ReportsScreen} options={{ headerShown: false }} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

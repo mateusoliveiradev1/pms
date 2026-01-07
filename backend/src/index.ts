@@ -14,7 +14,16 @@ import mercadoLivreRoutes from './routes/mercadoLivreRoutes';
 import reportsRoutes from './routes/reportsRoutes';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
+
+// Debug: Catch unhandled errors
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 app.use(cors());
 app.use(express.json());
@@ -35,3 +44,6 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+// Keep-alive to prevent premature exit in dev environment
+setInterval(() => {}, 60000);

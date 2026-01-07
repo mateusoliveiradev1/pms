@@ -6,6 +6,9 @@ import * as WebBrowser from 'expo-web-browser';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
+import Header from '../ui/components/Header';
+import { colors, shadow } from '../ui/theme';
+
 const SettingsScreen = () => {
   const { signOut } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -62,9 +65,7 @@ const SettingsScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Ajustes</Text>
-      </View>
+      <Header title="Ajustes" />
 
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
@@ -82,7 +83,7 @@ const SettingsScreen = () => {
                 </Text>
               </View>
               {mlConnected && (
-                <Ionicons name="checkmark-circle" size={24} color="#28a745" />
+                <Ionicons name="checkmark-circle" size={24} color={colors.success} />
               )}
             </View>
             
@@ -129,18 +130,7 @@ const SettingsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  header: {
-    padding: 16,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    backgroundColor: '#f5f5f5',
   },
   content: {
     padding: 16,
@@ -157,13 +147,9 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    ...shadow.card,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -193,42 +179,41 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   connectButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
   },
   connectButtonText: {
     color: '#FFF',
+    fontWeight: 'bold',
     fontSize: 16,
-    fontWeight: '600',
   },
   syncButton: {
-    backgroundColor: '#28a745',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
+      backgroundColor: '#17a2b8',
+      borderRadius: 12,
+      paddingVertical: 12,
+      alignItems: 'center',
   },
   syncButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: '600',
+      color: '#FFF',
+      fontWeight: 'bold',
+      fontSize: 16,
   },
   logoutButton: {
-    flexDirection: 'row',
-    backgroundColor: '#FFF',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#dc3545',
+      flexDirection: 'row',
+      backgroundColor: '#FFF',
+      padding: 16,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...shadow.card,
   },
   logoutText: {
-    color: '#dc3545',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+      color: '#dc3545',
+      fontWeight: 'bold',
+      fontSize: 16,
+  }
 });
 
 export default SettingsScreen;

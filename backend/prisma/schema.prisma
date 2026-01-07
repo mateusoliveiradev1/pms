@@ -54,6 +54,18 @@ model Product {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   OrderItem        OrderItem[]
+  InventoryLog     InventoryLog[]
+}
+
+model InventoryLog {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int      // Change amount (+/-)
+  type      String   // SALE, RESTOCK, ADJUSTMENT, RETURN, CANCEL
+  reason    String?
+  userId    String?  // Who performed the action (optional)
+  createdAt DateTime @default(now())
 }
 
 model ProductSupplier {
