@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import api from '../../services/api';
 import Header from '../../ui/components/Header';
-import { colors } from '../../ui/theme';
+import { colors, radius, shadow, spacing } from '../../ui/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 type InventoryLog = {
@@ -41,9 +41,7 @@ const ProductDetailsScreen = () => {
     );
 
     const loadData = async () => {
-        console.log('Loading details for product ID:', productId);
         if (!productId) {
-            console.error('No productId provided');
             setLoading(false);
             return;
         }
@@ -64,33 +62,32 @@ const ProductDetailsScreen = () => {
 
     const formatDate = (dateStr: string) => {
         const d = new Date(dateStr);
-        return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+        return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
     };
 
-    const renderLogItem = (item: InventoryLog) => {
+    const renderLogItem = (item: InventoryLog, index: number) => {
         const isPositive = item.quantity > 0;
+        const isLast = index === logs.length - 1;
+        
         return (
-        <View style={[styles.logItem, { borderLeftColor: isPositive ? colors.success : colors.danger }]}>
-            <View style={styles.logIconContainer}>
-                <Ionicons 
-                    name={isPositive ? "arrow-up-circle" : "arrow-down-circle"} 
-                    size={24} 
-                    color={isPositive ? colors.success : colors.danger} 
-                />
-            </View>
-            <View style={styles.logContent}>
-                <View style={styles.logHeader}>
-                    <Text style={styles.logType}>{item.type}</Text>
-                    <Text style={styles.logDate}>{formatDate(item.createdAt)}</Text>
+            <View style={styles.timelineItem} key={item.id}>
+                <View style={styles.timelineLeft}>
+                    <View style={[styles.timelineDot, { backgroundColor: isPositive ? colors.success : colors.danger }]} />
+                    {!isLast && <View style={styles.timelineLine} />}
                 </View>
-                <Text style={styles.logReason}>{item.reason}</Text>
+                <View style={styles.timelineContent}>
+                    <View style={styles.logCard}>
+                        <View style={styles.logHeader}>
+                            <Text style={styles.logType}>{item.type}</Text>
+                            <Text style={styles.logDate}>{formatDate(item.createdAt)}</Text>
+                        </View>
+                        <Text style={styles.logReason} numberOfLines={2}>{item.reason}</Text>
+                        <Text style={[styles.logQuantity, { color: isPositive ? colors.success : colors.danger }]}>
+                            {isPositive ? '+' : ''}{item.quantity} un
+                        </Text>
+                    </View>
+                </View>
             </View>
-            <View style={styles.logQuantityContainer}>
-                <Text style={[styles.logQuantity, { color: isPositive ? colors.success : colors.danger }]}>
-                    {isPositive ? '+' : ''}{item.quantity}
-                </Text>
-            </View>
-        </View>
         );
     };
 
@@ -99,102 +96,287 @@ const ProductDetailsScreen = () => {
     }
 
     if (!product) {
-        return <View style={styles.center}><Text>Produto não encontrado</Text></View>;
+        return (
+            <SafeAreaView style={styles.container}>
+                 <Header onBack={() => navigation.goBack()} title="Detalhes" />
+                 <View style={styles.center}>
+                     <Text style={styles.errorText}>Produto não encontrado.</Text>
+                 </View>
+            </SafeAreaView>
+        );
     }
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
-            <Header title="Detalhes do Produto" onBack={() => navigation.goBack()} />
-
-            <ScrollView contentContainerStyle={styles.content}>
-                <View style={styles.headerCard}>
-                    <View style={styles.headerRow}>
-                        <View style={{flex: 1}}>
-                            <Text style={styles.name}>{product.name}</Text>
-                            <Text style={styles.sku}>SKU: {product.sku}</Text>
-                        </View>
-                        <TouchableOpacity 
-                            style={styles.iconButton}
-                            // @ts-ignore
-                            onPress={() => navigation.navigate('ProductForm', { productId: product.id })}
-                        >
-                            <Ionicons name="create-outline" size={24} color={colors.primary} />
-                        </TouchableOpacity>
+            <Header 
+                onBack={() => navigation.goBack()} 
+                title="Detalhes do Produto"
+                rightIcon="create-outline"
+                // @ts-ignore
+                onRightPress={() => navigation.navigate('ProductForm', { productId: product.id })}
+            />
+            
+            <ScrollView contentContainerStyle={styles.scrollContent}>
+                {/* Hero Section */}
+                <View style={styles.heroSection}>
+                    <View style={styles.iconCircle}>
+                        <Ionicons name="cube" size={48} color={colors.primary} />
                     </View>
-                    <Text style={styles.description}>{product.description}</Text>
-                </View>
-                    
-                <View style={styles.statsContainer}>
-                    <View style={styles.statCard}>
-                        <Ionicons name="pricetag-outline" size={20} color={colors.success} style={{marginBottom: 4}} />
-                        <Text style={styles.label}>Preço</Text>
-                        <Text style={[styles.price, { color: colors.success }]}>R$ {product.finalPrice?.toFixed(2)}</Text>
-                    </View>
-                    <View style={styles.statCard}>
-                        <Ionicons name="cube-outline" size={20} color={colors.primary} style={{marginBottom: 4}} />
-                        <Text style={styles.label}>Estoque</Text>
-                        <Text style={[styles.stock, { color: product.stockAvailable < 5 ? colors.danger : colors.primary }]}>
-                            {product.stockAvailable}
-                        </Text>
-                    </View>
+                    <Text style={styles.productName}>{product.name}</Text>
+                    <Text style={styles.productSku}>SKU: {product.sku}</Text>
+                    <Text style={styles.productPrice}>R$ {product.finalPrice?.toFixed(2)}</Text>
                 </View>
 
-                <View style={styles.sectionHeader}>
-                    <Ionicons name="time-outline" size={20} color="#555" style={{marginRight: 8}} />
+                {/* Stats Grid */}
+                <View style={styles.statsGrid}>
+                    <View style={styles.statCard}>
+                        <Ionicons name="layers" size={24} color={colors.info} />
+                        <Text style={styles.statValue}>{product.stockAvailable}</Text>
+                        <Text style={styles.statLabel}>Estoque</Text>
+                    </View>
+                    <View style={styles.statCard}>
+                        <Ionicons name="pricetag" size={24} color={colors.success} />
+                        <Text style={styles.statValue}>R$ {product.finalPrice?.toFixed(2)}</Text>
+                        <Text style={styles.statLabel}>Preço</Text>
+                    </View>
+                     <View style={styles.statCard}>
+                        <Ionicons name="time" size={24} color={colors.warning} />
+                        <Text style={styles.statValue}>{logs.length}</Text>
+                        <Text style={styles.statLabel}>Movimentações</Text>
+                    </View>
+                </View>
+
+                {/* Description */}
+                {product.description ? (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Descrição</Text>
+                        <Text style={styles.descriptionText}>{product.description}</Text>
+                    </View>
+                ) : null}
+
+                {/* History Timeline */}
+                <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Histórico de Movimentação</Text>
-                </View>
-
-                {logs.length === 0 ? (
-                    <View style={styles.emptyContainer}>
-                        <Ionicons name="document-text-outline" size={48} color="#ccc" />
-                        <Text style={styles.empty}>Nenhum registro encontrado.</Text>
+                    <View style={styles.timelineContainer}>
+                        {logs.length === 0 ? (
+                            <Text style={styles.emptyText}>Nenhuma movimentação registrada.</Text>
+                        ) : (
+                            logs.map((log, index) => renderLogItem(log, index))
+                        )}
                     </View>
-                ) : (
-                    logs.map(log => (
-                        <View key={log.id} style={styles.logContainerWrapper}>
-                             {renderLogItem(log)}
-                        </View>
-                    ))
-                )}
+                </View>
             </ScrollView>
+
+            {/* Bottom Actions */}
+            <View style={styles.footer}>
+                <TouchableOpacity 
+                    style={[styles.actionButton, styles.deleteButton]}
+                    onPress={() => Alert.alert('Atenção', 'Deseja excluir este produto?', [
+                        { text: 'Cancelar', style: 'cancel' },
+                        { text: 'Excluir', style: 'destructive', onPress: async () => {
+                            try {
+                                await api.delete(`/products/${product.id}`);
+                                navigation.goBack();
+                            } catch (error) {
+                                Alert.alert('Erro', 'Não foi possível excluir o produto.');
+                            }
+                        }}
+                    ])}
+                >
+                    <Ionicons name="trash-outline" size={20} color={colors.danger} />
+                    <Text style={[styles.actionButtonText, { color: colors.danger }]}>Excluir</Text>
+                </TouchableOpacity>
+            </View>
         </SafeAreaView>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#f5f5f5' },
-    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    content: { padding: 16 },
-    headerCard: { backgroundColor: '#fff', padding: 20, borderRadius: 16, marginBottom: 16, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, shadowOffset: {width:0, height:2} },
-    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
-    name: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 4 },
-    sku: { color: '#888', fontSize: 14, fontWeight: '600' },
-    description: { color: '#666', fontSize: 14, lineHeight: 20 },
-    iconButton: { padding: 8, backgroundColor: '#f0f0f0', borderRadius: 8 },
-    
-    statsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 },
-    statCard: { flex: 0.48, backgroundColor: '#fff', padding: 16, borderRadius: 12, alignItems: 'center', elevation: 2 },
-    
-    label: { fontSize: 12, color: '#888', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-    price: { fontSize: 18, fontWeight: 'bold' },
-    stock: { fontSize: 24, fontWeight: 'bold' },
-    
-    sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 },
-    sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#555' },
-    
-    logContainerWrapper: { marginBottom: 10 },
-    logItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 12, borderRadius: 12, borderLeftWidth: 4, elevation: 1 },
-    logIconContainer: { marginRight: 12 },
-    logContent: { flex: 1 },
-    logHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
-    logType: { fontWeight: 'bold', fontSize: 14, color: '#333' },
-    logDate: { fontSize: 11, color: '#999' },
-    logReason: { color: '#666', fontSize: 12 },
-    logQuantityContainer: { marginLeft: 12, minWidth: 40, alignItems: 'flex-end' },
-    logQuantity: { fontWeight: 'bold', fontSize: 16 },
-    
-    emptyContainer: { alignItems: 'center', marginTop: 40 },
-    empty: { textAlign: 'center', color: '#888', marginTop: 12 }
+    container: {
+        flex: 1,
+        backgroundColor: colors.background,
+    },
+    center: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scrollContent: {
+        paddingBottom: 80,
+    },
+    heroSection: {
+        alignItems: 'center',
+        paddingVertical: spacing.xl,
+        backgroundColor: colors.surface,
+        borderBottomLeftRadius: radius.xl,
+        borderBottomRightRadius: radius.xl,
+        ...shadow.card,
+        marginBottom: spacing.md,
+    },
+    iconCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: colors.primary + '15',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: spacing.md,
+    },
+    productName: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: colors.text,
+        textAlign: 'center',
+        paddingHorizontal: spacing.md,
+        marginBottom: 4,
+    },
+    productSku: {
+        fontSize: 14,
+        color: colors.muted,
+        marginBottom: spacing.sm,
+    },
+    productPrice: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: colors.primary,
+    },
+    statsGrid: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingHorizontal: spacing.md,
+        marginBottom: spacing.lg,
+    },
+    statCard: {
+        flex: 1,
+        backgroundColor: colors.surface,
+        borderRadius: radius.md,
+        padding: spacing.md,
+        alignItems: 'center',
+        marginHorizontal: 4,
+        ...shadow.card,
+    },
+    statValue: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: colors.text,
+        marginTop: 8,
+    },
+    statLabel: {
+        fontSize: 12,
+        color: colors.muted,
+    },
+    section: {
+        paddingHorizontal: spacing.md,
+        marginBottom: spacing.lg,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: colors.text,
+        marginBottom: spacing.md,
+    },
+    descriptionText: {
+        fontSize: 14,
+        color: colors.text,
+        lineHeight: 20,
+        backgroundColor: colors.surface,
+        padding: spacing.md,
+        borderRadius: radius.md,
+    },
+    timelineContainer: {
+        paddingLeft: spacing.sm,
+    },
+    timelineItem: {
+        flexDirection: 'row',
+        marginBottom: 0,
+    },
+    timelineLeft: {
+        alignItems: 'center',
+        width: 20,
+        marginRight: spacing.sm,
+    },
+    timelineDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        zIndex: 1,
+    },
+    timelineLine: {
+        width: 2,
+        flex: 1,
+        backgroundColor: colors.border,
+        marginVertical: 4,
+    },
+    timelineContent: {
+        flex: 1,
+        paddingBottom: spacing.md,
+    },
+    logCard: {
+        backgroundColor: colors.surface,
+        borderRadius: radius.md,
+        padding: spacing.md,
+        ...shadow.card,
+    },
+    logHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+    },
+    logType: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: colors.text,
+    },
+    logDate: {
+        fontSize: 12,
+        color: colors.muted,
+    },
+    logReason: {
+        fontSize: 14,
+        color: colors.muted,
+        marginBottom: 4,
+    },
+    logQuantity: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        textAlign: 'right',
+    },
+    emptyText: {
+        fontSize: 14,
+        color: colors.muted,
+        fontStyle: 'italic',
+    },
+    errorText: {
+        fontSize: 16,
+        color: colors.danger,
+    },
+    footer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: colors.surface,
+        padding: spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+    },
+    actionButton: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderRadius: radius.md,
+        borderWidth: 1,
+    },
+    deleteButton: {
+        borderColor: colors.danger,
+        backgroundColor: colors.danger + '10',
+    },
+    actionButtonText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginLeft: 8,
+    }
 });
 
 export default ProductDetailsScreen;
