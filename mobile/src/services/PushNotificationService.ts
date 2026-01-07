@@ -47,13 +47,6 @@ export async function registerForPushNotificationsAsync() {
   // https://docs.expo.dev/push-notifications/push-notifications-setup/#configure-projectid
   const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
   
-  if (!projectId) {
-     // console.log('Project ID not found. Ensure EAS Build is configured if using EAS.');
-     // Usually for development we don't strictly need it if just testing locally with Expo Go?
-     // Actually Expo Go needs it for new API? 
-     // Let's try getting token without projectId first, or with it if available.
-  }
-
   try {
     const tokenData = await Notifications.getExpoPushTokenAsync({
         projectId: projectId, 
@@ -64,7 +57,12 @@ export async function registerForPushNotificationsAsync() {
     await api.post('/auth/push-token', { token });
     
     return token;
-  } catch (error) {
+  } catch (error: any) {
+    // Suppress specific errors that are expected during development in Expo Go
+    if (error?.message?.includes('No "projectId" found') || error?.message?.includes('removed from Expo Go')) {
+        console.log('Push Notifications are skipped (Expo Go / No Project ID). This is expected in development.');
+        return null;
+    }
     console.log('Error getting push token', error);
     return null;
   }
