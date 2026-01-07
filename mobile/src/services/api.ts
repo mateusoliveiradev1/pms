@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { Alert } from 'react-native';
 
 // Use seu IP local se estiver testando em dispositivo físico ou emulador Android (10.0.2.2)
 // Exemplo: 'http://192.168.1.10:3000/api'
@@ -21,7 +22,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      console.warn('Sessão expirada ou sem permissão. Por favor, faça logout e login novamente.');
+      Alert.alert(
+        'Sessão Expirada',
+        'Sua sessão expirou ou você não tem permissão. Por favor, faça login novamente.'
+      );
     }
     return Promise.reject(error);
   }
