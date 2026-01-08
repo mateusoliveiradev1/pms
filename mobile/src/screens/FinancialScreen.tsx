@@ -73,6 +73,49 @@ const FinancialScreen = () => {
   const [billingDoc, setBillingDoc] = useState('');
   const [billingAddress, setBillingAddress] = useState('');
   const [billingEmail, setBillingEmail] = useState('');
+  const [billingCep, setBillingCep] = useState('');
+  const [loadingCep, setLoadingCep] = useState(false);
+
+  const formatDoc = (text: string) => {
+    const numbers = text.replace(/\D/g, '');
+    if (numbers.length <= 11) {
+      return numbers
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+        .replace(/(-\d{2})\d+?$/, '$1');
+    } else {
+      return numbers
+        .replace(/^(\d{2})(\d)/, '$1.$2')
+        .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+        .replace(/\.(\d{3})(\d)/, '.$1/$2')
+        .replace(/(\d{4})(\d)/, '$1-$2')
+        .replace(/(-\d{2})\d+?$/, '$1');
+    }
+  };
+
+  const handleSearchCep = async () => {
+    const cep = billingCep.replace(/\D/g, '');
+    if (cep.length !== 8) {
+      Alert.alert('CEP Inválido', 'O CEP deve conter 8 dígitos.');
+      return;
+    }
+    setLoadingCep(true);
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await response.json();
+      if (data.erro) {
+        Alert.alert('Erro', 'CEP não encontrado.');
+        return;
+      }
+      const formattedAddress = `${data.logradouro}, Nº , ${data.bairro}, ${data.localidade} - ${data.uf}`;
+      setBillingAddress(formattedAddress);
+    } catch (error) {
+      Alert.alert('Erro', 'Falha ao buscar CEP.');
+    } finally {
+      setLoadingCep(false);
+    }
+  };
 
   // New Card Form State
   const [newCardNumber, setNewCardNumber] = useState('');
