@@ -35,7 +35,7 @@ interface StatusData {
 }
 
 const ReportsScreen: React.FC = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   
   const [salesStats, setSalesStats] = useState<SalesStatsResponse | null>(null);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -44,9 +44,9 @@ const ReportsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async (isRefresh = false) => {
     try {
-      if (!refreshing) setLoading(true);
+      if (!isRefresh) setLoading(true);
       
       const [salesRes, topRes, statusRes] = await Promise.all([
         api.get<SalesStatsResponse>('/reports/sales'),
@@ -63,18 +63,18 @@ const ReportsScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       fetchData();
-    }, [])
+    }, [fetchData])
   );
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchData();
-  };
+    fetchData(true);
+  }, [fetchData]);
 
   // Prepare data for Line chart
   const getLineChartData = () => {
