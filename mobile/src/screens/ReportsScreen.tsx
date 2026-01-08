@@ -104,7 +104,7 @@ const ReportsScreen: React.FC = () => {
 
   // Prepare data for Weekday Bar Chart
   const getWeekdayData = () => {
-      if (!salesStats) return null;
+      if (!salesStats) return { labels: [], datasets: [] };
 
       const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
       const counts = [0, 0, 0, 0, 0, 0, 0];
@@ -218,7 +218,7 @@ const ReportsScreen: React.FC = () => {
           </View>
         )}
 
-        {weekdayChartData && (
+        {weekdayChartData.datasets.length > 0 && weekdayChartData.datasets[0].data.some(v => v > 0) && (
           <View style={styles.chartCard}>
               <Text style={styles.chartTitle}>Vendas por Dia da Semana</Text>
               <BarChart
@@ -226,6 +226,7 @@ const ReportsScreen: React.FC = () => {
                   width={screenWidth - 48}
                   height={220}
                   yAxisLabel="R$ "
+                  yAxisSuffix=""
                   chartConfig={{
                       backgroundColor: "#ffffff",
                       backgroundGradientFrom: "#ffffff",
@@ -237,6 +238,7 @@ const ReportsScreen: React.FC = () => {
                   }}
                   style={{ marginVertical: 8, borderRadius: 16 }}
                   showValuesOnTopOfBars
+                  fromZero
               />
           </View>
         )}
