@@ -43,6 +43,10 @@ interface SupplierData {
     name: string;
     monthlyPrice: number;
   };
+  billingName?: string;
+  billingDoc?: string;
+  billingAddress?: string;
+  billingEmail?: string;
 }
 
 const FinancialScreen = () => {
@@ -62,6 +66,13 @@ const FinancialScreen = () => {
   const [withdrawModalVisible, setWithdrawModalVisible] = useState(false);
   const [addCardMode, setAddCardMode] = useState(false);
   const [planModalVisible, setPlanModalVisible] = useState(false);
+  const [billingModalVisible, setBillingModalVisible] = useState(false);
+
+  // Billing Form State
+  const [billingName, setBillingName] = useState('');
+  const [billingDoc, setBillingDoc] = useState('');
+  const [billingAddress, setBillingAddress] = useState('');
+  const [billingEmail, setBillingEmail] = useState('');
 
   // New Card Form State
   const [newCardNumber, setNewCardNumber] = useState('');
@@ -190,6 +201,47 @@ const FinancialScreen = () => {
           }
           setPlanModalVisible(false);
           Alert.alert('Plano alterado', 'Seu plano foi atualizado para o próximo ciclo.');
+      }
+  };
+
+  const openBillingModal = () => {
+      if (supplier) {
+          setBillingName(supplier.billingName || supplier.name || '');
+          setBillingDoc(supplier.billingDoc || '');
+          setBillingAddress(supplier.billingAddress || '');
+          setBillingEmail(supplier.billingEmail || '');
+      }
+      setSettingsModalVisible(false);
+      setBillingModalVisible(true);
+  };
+
+  const saveBillingInfo = async () => {
+      if (!supplier) return;
+      
+      try {
+          // Optimistic update
+          setSupplier(prev => prev ? ({
+              ...prev,
+              billingName,
+              billingDoc,
+              billingAddress,
+              billingEmail
+          }) : null);
+          
+          setBillingModalVisible(false);
+
+          await api.post('/financial/billing-info', {
+              supplierId: supplier.id,
+              billingName,
+              billingDoc,
+              billingAddress,
+              billingEmail
+          });
+          
+          Alert.alert('Sucesso', 'Dados de faturamento atualizados.');
+      } catch (e) {
+          console.log('Error saving billing info', e);
+          Alert.alert('Erro', 'Não foi possível salvar os dados. Tente novamente.');
       }
   };
 
@@ -730,7 +782,7 @@ const FinancialScreen = () => {
                   
                   <TouchableOpacity 
                     style={styles.settingRow}
-                    onPress={() => Alert.alert('Dados de Faturamento', 'Empresa: Minha Loja Ltda\nCNPJ: 12.345.678/0001-90\nEndereço: Av. Paulista, 1000 - SP')}
+                    onPress={openBillingModal}
                   >
                       <Text style={styles.settingLabel}>Dados de Faturamento</Text>
                       <Ionicons name="chevron-forward" size={20} color={colors.muted} />
@@ -838,6 +890,98 @@ const FinancialScreen = () => {
                   <TouchableOpacity style={styles.saveButton} onPress={handleWithdraw}>
                       <Text style={styles.saveButtonText}>Confirmar Saque</Text>
                   </TouchableOpacity>
+              </View>
+          </View>
+      </Modal>
+
+      {/* 6. Billing Info Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={billingModalVisible}
+        onRequestClose={() => setBillingModalVisible(false)}
+      >
+          <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, { width: '90%' }]}>
+                  <View style={styles.modalHeader}>
+                      <Text style={styles.modalTitle}>Dados de Faturamento</Text>
+                      <TouchableOpacity onPress={() => setBillingModalVisible(false)}>
+                          <Ionicons name="close" size={24} color={colors.text} />
+                      </TouchableOpacity>
+                  </View>
+                  
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                      <Text style={styles.withdrawLabel}>Razão Social / Nome Completo</Text>
+                      <TextInput 
+                          style={styles.input}
+                          placeholder="Ex: Minha Loja Ltda"
+                          value={billingName}
+                          onChangeText={setBillingName}
+                      />
+
+                      <Text style={styles.withdrawLabel}>CPF / CNPJ</Text>
+                      <TextInput 
+                          style={styles.input}
+                          placeholder="00.000.000/0000-00"
+                          value={billingDoc}
+                          onChangeText={handleDocChange}
+                          keyboardType="numeric"
+                          maxLength={18}
+                      />
+
+                      <Text style={styles.withdrawLabel}>Endereço (Buscar por CEP)</Text>
+                      <View style={{ flexDirection: 'row', marginBottom: 12 }}>
+                          <TextInput 
+                              style={[styles.input, { flex: 1, marginBottom: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]}
+                              placeholder="00000-000"
+                              value={billingCep}
+                              onChangeText={(t) => setBillingCep(t.replace(/\D/g, ''))}
+                              keyboardType="numeric"
+                              maxLength={8}
+                          />
+                          <TouchableOpacity 
+                            style={{ 
+                                backgroundColor: colors.primary, 
+                                justifyContent: 'center', 
+                                alignItems: 'center',
+                                paddingHorizontal: 16,
+                                borderTopRightRadius: 8,
+                                borderBottomRightRadius: 8
+                            }}
+                            onPress={handleSearchCep}
+                            disabled={loadingCep}
+                          >
+                              {loadingCep ? (
+                                  <ActivityIndicator color="#FFF" size="small" />
+                              ) : (
+                                  <Ionicons name="search" size={20} color="#FFF" />
+                              )}
+                          </TouchableOpacity>
+                      </View>
+
+                      <Text style={styles.withdrawLabel}>Endereço Completo</Text>
+                      <TextInput 
+                          style={[styles.input, { height: 80 }]}
+                          placeholder="Rua, Número, Bairro, Cidade - UF"
+                          value={billingAddress}
+                          onChangeText={setBillingAddress}
+                          multiline
+                      />
+
+                      <Text style={styles.withdrawLabel}>E-mail para Nota Fiscal</Text>
+                      <TextInput 
+                          style={styles.input}
+                          placeholder="financeiro@minhaloja.com"
+                          value={billingEmail}
+                          onChangeText={setBillingEmail}
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                      />
+
+                      <TouchableOpacity style={styles.saveButton} onPress={saveBillingInfo}>
+                          <Text style={styles.saveButtonText}>Salvar Dados</Text>
+                      </TouchableOpacity>
+                  </ScrollView>
               </View>
           </View>
       </Modal>
