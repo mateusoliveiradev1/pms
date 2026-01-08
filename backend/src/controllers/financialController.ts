@@ -90,3 +90,24 @@ export const changePlan = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Error changing plan', error: error.message });
   }
 };
+
+export const updateBillingInfo = async (req: Request, res: Response) => {
+  const { supplierId, billingName, billingDoc, billingAddress, billingEmail } = req.body;
+  
+  try {
+    const supplier = await prisma.supplier.update({
+      where: { id: String(supplierId) },
+      data: {
+        billingName,
+        billingDoc,
+        billingAddress,
+        billingEmail
+      },
+      include: { plan: true } // Return full object for frontend update
+    });
+    
+    res.json({ message: 'Billing info updated successfully', supplier });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error updating billing info', error: error.message });
+  }
+};

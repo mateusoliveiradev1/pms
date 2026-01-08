@@ -46,6 +46,12 @@ model Supplier {
   walletBalance   Float     @default(0.0)
   nextBillingDate DateTime?
 
+  // Billing Info
+  billingName     String?
+  billingDoc      String?
+  billingAddress  String?
+  billingEmail    String?
+
   products        ProductSupplier[]
   orders          Order[]
   ledger          FinancialLedger[]
