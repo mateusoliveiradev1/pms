@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import api from '../services/api';
 import Header from '../ui/components/Header';
-import { colors, shadow, radius, spacing } from '../ui/theme';
+import { colors, shadow } from '../ui/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 const screenWidth = Dimensions.get("window").width;
