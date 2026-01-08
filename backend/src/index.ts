@@ -15,6 +15,7 @@ import reportsRoutes from './routes/reportsRoutes';
 import plansRoutes from './routes/plansRoutes';
 import financialRoutes from './routes/financialRoutes';
 import { getSupplierFinancials } from './controllers/financialController';
+import { listPlans } from './controllers/plansController';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -43,6 +44,7 @@ app.use('/api/plans', plansRoutes);
 app.use('/api/financial', financialRoutes);
 // Explicit route to avoid 404 on some environments
 app.get('/api/financial/supplier/:id', getSupplierFinancials);
+app.get('/api/plans', listPlans);
 
 app.get('/', (req, res) => {
   res.send('Dropshipping PMS API Running');
