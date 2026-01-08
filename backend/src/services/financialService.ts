@@ -1,4 +1,4 @@
-import { PrismaClient, Supplier, Order } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -17,6 +17,7 @@ export const FinancialService = {
       include: { plan: true }
     });
   },
+
   /**
    * Calculates the financial split for an order
    */
@@ -25,17 +26,8 @@ export const FinancialService = {
     commissionRatePercentage: number,
     marketplaceFeeValue: number = 0
   ): FinancialCalculation => {
-    // 1. Marketplace takes its cut first (usually)
-    // Assuming marketplaceFeeValue is provided (e.g., from Mercado Livre API)
-    // If not, we might need a rule for it. For now, we accept it as input.
-    
     const netAmount = totalAmount - marketplaceFeeValue;
-    
-    // 2. Platform commission is applied on the Net Amount (or Total, depending on business rule).
-    // The prompt says: "Comissão calculada sobre: Valor líquido da venda (após taxa do marketplace)"
     const platformCommission = netAmount * (commissionRatePercentage / 100);
-    
-    // 3. The rest goes to the supplier
     const supplierPayout = netAmount - platformCommission;
 
     return {
@@ -45,13 +37,213 @@ export const FinancialService = {
     };
   },
 
-  /**
-   * Processes the payout for a delivered order.
-   * Atomic transaction: Updates Order Status -> Updates Supplier Balance -> Creates Ledger Entry
-   */
+  // ==========================================
+  // CARTEIRA DO FORNECEDOR (SUPPLIER WALLET)
+  // ==========================================
+
+  getSupplierWallet: async (supplierId: string) => {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: {
+        walletBalance: true,
+        pendingBalance: true,
+        blockedBalance: true,
+        verificationStatus: true,
+        financialStatus: true
+      }
+    });
+    
+    if (!supplier) throw new Error('Supplier not found');
+
+    // Histórico recente (Ledger)
+    const ledger = await prisma.financialLedger.findMany({
+      where: { supplierId },
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    });
+
+    // Saques recentes
+    const withdrawals = await prisma.withdrawalRequest.findMany({
+      where: { supplierId },
+      orderBy: { requestedAt: 'desc' },
+      take: 10
+    });
+
+    return {
+      balances: {
+        available: supplier.walletBalance,
+        pending: supplier.pendingBalance,
+        blocked: supplier.blockedBalance
+      },
+      status: {
+        verified: supplier.verificationStatus === 'VERIFIED',
+        active: supplier.financialStatus === 'ACTIVE'
+      },
+      history: ledger,
+      withdrawals
+    };
+  },
+
+  requestWithdrawal: async (supplierId: string, amount: number) => {
+    return await prisma.$transaction(async (tx) => {
+      const supplier = await tx.supplier.findUnique({ where: { id: supplierId } });
+      if (!supplier) throw new Error('Supplier not found');
+
+      if (supplier.verificationStatus !== 'VERIFIED') {
+        throw new Error('Conta não verificada. Complete a verificação para sacar.');
+      }
+      if (supplier.financialStatus !== 'ACTIVE') {
+        throw new Error('Conta suspensa ou com pendências financeiras.');
+      }
+      // Check active subscription
+      const activeSub = await tx.supplierSubscription.findFirst({
+        where: { supplierId, status: 'ATIVA', endDate: { gt: new Date() } }
+      });
+      if (!activeSub) {
+        throw new Error('Plano vencido ou inativo. Renove para realizar saques.');
+      }
+
+      if (supplier.walletBalance < amount) {
+        throw new Error('Saldo disponível insuficiente.');
+      }
+      if (amount <= 0) {
+        throw new Error('Valor inválido.');
+      }
+
+      // Move from Available to Blocked
+      await tx.supplier.update({
+        where: { id: supplierId },
+        data: {
+          walletBalance: { decrement: amount },
+          blockedBalance: { increment: amount }
+        }
+      });
+
+      // Create Request
+      const request = await tx.withdrawalRequest.create({
+        data: {
+          supplierId,
+          amount,
+          status: 'PENDING'
+        }
+      });
+      
+      return request;
+    });
+  },
+
+  // ==========================================
+  // FINANCEIRO DA PLATAFORMA (ADMIN)
+  // ==========================================
+
+  getAdminDashboard: async () => {
+    // Totais acumulados
+    const totalCommission = await prisma.financialLedger.aggregate({
+      where: { type: 'SALE_COMMISSION' },
+      _sum: { amount: true }
+    });
+    
+    const totalSubscription = await prisma.financialLedger.aggregate({
+      where: { type: 'SUBSCRIPTION_PAYMENT' },
+      _sum: { amount: true }
+    });
+
+    const pendingWithdrawals = await prisma.withdrawalRequest.count({
+      where: { status: 'PENDING' }
+    });
+
+    return {
+      revenue: {
+        commissions: totalCommission._sum.amount || 0,
+        subscriptions: totalSubscription._sum.amount || 0,
+        total: (totalCommission._sum.amount || 0) + (totalSubscription._sum.amount || 0)
+      },
+      pendingWithdrawals
+    };
+  },
+
+  getWithdrawalRequests: async (status: string = 'PENDING') => {
+    return await prisma.withdrawalRequest.findMany({
+      where: { status },
+      include: { supplier: { select: { name: true, billingDoc: true } } },
+      orderBy: { requestedAt: 'asc' }
+    });
+  },
+
+  approveWithdrawal: async (requestId: string, adminId: string) => {
+    return await prisma.$transaction(async (tx) => {
+      const req = await tx.withdrawalRequest.findUnique({ 
+        where: { id: requestId },
+        include: { supplier: true }
+      });
+      if (!req || req.status !== 'PENDING') throw new Error('Request not pending');
+
+      // 1. Remove from Blocked Balance (It leaves the system)
+      await tx.supplier.update({
+        where: { id: req.supplierId },
+        data: {
+          blockedBalance: { decrement: req.amount }
+        }
+      });
+
+      // 2. Update Request Status
+      const updatedReq = await tx.withdrawalRequest.update({
+        where: { id: requestId },
+        data: {
+          status: 'APPROVED', 
+          processedAt: new Date(),
+          processedBy: adminId
+        }
+      });
+
+      // 3. Ledger Entry (Payout Completed)
+      await tx.financialLedger.create({
+        data: {
+          type: 'PAYOUT',
+          amount: req.amount,
+          supplierId: req.supplierId,
+          description: `Saque aprovado #${req.id}`,
+          status: 'COMPLETED'
+        }
+      });
+
+      return updatedReq;
+    });
+  },
+
+  rejectWithdrawal: async (requestId: string, reason: string, adminId: string) => {
+    return await prisma.$transaction(async (tx) => {
+      const req = await tx.withdrawalRequest.findUnique({ where: { id: requestId } });
+      if (!req || req.status !== 'PENDING') throw new Error('Request not pending');
+
+      // 1. Return to Wallet Balance (Available)
+      await tx.supplier.update({
+        where: { id: req.supplierId },
+        data: {
+          blockedBalance: { decrement: req.amount },
+          walletBalance: { increment: req.amount }
+        }
+      });
+
+      // 2. Update Request
+      return await tx.withdrawalRequest.update({
+        where: { id: requestId },
+        data: {
+          status: 'REJECTED',
+          notes: reason,
+          processedAt: new Date(),
+          processedBy: adminId
+        }
+      });
+    });
+  },
+
+  // ==========================================
+  // AUTOMATION & INTERNAL
+  // ==========================================
+
   processOrderPayout: async (orderId: string) => {
     return await prisma.$transaction(async (tx) => {
-      // 1. Get the order with supplier info
       const order = await tx.order.findUnique({
         where: { id: orderId },
         include: { supplier: true }
@@ -62,271 +254,153 @@ export const FinancialService = {
       if (order.financialStatus === 'RELEASED') throw new Error('Payout already released for this order');
       if (!order.supplier) throw new Error('Order has no linked supplier');
 
-      // 2. Update Supplier Balance
-      const updatedSupplier = await tx.supplier.update({
+      // Move from Pending to Available
+      await tx.supplier.update({
         where: { id: order.supplier.id },
         data: {
+          pendingBalance: { decrement: order.supplierPayout },
           walletBalance: { increment: order.supplierPayout }
         }
       });
 
-      // 3. Create Ledger Entry for Payout
+      await tx.order.update({
+        where: { id: order.id },
+        data: { financialStatus: 'RELEASED' }
+      });
+
+      // Ledger Entry: Revenue Released to Wallet
       await tx.financialLedger.create({
         data: {
-          type: 'PAYOUT',
+          type: 'SALE_REVENUE', 
           amount: order.supplierPayout,
           supplierId: order.supplier.id,
           orderId: order.id,
-          description: `Repasse referente ao pedido ${order.id}`,
+          description: `Receita de venda #${order.id.slice(0,8)}`,
           status: 'COMPLETED'
         }
       });
 
-      // 4. Create Ledger Entry for Platform Commission (Revenue)
+      // Ledger Entry: Platform Commission
       await tx.financialLedger.create({
         data: {
           type: 'SALE_COMMISSION',
           amount: order.platformCommission,
-          supplierId: order.supplier.id, // Linked to supplier for tracking
+          supplierId: order.supplier.id, // Linked for reference
           orderId: order.id,
-          description: `Comissão da plataforma sobre pedido ${order.id}`,
+          description: `Comissão plataforma #${order.id.slice(0,8)}`,
           status: 'COMPLETED'
         }
       });
-      await tx.log.create({
-        data: {
-          level: 'INFO',
-          message: 'Comissão aplicada em pedido',
-          context: JSON.stringify({ orderId: order.id, supplierId: order.supplier.id, commission: order.platformCommission })
-        }
-      });
-
-      // 5. Update Order Financial Status
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
-        data: { financialStatus: 'RELEASED' }
-      });
-
-      return { updatedOrder, updatedSupplier };
+      
+      return order;
     });
   },
-
-  /**
-   * Process a subscription payment for a supplier
-   */
+  
   processSubscriptionPayment: async (supplierId: string, amount: number, method: 'BALANCE' | 'CARD' = 'CARD') => {
     return await prisma.$transaction(async (tx) => {
-      const supplier = await tx.supplier.findUnique({ where: { id: supplierId }, include: { plan: true } });
+      const supplier = await tx.supplier.findUnique({
+        where: { id: supplierId },
+        include: { plan: true }
+      });
       if (!supplier) throw new Error('Supplier not found');
-      if (!supplier.planId) throw new Error('Supplier has no plan assigned');
 
-      if (method === 'BALANCE' && supplier.walletBalance < amount) {
-        throw new Error('Insufficient wallet balance');
+      if (method === 'BALANCE') {
+          if (supplier.walletBalance < amount) {
+             throw new Error('Insufficient wallet balance');
+          }
+          await tx.supplier.update({
+              where: { id: supplierId },
+              data: { walletBalance: { decrement: amount } }
+          });
       }
 
       const now = new Date();
       const cycleDays = supplier.plan?.cycleDays || 30;
-      const endDate = new Date(now);
-      endDate.setDate(endDate.getDate() + cycleDays);
+      const nextDate = new Date(now);
+      nextDate.setDate(nextDate.getDate() + cycleDays);
 
       await tx.financialLedger.create({
         data: {
           type: 'SUBSCRIPTION_PAYMENT',
-          amount,
+          amount: amount,
           supplierId: supplier.id,
           description: method === 'BALANCE' ? 'Pagamento de Mensalidade (Saldo)' : 'Pagamento de Mensalidade (Cartão)',
           status: 'COMPLETED'
         }
       });
 
-      const activeSub = await tx.supplierSubscription.findFirst({
-        where: { supplierId, status: 'ATIVA' }
-      });
-      if (activeSub) {
-        await tx.supplierSubscription.update({
-          where: { id: activeSub.id },
-          data: { planId: supplier.planId, startDate: now, endDate, status: 'ATIVA' }
-        });
-      } else {
-        await tx.supplierSubscription.create({
-          data: { supplierId, planId: supplier.planId, startDate: now, endDate, status: 'ATIVA' }
-        });
-      }
-
-      // Apply scheduled downgrade at renewal
-      const finalPlanId = supplier.scheduledPlanId ? supplier.scheduledPlanId : supplier.planId;
-
       const updatedSupplier = await tx.supplier.update({
         where: { id: supplierId },
         data: {
-          planId: finalPlanId,
-          scheduledPlanId: null,
-          nextBillingDate: endDate,
+          nextBillingDate: nextDate,
           financialStatus: 'ACTIVE',
-          status: 'ACTIVE',
-          walletBalance: method === 'BALANCE' ? { decrement: amount } : undefined
-        },
-        include: { plan: true }
+          status: 'ACTIVE'
+        }
       });
 
-      await tx.log.create({
-        data: { level: 'INFO', message: 'Assinatura ativada após pagamento', context: JSON.stringify({ supplierId, planId: updatedSupplier.planId }) }
+      const activeSub = await tx.supplierSubscription.findFirst({
+        where: { supplierId: supplier.id, status: 'ATIVA' }
       });
-
-      return updatedSupplier;
-    });
-  },
-  
-  /**
-   * Process a withdraw (PAYOUT) from supplier wallet with PIX
-   */
-  processWithdraw: async (supplierId: string, amount: number, pixKey: string) => {
-    return await prisma.$transaction(async (tx) => {
-      if (!amount || amount <= 0) throw new Error('Invalid amount');
       
-      const supplier = await tx.supplier.findUnique({ where: { id: supplierId } });
-      if (!supplier) throw new Error('Supplier not found');
-      if (supplier.financialStatus !== 'ACTIVE') throw new Error('Withdraw blocked: supplier not active');
-      const sub = await tx.supplierSubscription.findFirst({ where: { supplierId, status: 'ATIVA' } });
-      if (!sub || sub.endDate < new Date()) throw new Error('Withdraw blocked: subscription overdue');
-      if (supplier.walletBalance < amount) throw new Error('Insufficient wallet balance');
-
-      const updatedSupplier = await tx.supplier.update({
-        where: { id: supplierId },
-        data: {
-          walletBalance: { decrement: amount }
-        }
-      });
-
-      await tx.financialLedger.create({
-        data: {
-          type: 'PAYOUT',
-          amount,
-          supplierId,
-          description: `Saque PIX (${pixKey})`,
-          status: 'COMPLETED'
-        }
+      if (activeSub) {
+          await tx.supplierSubscription.update({
+              where: { id: activeSub.id },
+              data: { status: 'SUSPENSA' }
+          });
+      }
+      
+      await tx.supplierSubscription.create({
+          data: {
+              supplierId: supplier.id,
+              planId: supplier.planId!,
+              startDate: now,
+              endDate: nextDate,
+              status: 'ATIVA'
+          }
       });
 
       return updatedSupplier;
     });
   },
-  
-  /**
-   * Assign a plan to supplier
-   */
+
   assignPlanToSupplier: async (supplierId: string, planId: string) => {
     return await prisma.$transaction(async (tx) => {
       const plan = await tx.plan.findUnique({ where: { id: planId } });
       if (!plan) throw new Error('Plan not found');
-      const supplier = await tx.supplier.findUnique({ where: { id: supplierId }, include: { plan: true } });
-      if (!supplier) throw new Error('Supplier not found');
-      const currentPriority = supplier.plan?.priorityLevel ?? 1;
-      const isUpgrade = plan.priorityLevel > currentPriority || plan.monthlyPrice >= (supplier.plan?.monthlyPrice ?? 0);
 
-      let updated;
-      if (isUpgrade) {
-        const now = new Date();
-        const endDate = new Date(now);
-        endDate.setDate(endDate.getDate() + (plan.cycleDays || 30));
-
-        const activeSub = await tx.supplierSubscription.findFirst({ where: { supplierId, status: 'ATIVA' } });
-        if (activeSub) {
-          await tx.supplierSubscription.update({ where: { id: activeSub.id }, data: { planId: plan.id, startDate: now, endDate, status: 'ATIVA' } });
-        } else {
-          await tx.supplierSubscription.create({ data: { supplierId, planId: plan.id, startDate: now, endDate, status: 'ATIVA' } });
-        }
-
-        updated = await tx.supplier.update({
-          where: { id: supplierId },
-          data: { planId: plan.id, nextBillingDate: endDate, scheduledPlanId: null, financialStatus: 'ACTIVE', status: 'ACTIVE' },
-          include: { plan: true }
-        });
-        await tx.log.create({ data: { level: 'INFO', message: 'Upgrade de plano imediato', context: JSON.stringify({ supplierId, planId: plan.id }) } });
-      } else {
-        updated = await tx.supplier.update({
-          where: { id: supplierId },
-          data: { scheduledPlanId: plan.id },
-          include: { plan: true }
-        });
-        await tx.log.create({ data: { level: 'INFO', message: 'Downgrade agendado para próximo ciclo', context: JSON.stringify({ supplierId, planId: plan.id }) } });
-      }
-      
-      await tx.financialLedger.create({
+      const updatedSupplier = await tx.supplier.update({
+        where: { id: supplierId },
         data: {
-          type: 'ADJUSTMENT',
-          amount: 0,
-          supplierId,
-          description: `Alteração de plano para ${plan.name}`,
-          status: 'COMPLETED'
+          planId: plan.id,
+          commissionRate: plan.commissionPercent,
         }
       });
-      
-      return updated;
+      return updatedSupplier;
     });
   },
 
-  /**
-   * Checks and updates status for overdue suppliers
-   * Should be called by a Cron Job or Admin Trigger
-   */
   updateOverdueSuppliers: async () => {
-      const now = new Date();
-      
-      // 1. Find suppliers with expired billing date and currently ACTIVE
-      const overdueSuppliers = await prisma.supplier.findMany({
-          where: {
-              nextBillingDate: { lt: now },
-              financialStatus: 'ACTIVE'
-          }
-      });
-
-      const results = [];
-
-      for (const s of overdueSuppliers) {
-          // Mark as OVERDUE and PAUSED
-          const updated = await prisma.supplier.update({
-              where: { id: s.id },
-              data: {
-                  financialStatus: 'OVERDUE',
-                  status: 'PAUSED'
-              }
-          });
-          results.push(updated);
-          // Suspend active subscription
-          const activeSub = await prisma.supplierSubscription.findFirst({ where: { supplierId: s.id, status: 'ATIVA' } });
-          if (activeSub) {
-            await prisma.supplierSubscription.update({ where: { id: activeSub.id }, data: { status: 'SUSPENSA' } });
-          }
-          // Log it
-          await prisma.log.create({
-              data: {
-                  level: 'WARN',
-                  message: `Supplier ${s.name} marked as OVERDUE/PAUSED`,
-                  context: JSON.stringify({ supplierId: s.id, nextBillingDate: s.nextBillingDate })
-              }
-          });
-      }
-      
-      return results;
-  },
-
-  /**
-   * Checks if supplier is active and subscription is up to date
-   */
-  checkSupplierStatus: async (supplierId: string): Promise<boolean> => {
-    const supplier = await prisma.supplier.findUnique({
-      where: { id: supplierId }
+    const now = new Date();
+    const overdueSubs = await prisma.supplierSubscription.findMany({
+      where: {
+        status: 'ATIVA',
+        endDate: { lt: now }
+      },
+      include: { supplier: true }
     });
 
-    if (!supplier) return false;
-    
-    // Simple check: Status must be ACTIVE
-    if (supplier.status !== 'ACTIVE') return false;
-    if (supplier.financialStatus === 'SUSPENDED') return false;
-
-    const sub = await prisma.supplierSubscription.findFirst({ where: { supplierId, status: 'ATIVA' } });
-    if (!sub || sub.endDate < new Date()) return false;
-    return true;
+    const results = [];
+    for (const sub of overdueSubs) {
+      await prisma.supplierSubscription.update({
+        where: { id: sub.id },
+        data: { status: 'VENCIDA' }
+      });
+      await prisma.supplier.update({
+        where: { id: sub.supplierId },
+        data: { financialStatus: 'OVERDUE' }
+      });
+      results.push(sub.supplierId);
+    }
+    return results;
   }
 };

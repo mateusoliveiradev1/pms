@@ -49,7 +49,14 @@ model Supplier {
   plan            Plan?     @relation(fields: [planId], references: [id])
   financialStatus String    @default("ACTIVE") // ACTIVE, SUSPENDED, OVERDUE
   commissionRate  Float     @default(10.0) // Percentage
-  walletBalance   Float     @default(0.0)
+  
+  // Wallet Balances
+  walletBalance   Float     @default(0.0) // AVAILABLE
+  pendingBalance  Float     @default(0.0) // PENDING RELEASE
+  blockedBalance  Float     @default(0.0) // BLOCKED / IN WITHDRAWAL
+  
+  verificationStatus String @default("PENDING") // PENDING, VERIFIED, REJECTED
+
   nextBillingDate DateTime?
   scheduledPlanId String?
 
@@ -63,6 +70,7 @@ model Supplier {
   orders          Order[]
   ledger          FinancialLedger[]
   subscriptions   SupplierSubscription[]
+  withdrawals     WithdrawalRequest[]
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -102,6 +110,18 @@ model InventoryLog {
   reason    String?
   userId    String?  // Who performed the action (optional)
   createdAt DateTime @default(now())
+}
+
+model WithdrawalRequest {
+  id          String   @id @default(uuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  amount      Float
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED, PAID
+  notes       String?
+  requestedAt DateTime @default(now())
+  processedAt DateTime?
+  processedBy String?  // Admin ID
 }
 
 model ProductSupplier {
