@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect, useState, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import api from '../../services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import Header from '../../ui/components/Header';
-import { colors, shadow, spacing } from '../../ui/theme';
+import { colors, shadow, spacing, radius } from '../../ui/theme';
 
 type Supplier = {
   id: string;
@@ -18,6 +18,7 @@ type Supplier = {
 const SuppliersListScreen = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   const { user } = useAuth();
@@ -68,31 +69,53 @@ const SuppliersListScreen = () => {
     );
   };
 
+  const visibleSuppliers = useMemo(() => {
+      if (!searchQuery) return suppliers;
+      const lower = searchQuery.toLowerCase();
+      return suppliers.filter(s => s.name.toLowerCase().includes(lower));
+  }, [suppliers, searchQuery]);
+
   const renderItem = ({ item }: { item: Supplier }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
         <View style={styles.headerLeft}>
-            <View style={[styles.iconContainer, { backgroundColor: item.status === 'ACTIVE' ? '#e8f5e9' : '#ffebee' }]}>
-                <Ionicons name="business-outline" size={20} color={item.status === 'ACTIVE' ? colors.success : colors.danger} />
+            <View style={[styles.iconContainer, { backgroundColor: item.status === 'ACTIVE' ? colors.success + '20' : colors.danger + '20' }]}>
+                <Ionicons 
+                    name="business" 
+                    size={20} 
+                    color={item.status === 'ACTIVE' ? colors.success : colors.danger} 
+                />
             </View>
             <View>
                 <Text style={styles.cardTitle}>{item.name}</Text>
-                <Text style={styles.cardSubtitle}>Integração: {item.integrationType}</Text>
+                <View style={styles.badgeContainer}>
+                    <View style={styles.miniBadge}>
+                        <Ionicons name="code-working-outline" size={12} color={colors.muted} style={{marginRight: 4}} />
+                        <Text style={styles.cardSubtitle}>{item.integrationType}</Text>
+                    </View>
+                </View>
             </View>
         </View>
         
         {isAdmin && (
-            <TouchableOpacity onPress={() => handleDelete(item.id)} accessibilityLabel="Excluir fornecedor" style={styles.deleteButton}>
-              <Ionicons name="trash-outline" size={20} color={colors.danger} />
+            <TouchableOpacity 
+                onPress={() => handleDelete(item.id)} 
+                style={styles.deleteButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="trash-outline" size={20} color={colors.muted} />
             </TouchableOpacity>
         )}
       </View>
       
+      <View style={styles.divider} />
+
       <View style={styles.cardFooter}>
           <View style={[
             styles.statusBadge, 
-            { backgroundColor: item.status === 'ACTIVE' ? '#e8f5e9' : '#ffebee' }
+            { backgroundColor: item.status === 'ACTIVE' ? colors.success + '15' : colors.danger + '15' }
           ]}>
+            <View style={[styles.statusDot, { backgroundColor: item.status === 'ACTIVE' ? colors.success : colors.danger }]} />
             <Text style={[
               styles.statusText,
               { color: item.status === 'ACTIVE' ? colors.success : colors.danger }
@@ -100,6 +123,11 @@ const SuppliersListScreen = () => {
               {item.status === 'ACTIVE' ? 'Ativo' : 'Pausado'}
             </Text>
           </View>
+          
+          <TouchableOpacity style={styles.editButton} onPress={() => (navigation as any).navigate('SupplierForm', { supplier: item })}>
+              <Text style={styles.editButtonText}>Editar</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+          </TouchableOpacity>
       </View>
     </View>
   );
@@ -113,20 +141,43 @@ const SuppliersListScreen = () => {
         onRightPress={fetchSuppliers}
       />
 
+      <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+              <Ionicons name="search-outline" size={20} color={colors.muted} style={{marginRight: 8}} />
+              <TextInput
+                  style={styles.searchInput}
+                  placeholder="Buscar fornecedor..."
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholderTextColor={colors.muted}
+              />
+              {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <Ionicons name="close-circle" size={18} color={colors.muted} />
+                  </TouchableOpacity>
+              )}
+          </View>
+      </View>
+
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
         <FlatList
-          data={suppliers}
+          data={visibleSuppliers}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Ionicons name="business-outline" size={64} color="#ccc" />
-              <Text style={styles.emptyText}>Nenhum fornecedor cadastrado.</Text>
+              <View style={styles.emptyIconContainer}>
+                  <Ionicons name="business-outline" size={64} color={colors.border} />
+              </View>
+              <Text style={styles.emptyTitle}>Nenhum fornecedor</Text>
+              <Text style={styles.emptyText}>
+                  {searchQuery ? 'Nenhum resultado para sua busca.' : 'Cadastre seus fornecedores para começar.'}
+              </Text>
             </View>
           }
         />
@@ -134,7 +185,7 @@ const SuppliersListScreen = () => {
 
       <TouchableOpacity 
         style={styles.fab}
-        onPress={() => navigation.navigate('SupplierForm' as never)}
+        onPress={() => (navigation as any).navigate('SupplierForm')}
       >
         <Ionicons name="add" size={30} color="#FFF" />
       </TouchableOpacity>
@@ -145,12 +196,33 @@ const SuppliersListScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  searchContainer: {
+      paddingHorizontal: 16,
+      paddingBottom: 8,
+      backgroundColor: '#fff',
+      zIndex: 1,
+  },
+  searchBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#f5f5f5',
+      borderRadius: radius.md,
+      paddingHorizontal: 12,
+      height: 44,
+      borderWidth: 1,
+      borderColor: colors.border,
+  },
+  searchInput: {
+      flex: 1,
+      fontSize: 14,
+      color: colors.text,
   },
   list: {
     padding: 16,
@@ -158,10 +230,12 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFF',
-    borderRadius: 16,
+    borderRadius: radius.lg,
     padding: 16,
     marginBottom: 12,
     ...shadow.card,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -175,9 +249,9 @@ const styles = StyleSheet.create({
       flex: 1,
   },
   iconContainer: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      width: 44,
+      height: 44,
+      borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 12,
@@ -185,54 +259,102 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  badgeContainer: {
+      flexDirection: 'row',
+  },
+  miniBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#f5f5f5',
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
   },
   cardSubtitle: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
+    fontSize: 11,
+    color: colors.muted,
+    fontWeight: '500',
   },
   deleteButton: {
-      padding: 8,
+      padding: 4,
+  },
+  divider: {
+      height: 1,
+      backgroundColor: '#f0f0f0',
+      marginBottom: 12,
   },
   cardFooter: {
       flexDirection: 'row',
-      justifyContent: 'flex-start',
+      justifyContent: 'space-between',
+      alignItems: 'center',
   },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 20,
+  },
+  statusDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      marginRight: 6,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: 'bold',
+      fontSize: 12,
+      fontWeight: 'bold',
+  },
+  editButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+  },
+  editButtonText: {
+      fontSize: 14,
+      color: colors.primary,
+      fontWeight: '600',
+      marginRight: 4,
   },
   emptyContainer: {
-    padding: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingTop: 60,
+  },
+  emptyIconContainer: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: '#f0f0f0',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 16,
+  },
+  emptyTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: colors.text,
+      marginBottom: 8,
   },
   emptyText: {
-    color: '#999',
-    marginTop: 16,
-    fontSize: 16,
+      fontSize: 14,
+      color: colors.muted,
+      textAlign: 'center',
   },
   fab: {
     position: 'absolute',
-    right: 20,
-    bottom: 20,
+    bottom: 24,
+    right: 24,
     backgroundColor: colors.primary,
     width: 56,
     height: 56,
     borderRadius: 28,
-    alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    alignItems: 'center',
+    ...shadow.lg,
+    zIndex: 10,
   },
 });
 

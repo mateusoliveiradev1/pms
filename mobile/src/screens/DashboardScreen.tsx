@@ -168,11 +168,15 @@ const DashboardScreen = () => {
             value={`R$ ${stats.totalSales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon="cash-outline" 
             color={colors.success} 
+            onPress={() => navigation.navigate('Relatórios' as never)}
           />
         </View>
 
-        <View style={styles.chartContainer}>
-          <Text style={styles.sectionTitle}>Vendas da Semana</Text>
+        <TouchableOpacity style={styles.chartContainer} onPress={() => navigation.navigate('Relatórios' as never)}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+             <Text style={styles.sectionTitle}>Vendas da Semana</Text>
+             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+          </View>
           <LineChart
             data={{
               labels: ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"],
@@ -217,7 +221,7 @@ const DashboardScreen = () => {
               borderRadius: 16
             }}
           />
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>

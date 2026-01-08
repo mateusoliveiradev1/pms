@@ -5,8 +5,7 @@ import api from '../../services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Header from '../../ui/components/Header';
-import { useIsFocused } from '@react-navigation/native';
-import { colors, radius, shadow } from '../../ui/theme';
+import { colors, radius, shadow, spacing } from '../../ui/theme';
 
 type Supplier = {
     id: string;
@@ -16,6 +15,12 @@ type Supplier = {
 };
 
 const ProductFormScreen = () => {
+  const navigation = useNavigation();
+  const route = useRoute();
+  // @ts-ignore
+  const { productId } = route.params || {};
+  const isEditing = !!productId;
+
   const [name, setName] = useState('');
   const [sku, setSku] = useState('');
   const [description, setDescription] = useState('');
@@ -24,23 +29,19 @@ const ProductFormScreen = () => {
   const [safetyStock, setSafetyStock] = useState('0');
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [marginValue, setMarginValue] = useState('');
-  const isFocused = useIsFocused();
+  
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [supplierQuery, setSupplierQuery] = useState('');
-  
-  const navigation = useNavigation();
-  const route = useRoute();
-  // @ts-ignore
-  const { productId } = route.params || {};
 
   useEffect(() => {
     fetchSuppliers();
     if (productId) {
         loadProductData();
+        navigation.setOptions({ headerTitle: 'Editar Produto' });
     }
-  }, [productId]);
+  }, [productId, navigation]);
 
   const loadProductData = async () => {
     try {
@@ -52,7 +53,6 @@ const ProductFormScreen = () => {
         setDescription(p.description || '');
         setMarginValue(String(p.marginValue || '0'));
         
-        // Handle Supplier Info (taking first one for MVP)
         if (p.suppliers && p.suppliers.length > 0) {
             const rel = p.suppliers[0];
             setSupplierPrice(String(rel.supplierPrice));
@@ -93,126 +93,235 @@ const ProductFormScreen = () => {
         sku,
         description,
         supplierPrice: parseFloat(supplierPrice),
-        virtualStock: parseInt(stockAvailable || '0', 10), // We use this input as virtual stock
+        virtualStock: parseInt(stockAvailable || '0', 10),
         safetyStock: parseInt(safetyStock || '0', 10),
         supplierId: selectedSupplier.id,
         marginType: 'FIXED', 
         marginValue: parseFloat(marginValue || '0'),
       };
 
-      if (productId) {
+      if (isEditing) {
           await api.put(`/products/${productId}`, payload);
           Alert.alert('Sucesso', 'Produto atualizado com sucesso!');
       } else {
-          await api.post('/products', {
-              ...payload,
-              stockAvailable: parseInt(stockAvailable || '0', 10), // Initial stock logic for create
-          });
-          Alert.alert('Sucesso', 'Produto cadastrado com sucesso!');
+          await api.post('/products', payload);
+          Alert.alert('Sucesso', 'Produto criado com sucesso!');
       }
+      
       navigation.goBack();
     } catch (error) {
-      console.log(error);
-      Alert.alert('Erro', 'Falha ao salvar produto.');
+      console.log('Error saving product', error);
+      Alert.alert('Erro', 'Falha ao salvar o produto.');
     } finally {
       setLoading(false);
     }
   };
 
-  const renderInput = (label: string, value: string, setValue: (t: string) => void, placeholder: string, options?: any) => (
-      <View style={styles.inputContainer}>
-          <Text style={styles.label}>{label}</Text>
-          <TextInput
-              style={[styles.input, options?.multiline && styles.textArea]}
-              value={value}
-              onChangeText={setValue}
-              placeholder={placeholder}
-              placeholderTextColor="#999"
-              {...options}
-          />
-      </View>
+  const filteredSuppliers = suppliers.filter(s => 
+      s.name.toLowerCase().includes(supplierQuery.toLowerCase())
+  );
+
+  const renderSupplierItem = ({ item }: { item: Supplier }) => (
+    <TouchableOpacity 
+        style={styles.supplierItem} 
+        onPress={() => {
+            setSelectedSupplier(item);
+            setModalVisible(false);
+        }}
+    >
+        <View style={styles.supplierAvatar}>
+            <Text style={styles.supplierInitials}>{item.name.substring(0,2).toUpperCase()}</Text>
+        </View>
+        <Text style={styles.supplierName}>{item.name}</Text>
+        {selectedSupplier?.id === item.id && (
+            <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+        )}
+    </TouchableOpacity>
   );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Header title={productId ? "Editar Produto" : "Novo Produto"} onBack={() => navigation.goBack()} />
+      <Header title={isEditing ? "Editar Produto" : "Novo Produto"} onBack={() => navigation.goBack()} />
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{flex: 1}}>
-          <ScrollView contentContainerStyle={styles.form} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.form} showsVerticalScrollIndicator={false}>
+            {/* Basic Info Section */}
             <View style={styles.section}>
-                {renderInput("Nome do Produto *", name, setName, "Ex: Fone Bluetooth")}
-                {renderInput("SKU *", sku, setSku, "Ex: FONE-001", { autoCapitalize: "characters" })}
-                {renderInput("Descrição", description, setDescription, "Detalhes do produto", { multiline: true, numberOfLines: 3 })}
+                <Text style={styles.sectionTitle}>Informações Básicas</Text>
+                
+                <Text style={styles.label}>Nome do Produto *</Text>
+                <View style={styles.inputContainer}>
+                    <Ionicons name="pricetag-outline" size={20} color={colors.muted} style={styles.inputIcon} />
+                    <TextInput
+                        style={styles.input}
+                        value={name}
+                        onChangeText={setName}
+                        placeholder="Ex: Camiseta Básica"
+                        placeholderTextColor={colors.muted}
+                    />
+                </View>
+
+                <View style={styles.row}>
+                    <View style={{flex: 1}}>
+                        <Text style={styles.label}>SKU *</Text>
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="barcode-outline" size={20} color={colors.muted} style={styles.inputIcon} />
+                            <TextInput
+                                style={styles.input}
+                                value={sku}
+                                onChangeText={setSku}
+                                placeholder="Ex: CAM-001"
+                                placeholderTextColor={colors.muted}
+                                autoCapitalize="characters"
+                            />
+                        </View>
+                    </View>
+                </View>
+
+                <Text style={styles.label}>Descrição</Text>
+                <View style={[styles.inputContainer, { alignItems: 'flex-start', paddingVertical: 12 }]}>
+                    <Ionicons name="document-text-outline" size={20} color={colors.muted} style={[styles.inputIcon, { marginTop: 2 }]} />
+                    <TextInput
+                        style={[styles.input, { height: 80, paddingVertical: 0 }]}
+                        value={description}
+                        onChangeText={setDescription}
+                        placeholder="Detalhes do produto..."
+                        placeholderTextColor={colors.muted}
+                        multiline
+                        textAlignVertical="top"
+                    />
+                </View>
             </View>
 
+            {/* Pricing & Stock Section */}
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Preço e Estoque</Text>
+                
                 <View style={styles.row}>
-                    <View style={{flex: 1, marginRight: 8}}>
-                        {renderInput("Custo (R$) *", supplierPrice, setSupplierPrice, "0.00", { keyboardType: "numeric" })}
+                    <View style={{flex: 1}}>
+                        <Text style={styles.label}>Preço Custo (R$) *</Text>
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.currencyPrefix}>R$</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={supplierPrice}
+                                onChangeText={setSupplierPrice}
+                                placeholder="0.00"
+                                placeholderTextColor={colors.muted}
+                                keyboardType="numeric"
+                            />
+                        </View>
                     </View>
-                    <View style={{flex: 1, marginLeft: 8}}>
-                         {renderInput("Margem (R$)", marginValue, setMarginValue, "0.00", { keyboardType: "numeric" })}
+                    <View style={{flex: 1}}>
+                        <Text style={styles.label}>Margem Fixa (R$)</Text>
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.currencyPrefix}>R$</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={marginValue}
+                                onChangeText={setMarginValue}
+                                placeholder="0.00"
+                                placeholderTextColor={colors.muted}
+                                keyboardType="numeric"
+                            />
+                        </View>
                     </View>
                 </View>
 
                 <View style={styles.row}>
-                    <View style={{flex: 1, marginRight: 8}}>
-                        {renderInput("Estoque Atual", stockAvailable, setStockAvailable, "0", { keyboardType: "numeric" })}
+                    <View style={{flex: 1}}>
+                        <Text style={styles.label}>Estoque Virtual</Text>
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="cube-outline" size={20} color={colors.muted} style={styles.inputIcon} />
+                            <TextInput
+                                style={styles.input}
+                                value={stockAvailable}
+                                onChangeText={setStockAvailable}
+                                placeholder="0"
+                                placeholderTextColor={colors.muted}
+                                keyboardType="numeric"
+                            />
+                        </View>
                     </View>
-                    <View style={{flex: 1, marginLeft: 8}}>
-                        {renderInput("Estoque Mín.", safetyStock, setSafetyStock, "0", { keyboardType: "numeric" })}
+                    <View style={{flex: 1}}>
+                        <Text style={styles.label}>Estoque Mínimo</Text>
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="alert-circle-outline" size={20} color={colors.muted} style={styles.inputIcon} />
+                            <TextInput
+                                style={styles.input}
+                                value={safetyStock}
+                                onChangeText={setSafetyStock}
+                                placeholder="0"
+                                placeholderTextColor={colors.muted}
+                                keyboardType="numeric"
+                            />
+                        </View>
                     </View>
                 </View>
             </View>
 
+            {/* Supplier Section */}
             <View style={styles.section}>
-                <Text style={styles.label}>Fornecedor *</Text>
+                <Text style={styles.sectionTitle}>Fornecedor</Text>
+                <Text style={styles.label}>Fornecedor Responsável *</Text>
                 <TouchableOpacity 
-                    style={styles.selector}
+                    style={styles.supplierSelectButton}
                     onPress={() => setModalVisible(true)}
                 >
-                    <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                        <Ionicons name="business-outline" size={20} color={colors.primary} style={{marginRight: 8}} />
-                        <Text style={selectedSupplier ? styles.selectorText : styles.placeholderText}>
-                            {selectedSupplier ? selectedSupplier.name : 'Selecione um fornecedor'}
-                        </Text>
-                    </View>
-                    <Ionicons name="chevron-down" size={20} color="#666" />
+                    {selectedSupplier ? (
+                        <View style={styles.selectedSupplierInfo}>
+                            <View style={styles.supplierAvatarSmall}>
+                                <Text style={styles.supplierInitialsSmall}>{selectedSupplier.name.substring(0,2).toUpperCase()}</Text>
+                            </View>
+                            <Text style={styles.selectedSupplierName}>{selectedSupplier.name}</Text>
+                        </View>
+                    ) : (
+                        <Text style={styles.placeholderText}>Selecione um fornecedor</Text>
+                    )}
+                    <Ionicons name="chevron-down" size={20} color={colors.muted} />
                 </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
-              {loading ? (
-                <ActivityIndicator color="#FFF" />
-              ) : (
-                <Text style={styles.saveButtonText}>Salvar Produto</Text>
-              )}
+            <TouchableOpacity 
+                style={[styles.saveButton, loading && styles.saveButtonDisabled]} 
+                onPress={handleSave} 
+                disabled={loading}
+            >
+                {loading ? (
+                    <ActivityIndicator color="#FFF" />
+                ) : (
+                    <>
+                        <Ionicons name="save-outline" size={20} color="#FFF" style={{marginRight: 8}} />
+                        <Text style={styles.saveButtonText}>Salvar Produto</Text>
+                    </>
+                )}
             </TouchableOpacity>
-            <View style={{height: 40}} />
-          </ScrollView>
+        </ScrollView>
       </KeyboardAvoidingView>
 
       {/* Supplier Selection Modal */}
       <Modal
-        visible={modalVisible}
         animationType="slide"
         transparent={true}
+        visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Selecione o Fornecedor</Text>
+                    <Text style={styles.modalTitle}>Selecionar Fornecedor</Text>
                     <TouchableOpacity onPress={() => setModalVisible(false)}>
-                        <Ionicons name="close" size={24} color="#666" />
+                        <Ionicons name="close" size={24} color={colors.text} />
                     </TouchableOpacity>
                 </View>
                 
-                <View style={styles.searchContainer}>
-                    <Ionicons name="search" size={20} color="#999" style={{marginRight: 8}} />
-                    <TextInput
-                        style={styles.modalSearchInput}
+                <View style={styles.searchBox}>
+                    <Ionicons name="search" size={20} color={colors.muted} style={{marginRight: 8}} />
+                    <TextInput 
+                        style={styles.searchInput}
                         placeholder="Buscar fornecedor..."
                         value={supplierQuery}
                         onChangeText={setSupplierQuery}
@@ -220,38 +329,15 @@ const ProductFormScreen = () => {
                 </View>
 
                 <FlatList
-                    data={suppliers.filter(s => s.name.toLowerCase().includes(supplierQuery.toLowerCase()))}
-                    keyExtractor={(item) => item.id}
-                    contentContainerStyle={{padding: 16}}
-                    renderItem={({ item }) => (
-                        <TouchableOpacity 
-                            style={styles.modalItem}
-                            onPress={() => {
-                                setSelectedSupplier(item);
-                                setModalVisible(false);
-                            }}
-                        >
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <View>
-                                    <Text style={styles.modalItemTitle}>{item.name}</Text>
-                                    <Text style={styles.modalItemSubtitle}>{item.integrationType || 'MANUAL'}</Text>
-                                </View>
-                                {item.status && (
-                                    <View style={[
-                                        styles.statusBadge, 
-                                        { backgroundColor: item.status === 'ACTIVE' ? '#e6f4ea' : '#fdecea' }
-                                    ]}>
-                                        <Text style={[
-                                            styles.statusText,
-                                            { color: item.status === 'ACTIVE' ? '#1e7e34' : '#c62828' }
-                                        ]}>
-                                            {item.status === 'ACTIVE' ? 'Ativo' : 'Pausado'}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
-                        </TouchableOpacity>
-                    )}
+                    data={filteredSuppliers}
+                    keyExtractor={item => item.id}
+                    renderItem={renderSupplierItem}
+                    contentContainerStyle={{ paddingBottom: 20 }}
+                    ListEmptyComponent={
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyText}>Nenhum fornecedor encontrado</Text>
+                        </View>
+                    }
                 />
             </View>
         </View>
@@ -266,145 +352,188 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
   },
   form: {
-    padding: 20,
+    padding: 16,
+    paddingBottom: 40,
   },
   section: {
       backgroundColor: '#fff',
-      borderRadius: 12,
+      borderRadius: radius.lg,
       padding: 16,
       marginBottom: 16,
       ...shadow.card,
+      borderWidth: 1,
+      borderColor: 'rgba(0,0,0,0.05)',
   },
   sectionTitle: {
       fontSize: 16,
       fontWeight: 'bold',
-      marginBottom: 16,
-      color: '#333',
-      borderBottomWidth: 1,
-      borderBottomColor: '#f0f0f0',
-      paddingBottom: 8,
-  },
-  inputContainer: {
+      color: colors.text,
       marginBottom: 16,
   },
   label: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 6,
-    fontWeight: '500',
+    color: colors.text,
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#f9f9f9',
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 16,
+      paddingHorizontal: 12,
+  },
+  inputIcon: {
+      marginRight: 10,
+  },
+  currencyPrefix: {
+      fontSize: 15,
+      color: colors.muted,
+      marginRight: 8,
+      fontWeight: '600',
   },
   input: {
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#333',
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  selector: {
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  selectorText: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
-  placeholderText: {
-    fontSize: 16,
-    color: '#999',
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: colors.text,
   },
   row: {
     flexDirection: 'row',
     marginBottom: 0,
+    gap: 12,
+  },
+  supplierSelectButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: '#f9f9f9',
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 12,
+  },
+  selectedSupplierInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+  },
+  supplierAvatarSmall: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: colors.primary + '20',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 8,
+  },
+  supplierInitialsSmall: {
+      color: colors.primary,
+      fontWeight: 'bold',
+      fontSize: 10,
+  },
+  selectedSupplierName: {
+      color: colors.text,
+      fontWeight: '500',
+      fontSize: 15,
+  },
+  placeholderText: {
+      color: colors.muted,
+      fontSize: 15,
   },
   saveButton: {
     backgroundColor: colors.primary,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: radius.lg,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
     marginTop: 8,
-    ...shadow.card,
+    ...shadow.lg,
+  },
+  saveButtonDisabled: {
+      opacity: 0.7,
   },
   saveButtonText: {
     color: '#FFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
+  
+  // Modal Styles
   modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    height: '80%',
-    ...shadow.card,
+      backgroundColor: '#FFF',
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      height: '70%',
+      padding: 16,
   },
   modalHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: 20,
-      borderBottomWidth: 1,
-      borderBottomColor: '#f0f0f0',
+      marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: colors.text,
   },
-  searchContainer: {
+  searchBox: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: '#f5f5f5',
-      margin: 16,
+      borderRadius: radius.md,
       paddingHorizontal: 12,
-      borderRadius: 12,
-      height: 44,
+      paddingVertical: 10,
+      marginBottom: 16,
   },
-  modalSearchInput: {
+  searchInput: {
       flex: 1,
+      fontSize: 15,
+      color: colors.text,
+  },
+  supplierItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+  },
+  supplierAvatar: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: colors.primary + '15',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+  },
+  supplierInitials: {
+      color: colors.primary,
+      fontWeight: 'bold',
       fontSize: 16,
-      color: '#333',
   },
-  modalItem: {
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+  supplierName: {
+      fontSize: 16,
+      color: colors.text,
+      flex: 1,
   },
-  modalItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333'
+  emptyState: {
+      alignItems: 'center',
+      padding: 20,
   },
-  modalItemSubtitle: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 2
+  emptyText: {
+      color: colors.muted,
+      fontSize: 14,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '600'
-  }
 });
 
 export default ProductFormScreen;

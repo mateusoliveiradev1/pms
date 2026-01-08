@@ -1,20 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import api from '../../services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Header from '../../ui/components/Header';
-import { colors, shadow } from '../../ui/theme';
+import { colors, shadow, radius, spacing } from '../../ui/theme';
+
+type SupplierParams = {
+    id: string;
+    name: string;
+    integrationType: string;
+    shippingDeadline: number;
+    status: string;
+};
 
 const SupplierFormScreen = () => {
+  const route = useRoute();
+  const navigation = useNavigation();
+  const { supplier } = (route.params as any) || {};
+  const isEditing = !!supplier;
+
   const [name, setName] = useState('');
   const [integrationType, setIntegrationType] = useState('MANUAL'); // MANUAL, API
   const [shippingDeadline, setShippingDeadline] = useState('');
   const [status, setStatus] = useState('ACTIVE');
   const [loading, setLoading] = useState(false);
-  
-  const navigation = useNavigation();
+
+  useEffect(() => {
+      if (isEditing && supplier) {
+          setName(supplier.name);
+          setIntegrationType(supplier.integrationType);
+          setShippingDeadline(supplier.shippingDeadline ? String(supplier.shippingDeadline) : '');
+          setStatus(supplier.status);
+          navigation.setOptions({ headerTitle: 'Editar Fornecedor' });
+      }
+  }, [isEditing, supplier, navigation]);
 
   const handleSave = async () => {
     if (!name || !shippingDeadline) {
@@ -24,13 +45,21 @@ const SupplierFormScreen = () => {
 
     setLoading(true);
     try {
-      await api.post('/suppliers', {
+      const payload = {
         name,
         integrationType,
         shippingDeadline: parseInt(shippingDeadline, 10),
         status,
-      });
-      Alert.alert('Sucesso', 'Fornecedor cadastrado com sucesso!');
+      };
+
+      if (isEditing) {
+          await api.put(`/suppliers/${supplier.id}`, payload);
+          Alert.alert('Sucesso', 'Fornecedor atualizado com sucesso!');
+      } else {
+          await api.post('/suppliers', payload);
+          Alert.alert('Sucesso', 'Fornecedor cadastrado com sucesso!');
+      }
+      
       navigation.goBack();
     } catch (error) {
       console.log(error);
@@ -46,7 +75,9 @@ const SupplierFormScreen = () => {
           <TouchableOpacity 
             style={[styles.optionButton, isSelected && styles.optionSelected]}
             onPress={() => onSelect(value)}
+            activeOpacity={0.7}
           >
+            {isSelected && <Ionicons name="checkmark-circle" size={16} color="#FFF" style={{marginRight: 6}} />}
             <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{label}</Text>
           </TouchableOpacity>
       );
@@ -54,36 +85,38 @@ const SupplierFormScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Header title="Novo Fornecedor" onBack={() => navigation.goBack()} />
+      <Header title={isEditing ? "Editar Fornecedor" : "Novo Fornecedor"} onBack={() => navigation.goBack()} />
 
       <KeyboardAvoidingView 
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.form}>
+        <ScrollView contentContainerStyle={styles.form} showsVerticalScrollIndicator={false}>
             <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Dados Principais</Text>
+                
                 <Text style={styles.label}>Nome do Fornecedor *</Text>
                 <View style={styles.inputContainer}>
-                    <Ionicons name="business-outline" size={20} color="#999" style={styles.inputIcon} />
+                    <Ionicons name="business-outline" size={20} color={colors.muted} style={styles.inputIcon} />
                     <TextInput
-                    style={styles.input}
-                    value={name}
-                    onChangeText={setName}
-                    placeholder="Ex: Fornecedor SP"
-                    placeholderTextColor="#999"
+                        style={styles.input}
+                        value={name}
+                        onChangeText={setName}
+                        placeholder="Ex: Fornecedor SP"
+                        placeholderTextColor={colors.muted}
                     />
                 </View>
 
                 <Text style={styles.label}>Prazo de Envio (dias) *</Text>
                 <View style={styles.inputContainer}>
-                    <Ionicons name="time-outline" size={20} color="#999" style={styles.inputIcon} />
+                    <Ionicons name="time-outline" size={20} color={colors.muted} style={styles.inputIcon} />
                     <TextInput
-                    style={styles.input}
-                    value={shippingDeadline}
-                    onChangeText={setShippingDeadline}
-                    placeholder="Ex: 2"
-                    placeholderTextColor="#999"
-                    keyboardType="numeric"
+                        style={styles.input}
+                        value={shippingDeadline}
+                        onChangeText={setShippingDeadline}
+                        placeholder="Ex: 2"
+                        placeholderTextColor={colors.muted}
+                        keyboardType="numeric"
                     />
                 </View>
             </View>
@@ -104,11 +137,18 @@ const SupplierFormScreen = () => {
                 </View>
             </View>
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={loading}>
+            <TouchableOpacity 
+                style={[styles.saveButton, loading && styles.saveButtonDisabled]} 
+                onPress={handleSave} 
+                disabled={loading}
+            >
                 {loading ? (
                     <ActivityIndicator color="#FFF" />
                 ) : (
-                    <Text style={styles.saveButtonText}>Salvar Fornecedor</Text>
+                    <>
+                        <Ionicons name="save-outline" size={20} color="#FFF" style={{marginRight: 8}} />
+                        <Text style={styles.saveButtonText}>Salvar Fornecedor</Text>
+                    </>
                 )}
             </TouchableOpacity>
         </ScrollView>
@@ -120,28 +160,30 @@ const SupplierFormScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
   },
   form: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 40,
   },
   section: {
       backgroundColor: '#fff',
-      borderRadius: 16,
+      borderRadius: radius.lg,
       padding: 16,
-      marginBottom: 20,
+      marginBottom: 16,
       ...shadow.card,
+      borderWidth: 1,
+      borderColor: 'rgba(0,0,0,0.05)',
   },
   sectionTitle: {
-      fontSize: 18,
+      fontSize: 16,
       fontWeight: 'bold',
-      color: '#333',
+      color: colors.text,
       marginBottom: 16,
   },
   label: {
     fontSize: 14,
-    color: '#666',
+    color: colors.text,
     marginBottom: 8,
     fontWeight: '600',
   },
@@ -149,33 +191,35 @@ const styles = StyleSheet.create({
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: '#f9f9f9',
-      borderRadius: 12,
+      borderRadius: radius.md,
       borderWidth: 1,
-      borderColor: '#eee',
-      marginBottom: 20,
+      borderColor: colors.border,
+      marginBottom: 16,
       paddingHorizontal: 12,
   },
   inputIcon: {
-      marginRight: 8,
+      marginRight: 10,
   },
   input: {
     flex: 1,
     paddingVertical: 12,
-    fontSize: 16,
-    color: '#333',
+    fontSize: 15,
+    color: colors.text,
   },
   row: {
     flexDirection: 'row',
-    marginBottom: 20,
+    marginBottom: 16,
     gap: 12,
   },
   optionButton: {
     flex: 1,
+    flexDirection: 'row',
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: colors.border,
     alignItems: 'center',
-    borderRadius: 12,
+    justifyContent: 'center',
+    borderRadius: radius.md,
     backgroundColor: '#fff',
   },
   optionSelected: {
@@ -183,23 +227,29 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   optionText: {
-    color: '#666',
+    color: colors.muted,
     fontWeight: '600',
+    fontSize: 14,
   },
   optionTextSelected: {
     color: '#FFF',
   },
   saveButton: {
-    backgroundColor: colors.success,
+    backgroundColor: colors.primary,
     padding: 16,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     alignItems: 'center',
-    marginTop: 10,
-    ...shadow.card,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginTop: 8,
+    ...shadow.lg,
+  },
+  saveButtonDisabled: {
+      opacity: 0.7,
   },
   saveButtonText: {
     color: '#FFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });

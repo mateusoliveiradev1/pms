@@ -5,7 +5,6 @@ import api from '../../services/api';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Header from '../../ui/components/Header';
-import Card from '../../ui/components/Card';
 import Badge from '../../ui/components/Badge';
 import { colors, spacing, shadow } from '../../ui/theme';
 
@@ -15,6 +14,7 @@ interface Order {
   status: string;
   totalAmount: number;
   mercadoLivreId: string | null;
+  createdAt: string;
 }
 
 const OrdersListScreen = () => {
@@ -29,8 +29,8 @@ const OrdersListScreen = () => {
 
   const STATUS_OPTIONS = [
     { label: 'Todos', value: null as string | null, icon: 'list' as const },
-    { label: 'Novo', value: 'NEW' as const, icon: 'document-text' as const },
-    { label: 'Enviado', value: 'SENT_TO_SUPPLIER' as const, icon: 'send' as const },
+    { label: 'Novo', value: 'NEW' as const, icon: 'sparkles' as const },
+    { label: 'Enviado', value: 'SENT_TO_SUPPLIER' as const, icon: 'paper-plane' as const },
     { label: 'Transporte', value: 'SHIPPING' as const, icon: 'bus' as const },
     { label: 'Entregue', value: 'DELIVERED' as const, icon: 'checkmark-circle' as const },
     { label: 'Cancelado', value: 'CANCELLED' as const, icon: 'close-circle' as const },
@@ -65,7 +65,6 @@ const OrdersListScreen = () => {
       const response = await api.get('/orders/stats');
       setCounts(response.data || {});
     } catch (err) {
-      // Fallback local count if endpoint fails
       try {
         const response = await api.get('/orders');
         const list: Order[] = response.data || [];
@@ -84,7 +83,6 @@ const OrdersListScreen = () => {
   };
 
   const visibleOrders = useMemo(() => {
-    // If API filtering is not enough or we want local filtering for speed
     if (!selectedStatus) return orders;
     return orders.filter(o => o.status === selectedStatus);
   }, [orders, selectedStatus]);
@@ -98,20 +96,20 @@ const OrdersListScreen = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-        case 'NEW': return '#007bff';
+        case 'NEW': return colors.primary;
         case 'SENT_TO_SUPPLIER': return '#fd7e14';
         case 'SHIPPING': return '#17a2b8';
-        case 'DELIVERED': return '#28a745';
-        case 'CANCELLED': return '#dc3545';
-        default: return '#6c757d';
+        case 'DELIVERED': return colors.success;
+        case 'CANCELLED': return colors.error;
+        default: return colors.muted;
     }
   };
   
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'NEW': return 'Novo';
-      case 'SENT_TO_SUPPLIER': return 'Enviado ao Fornecedor';
-      case 'SHIPPING': return 'Em Transporte';
+      case 'SENT_TO_SUPPLIER': return 'Enviado';
+      case 'SHIPPING': return 'Transporte';
       case 'DELIVERED': return 'Entregue';
       case 'CANCELLED': return 'Cancelado';
       default: return status;
@@ -119,37 +117,50 @@ const OrdersListScreen = () => {
   };
 
   const renderItem = ({ item }: { item: Order }) => (
-    <TouchableOpacity onPress={() => (navigation as any).navigate('OrderDetails', { order: item })}>
-      <Card style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.iconContainer}>
-              <Ionicons name="cart-outline" size={24} color={colors.primary} />
-          </View>
-          <View style={{flex: 1}}>
-             <Text style={styles.customerName}>{item.customerName || 'Cliente Anônimo'}</Text>
-             <Text style={styles.orderId}>#{item.id.substring(0, 8)}</Text>
-          </View>
-          <Badge
-            text={getStatusLabel(item.status)}
-            color="#FFF"
-            backgroundColor={getStatusColor(item.status)}
-            style={{ borderRadius: 8 }}
-          />
-        </View>
-        
-        <View style={styles.divider} />
-        
-        <View style={styles.row}>
-          <Text style={styles.totalLabel}>Total do Pedido</Text>
-          <Text style={styles.totalValue}>R$ {item.totalAmount.toFixed(2)}</Text>
-        </View>
-        {item.mercadoLivreId && (
-            <View style={styles.mlTag}>
-                <Ionicons name="logo-yen" size={12} color="#FFF" style={{marginRight: 4}} /> 
-                <Text style={styles.mlId}>Mercado Livre</Text>
+    <TouchableOpacity 
+        style={styles.card} 
+        onPress={() => (navigation as any).navigate('OrderDetails', { order: item })}
+        activeOpacity={0.7}
+    >
+      <View style={styles.cardHeader}>
+        <View style={styles.orderIdContainer}>
+            <View style={[styles.iconBox, { backgroundColor: getStatusColor(item.status) + '15' }]}>
+                <Ionicons name="receipt-outline" size={20} color={getStatusColor(item.status)} />
             </View>
-        )}
-      </Card>
+            <View>
+                <Text style={styles.orderId}>#{item.id.substring(0, 8).toUpperCase()}</Text>
+                <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+            </View>
+        </View>
+        <Badge
+          text={getStatusLabel(item.status)}
+          color="#FFF"
+          backgroundColor={getStatusColor(item.status)}
+          style={{ borderRadius: 8, paddingHorizontal: 8 }}
+        />
+      </View>
+      
+      <View style={styles.divider} />
+      
+      <View style={styles.cardBody}>
+         <View style={styles.customerInfo}>
+             <Ionicons name="person-outline" size={14} color={colors.muted} style={{marginRight: 4}} />
+             <Text style={styles.customerName} numberOfLines={1}>
+                {item.customerName || 'Cliente não identificado'}
+             </Text>
+         </View>
+         <View style={styles.amountContainer}>
+            <Text style={styles.amountLabel}>Total</Text>
+            <Text style={styles.amountValue}>R$ {item.totalAmount.toFixed(2)}</Text>
+         </View>
+      </View>
+      
+      {item.mercadoLivreId && (
+        <View style={styles.mlTag}>
+           <Ionicons name="logo-yen" size={10} color="#333" />
+           <Text style={styles.mlText}>ML</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 
@@ -170,9 +181,7 @@ const OrdersListScreen = () => {
             {STATUS_OPTIONS.map(opt => {
             const active = (selectedStatus ?? null) === opt.value;
             const color = opt.value ? getStatusColor(String(opt.value)) : colors.primary;
-            // Count logic is a bit tricky if keys don't match exactly, assuming simple mapping
             const countKey = opt.value ?? 'ALL'; 
-            // We might need to map 'SENT_TO_SUPPLIER' to count key if different, but let's assume it matches
             const count = counts[String(countKey)];
 
             return (
@@ -184,12 +193,12 @@ const OrdersListScreen = () => {
                     ]} 
                     onPress={() => setSelectedStatus(opt.value)}
                 >
-                    <Ionicons name={opt.icon} size={16} color={active ? '#FFF' : '#666'} style={{ marginRight: 6 }} />
+                    <Ionicons name={opt.icon} size={16} color={active ? '#FFF' : colors.text} style={{ marginRight: 6 }} />
                     <Text style={[styles.filterText, active && { color: '#FFF' }]}>
                         {opt.label}
                     </Text>
                     {count !== undefined && (
-                        <View style={[styles.counterBadge, active ? { backgroundColor: 'rgba(255,255,255,0.3)' } : { backgroundColor: '#eee' }]}>
+                        <View style={[styles.counterBadge, active ? { backgroundColor: 'rgba(255,255,255,0.2)' } : { backgroundColor: '#f0f0f0' }]}>
                             <Text style={[styles.counterText, active && { color: '#FFF' }]}>{count}</Text>
                         </View>
                     )}
@@ -213,7 +222,7 @@ const OrdersListScreen = () => {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconContainer}>
-                    <Ionicons name="cart-outline" size={64} color="#ccc" />
+                    <Ionicons name="cart-outline" size={64} color={colors.border} />
                 </View>
                 <Text style={styles.emptyTitle}>Nenhum pedido encontrado</Text>
                 <Text style={styles.emptyText}>
@@ -226,7 +235,7 @@ const OrdersListScreen = () => {
 
       <TouchableOpacity 
         style={styles.fab}
-        onPress={() => navigation.navigate('OrderForm' as never)}
+        onPress={() => (navigation as any).navigate('OrderForm')}
       >
         <Ionicons name="add" size={30} color="#FFF" />
       </TouchableOpacity>
@@ -237,7 +246,7 @@ const OrdersListScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
   },
   center: {
       flex: 1,
@@ -251,8 +260,8 @@ const styles = StyleSheet.create({
   filtersContainer: {
     paddingVertical: 12,
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    ...shadow.sm,
+    zIndex: 1,
   },
   filterScroll: {
       paddingHorizontal: 16,
@@ -262,15 +271,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#eee',
+    borderColor: colors.border,
     marginRight: 8,
     backgroundColor: '#fff',
   },
   filterText: {
     fontSize: 14,
-    color: '#666',
+    color: colors.text,
     fontWeight: '600',
   },
   counterBadge: {
@@ -282,71 +291,93 @@ const styles = StyleSheet.create({
   counterText: {
       fontSize: 10,
       fontWeight: 'bold',
-      color: '#666',
+      color: colors.text,
   },
   card: {
-      marginBottom: 12,
+      marginBottom: 16,
       padding: 16,
       borderRadius: 16,
+      backgroundColor: '#fff',
       ...shadow.card,
+      borderWidth: 1,
+      borderColor: colors.border,
   },
   cardHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: 12,
   },
-  iconContainer: {
+  orderIdContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+  },
+  iconBox: {
       width: 40,
       height: 40,
-      borderRadius: 20,
-      backgroundColor: '#f0f7ff',
+      borderRadius: 12,
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 12,
   },
-  customerName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
   orderId: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  dateText: {
+      fontSize: 12,
+      color: colors.muted,
   },
   divider: {
       height: 1,
-      backgroundColor: '#f0f0f0',
+      backgroundColor: colors.border,
       marginBottom: 12,
   },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  cardBody: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
   },
-  totalLabel: {
+  customerInfo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+  },
+  customerName: {
     fontSize: 14,
-    color: '#666',
+    color: colors.text,
+    fontWeight: '500',
   },
-  totalValue: {
-    fontSize: 18,
+  amountContainer: {
+      alignItems: 'flex-end',
+  },
+  amountLabel: {
+      fontSize: 10,
+      color: colors.muted,
+      textTransform: 'uppercase',
+  },
+  amountValue: {
+    fontSize: 16,
     fontWeight: 'bold',
     color: colors.primary,
   },
   mlTag: {
       position: 'absolute',
-      top: 16,
-      right: 16,
+      top: 12,
+      right: 12,
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: '#ffe600',
-      paddingHorizontal: 8,
-      paddingVertical: 4,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
       borderRadius: 4,
+      display: 'none', // Hiding for now to clean up UI, or enable if needed
   },
-  mlId: {
-    fontSize: 10,
-    color: '#333',
-    fontWeight: 'bold',
+  mlText: {
+      fontSize: 10,
+      fontWeight: 'bold',
+      marginLeft: 2,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -354,9 +385,9 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
   emptyIconContainer: {
-      width: 120,
-      height: 120,
-      borderRadius: 60,
+      width: 100,
+      height: 100,
+      borderRadius: 50,
       backgroundColor: '#f0f0f0',
       justifyContent: 'center',
       alignItems: 'center',
@@ -365,12 +396,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.text,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 14,
-    color: '#999',
+    color: colors.muted,
     textAlign: 'center',
   },
   fab: {
@@ -383,8 +414,8 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    ...shadow.card,
-    elevation: 6,
+    ...shadow.lg,
+    zIndex: 10,
   },
 });
 

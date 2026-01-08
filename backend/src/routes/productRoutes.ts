@@ -4,6 +4,8 @@ import { authenticateToken } from '../middlewares/authMiddleware';
 
 const router = Router();
 
+router.get('/health', (req, res) => res.json({ status: 'ok', routes: 'loaded' }));
+
 router.get('/', authenticateToken, getProducts);
 router.get('/export.csv', authenticateToken, exportProductsCsv);
 router.get('/:id', authenticateToken, getProductById);

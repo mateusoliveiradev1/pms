@@ -51,6 +51,8 @@ function AppTabs() {
             iconName = focused ? 'people' : 'people-outline';
           } else if (route.name === 'Notificações') {
             iconName = focused ? 'notifications' : 'notifications-outline';
+          } else if (route.name === 'Relatórios') {
+            iconName = focused ? 'bar-chart' : 'bar-chart-outline';
           } else if (route.name === 'Ajustes') {
             iconName = focused ? 'settings' : 'settings-outline';
           }
@@ -65,6 +67,7 @@ function AppTabs() {
       <Tab.Screen name="Pedidos" component={OrdersListScreen} />
       <Tab.Screen name="Fornecedores" component={SuppliersStack} />
       <Tab.Screen name="Notificações" component={NotificationsScreen} />
+      <Tab.Screen name="Relatórios" component={ReportsScreen} />
       <Tab.Screen name="Ajustes" component={SettingsScreen} />
     </Tab.Navigator>
   );

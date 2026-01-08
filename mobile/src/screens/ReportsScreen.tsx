@@ -1,78 +1,119 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, ActivityIndicator } from 'react-native';
-import { LineChart, BarChart } from 'react-native-chart-kit';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, Dimensions, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import api from '../services/api';
 import Header from '../ui/components/Header';
-import { colors, shadow } from '../ui/theme';
+import { colors, shadow, radius, spacing } from '../ui/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 const screenWidth = Dimensions.get("window").width;
 
-interface SalesData {
-  date: string;
-  total: number;
+interface SalesChartItem {
+  date: string;     // Formatted DD/MM
+  fullDate: string; // YYYY-MM-DD
+  value: number;
+}
+
+interface SalesStatsResponse {
+  totalSales: number;
+  totalOrders: number;
+  chartData: SalesChartItem[];
+}
+
+interface TopProduct {
+  id: string;
+  name: string;
+  sku: string;
+  quantity: number;
+}
+
+interface StatusData {
+  status: string;
+  count: number;
 }
 
 const ReportsScreen: React.FC = () => {
   const navigation = useNavigation();
-  const [data, setData] = useState<SalesData[]>([]);
+  
+  const [salesStats, setSalesStats] = useState<SalesStatsResponse | null>(null);
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [statusData, setStatusData] = useState<StatusData[]>([]);
+  
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
     try {
-      const response = await api.get('/reports/sales');
-      setData(response.data);
+      if (!refreshing) setLoading(true);
+      
+      const [salesRes, topRes, statusRes] = await Promise.all([
+        api.get<SalesStatsResponse>('/reports/sales'),
+        api.get<TopProduct[]>('/reports/top-products'),
+        api.get<StatusData[]>('/reports/status')
+      ]);
+
+      setSalesStats(salesRes.data);
+      setTopProducts(topRes.data);
+      setStatusData(statusRes.data);
     } catch (error) {
       console.log('Error fetching reports', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  // Calculate summary stats
-  const totalSales = data.reduce((acc, curr) => acc + curr.total, 0);
-  const averageSales = data.length > 0 ? totalSales / data.length : 0;
-  const maxSales = data.length > 0 ? Math.max(...data.map(d => d.total)) : 0;
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [])
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
 
   // Prepare data for Line chart
-  const labels = data.map((d, index) => {
-      // Show label for every 5th day or first/last
-      if (index % 5 === 0 || index === data.length - 1) {
-          const parts = d.date.split('-');
-          return `${parts[2]}/${parts[1]}`;
-      }
-      return '';
-  });
+  const getLineChartData = () => {
+    if (!salesStats || salesStats.chartData.length === 0) return null;
 
-  const chartData = {
-    labels: labels,
-    datasets: [
-      {
-        data: data.length > 0 ? data.map(d => d.total) : [0],
-        color: (opacity: number = 1) => colors.primary, 
-        strokeWidth: 2
-      }
-    ],
-    legend: ["Vendas (Últimos 30 dias)"]
+    const data = salesStats.chartData;
+    // Show label every 5 days to avoid clutter
+    const labels = data.map((d, index) => {
+        if (index % 5 === 0 || index === data.length - 1) {
+            return d.date;
+        }
+        return '';
+    });
+
+    return {
+      labels: labels,
+      datasets: [
+        {
+          data: data.map(d => d.value),
+          color: (opacity: number = 1) => colors.primary, 
+          strokeWidth: 2
+        }
+      ],
+      legend: ["Vendas (Últimos 30 dias)"]
+    };
   };
 
   // Prepare data for Weekday Bar Chart
   const getWeekdayData = () => {
+      if (!salesStats) return null;
+
       const weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
       const counts = [0, 0, 0, 0, 0, 0, 0];
       
-      data.forEach(d => {
-          const dayIndex = new Date(d.date).getDay(); // 0-6 (Sun-Sat) - Note: depends on timezone, but good enough for demo
-          // Adjust for timezone issue if date string is YYYY-MM-DD (treated as UTC) vs local
-          // Simple hack: append T12:00:00 to ensure it falls in the day
-          const dateObj = new Date(d.date + 'T12:00:00'); 
-          counts[dateObj.getDay()] += d.total;
+      salesStats.chartData.forEach(d => {
+          // Create date object from YYYY-MM-DD
+          // Append T12:00:00 to avoid timezone issues shifting the day
+          const dateObj = new Date(d.fullDate + 'T12:00:00'); 
+          counts[dateObj.getDay()] += d.value;
       });
 
       return {
@@ -81,17 +122,59 @@ const ReportsScreen: React.FC = () => {
       };
   };
 
+  const lineChartData = getLineChartData();
   const weekdayChartData = getWeekdayData();
 
-  if (loading) {
-      return <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>;
-  }
+  // Prepare Pie Chart Data
+  const getStatusColor = (status: string) => {
+      switch (status) {
+          case 'NEW': return '#007AFF';
+          case 'SENT_TO_SUPPLIER': return '#FF9500';
+          case 'SHIPPING': return '#AF52DE';
+          case 'DELIVERED': return '#34C759';
+          case 'CANCELLED': return '#FF3B30';
+          default: return '#8E8E93';
+      }
+  };
+
+  const getStatusLabel = (status: string) => {
+      const map: Record<string, string> = {
+          'NEW': 'Novo',
+          'SENT_TO_SUPPLIER': 'No Fornecedor',
+          'SHIPPING': 'Em Trânsito',
+          'DELIVERED': 'Entregue',
+          'CANCELLED': 'Cancelado'
+      };
+      return map[status] || status;
+  };
+
+  const pieChartData = statusData.map(item => ({
+      name: getStatusLabel(item.status),
+      population: item.count,
+      color: getStatusColor(item.status),
+      legendFontColor: "#7F7F7F",
+      legendFontSize: 12
+  }));
+
+  const totalSales = salesStats?.totalSales || 0;
+  const averageSales = salesStats?.chartData?.length ? totalSales / salesStats.chartData.length : 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <Header title="Relatórios e Gráficos" onBack={() => navigation.goBack()} />
       
-      <ScrollView contentContainerStyle={styles.content}>
+      {loading && !refreshing ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : (
+        <ScrollView 
+          contentContainerStyle={styles.content} 
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
+          }
+        >
         
         {/* Summary Cards */}
         <View style={styles.summaryContainer}>
@@ -111,60 +194,92 @@ const ReportsScreen: React.FC = () => {
             </View>
         </View>
 
-        {data.length > 0 ? (
-          <>
-            <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>Evolução de Vendas</Text>
-                <LineChart
-                    data={chartData}
-                    width={screenWidth - 48}
-                    height={220}
-                    yAxisLabel="R$ "
-                    chartConfig={{
-                        backgroundColor: "#ffffff",
-                        backgroundGradientFrom: "#ffffff",
-                        backgroundGradientTo: "#ffffff",
-                        decimalPlaces: 0, 
-                        color: (opacity: number = 1) => colors.primary,
-                        labelColor: (opacity: number = 1) => `rgba(0, 0, 0, ${opacity})`,
-                        style: { borderRadius: 16 },
-                        propsForDots: { r: "4", strokeWidth: "2", stroke: colors.secondary }
-                    }}
-                    bezier
-                    style={styles.chart}
-                />
-            </View>
+        {lineChartData && (
+          <View style={styles.chartCard}>
+              <Text style={styles.chartTitle}>Evolução de Vendas</Text>
+              <LineChart
+                  data={lineChartData}
+                  width={screenWidth - 48}
+                  height={220}
+                  yAxisLabel="R$ "
+                  chartConfig={{
+                      backgroundColor: "#ffffff",
+                      backgroundGradientFrom: "#ffffff",
+                      backgroundGradientTo: "#ffffff",
+                      decimalPlaces: 0, 
+                      color: (opacity: number = 1) => colors.primary,
+                      labelColor: (opacity: number = 1) => `rgba(0, 0, 0, ${opacity})`,
+                      style: { borderRadius: 16 },
+                      propsForDots: { r: "4", strokeWidth: "2", stroke: colors.primary }
+                  }}
+                  bezier
+                  style={{ marginVertical: 8, borderRadius: 16 }}
+              />
+          </View>
+        )}
 
+        {weekdayChartData && (
+          <View style={styles.chartCard}>
+              <Text style={styles.chartTitle}>Vendas por Dia da Semana</Text>
+              <BarChart
+                  data={weekdayChartData}
+                  width={screenWidth - 48}
+                  height={220}
+                  yAxisLabel="R$ "
+                  chartConfig={{
+                      backgroundColor: "#ffffff",
+                      backgroundGradientFrom: "#ffffff",
+                      backgroundGradientTo: "#ffffff",
+                      decimalPlaces: 0,
+                      color: (opacity: number = 1) => colors.secondary,
+                      labelColor: (opacity: number = 1) => `rgba(0, 0, 0, ${opacity})`,
+                      barPercentage: 0.7,
+                  }}
+                  style={{ marginVertical: 8, borderRadius: 16 }}
+                  showValuesOnTopOfBars
+              />
+          </View>
+        )}
+
+        {pieChartData.length > 0 && (
             <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>Vendas por Dia da Semana</Text>
-                <BarChart
-                    data={weekdayChartData}
+                <Text style={styles.chartTitle}>Status dos Pedidos</Text>
+                <PieChart
+                    data={pieChartData}
                     width={screenWidth - 48}
                     height={220}
-                    yAxisLabel="R$ "
-                    yAxisSuffix=""
                     chartConfig={{
-                        backgroundColor: "#ffffff",
-                        backgroundGradientFrom: "#ffffff",
-                        backgroundGradientTo: "#ffffff",
-                        decimalPlaces: 0,
-                        color: (opacity: number = 1) => colors.secondary,
-                        labelColor: (opacity: number = 1) => `rgba(0, 0, 0, ${opacity})`,
-                        barPercentage: 0.7,
+                        color: (opacity: number = 1) => `rgba(0, 0, 0, ${opacity})`,
                     }}
-                    style={styles.chart}
-                    showValuesOnTopOfBars={false} // clean look
+                    accessor={"population"}
+                    backgroundColor={"transparent"}
+                    paddingLeft={"15"}
+                    center={[0, 0]}
+                    absolute
                 />
-            </View>
-          </>
-        ) : (
-            <View style={styles.noDataContainer}>
-                <Ionicons name="stats-chart-outline" size={64} color="#ddd" />
-                <Text style={styles.noData}>Nenhum dado encontrado para o período.</Text>
             </View>
         )}
 
-      </ScrollView>
+        {topProducts.length > 0 && (
+            <View style={styles.chartCard}>
+                <Text style={styles.chartTitle}>Produtos Mais Vendidos</Text>
+                {topProducts.map((product, index) => (
+                    <View key={product.id} style={styles.topProductRow}>
+                        <View style={styles.rankBadge}>
+                            <Text style={styles.rankText}>{index + 1}</Text>
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                            <Text style={styles.productName}>{product.name}</Text>
+                            <Text style={styles.productSku}>{product.sku}</Text>
+                        </View>
+                        <Text style={styles.productQty}>{product.quantity} un</Text>
+                    </View>
+                ))}
+            </View>
+        )}
+
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 };
@@ -172,34 +287,38 @@ const ReportsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  content: {
-      padding: 16,
-      paddingBottom: 40,
+    backgroundColor: '#F5F5F5',
   },
   center: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center'
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    padding: 24,
+    paddingBottom: 40,
   },
   summaryContainer: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginBottom: 20,
+      marginBottom: 24,
   },
   summaryCard: {
-      flex: 0.48,
+      flex: 1,
       backgroundColor: '#fff',
       padding: 16,
       borderRadius: 16,
+      marginHorizontal: 6,
+      ...shadow.small,
       alignItems: 'center',
-      ...shadow.card,
   },
   iconContainer: {
-      padding: 10,
-      borderRadius: 12,
-      marginBottom: 8,
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 12,
   },
   summaryLabel: {
       fontSize: 12,
@@ -207,7 +326,7 @@ const styles = StyleSheet.create({
       marginBottom: 4,
   },
   summaryValue: {
-      fontSize: 18,
+      fontSize: 16,
       fontWeight: 'bold',
       color: '#333',
   },
@@ -215,30 +334,48 @@ const styles = StyleSheet.create({
       backgroundColor: '#fff',
       borderRadius: 16,
       padding: 16,
-      marginBottom: 20,
-      alignItems: 'center',
-      ...shadow.card,
+      marginBottom: 24,
+      ...shadow.medium,
   },
   chartTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      marginBottom: 16,
+      color: '#333',
+  },
+  topProductRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: '#f0f0f0',
+  },
+  rankBadge: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+  },
+  rankText: {
+      color: '#fff',
+      fontWeight: 'bold',
+      fontSize: 14,
+  },
+  productName: {
+      fontSize: 16,
+      color: '#333',
+      fontWeight: '500',
+  },
+  productSku: {
+      fontSize: 12,
+      color: '#999',
+  },
+  productQty: {
       fontSize: 16,
       fontWeight: 'bold',
-      color: '#333',
-      marginBottom: 16,
-      alignSelf: 'flex-start',
-  },
-  chart: {
-      borderRadius: 16,
-      marginVertical: 8,
-  },
-  noDataContainer: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 40,
-  },
-  noData: {
-      textAlign: 'center',
-      marginTop: 20,
-      color: '#666'
+      color: colors.secondary,
   }
 });
 
