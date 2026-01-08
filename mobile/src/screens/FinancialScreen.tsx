@@ -924,7 +924,7 @@ const FinancialScreen = () => {
                           style={styles.input}
                           placeholder="00.000.000/0000-00"
                           value={billingDoc}
-                          onChangeText={handleDocChange}
+                          onChangeText={(t) => setBillingDoc(formatDoc(t))}
                           keyboardType="numeric"
                           maxLength={18}
                       />
