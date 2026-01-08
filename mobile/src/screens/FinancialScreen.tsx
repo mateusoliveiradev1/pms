@@ -49,12 +49,21 @@ interface SupplierData {
   billingEmail?: string;
 }
 
+interface SupplierSubscriptionData {
+  id: string;
+  startDate: string;
+  endDate: string;
+  status: 'ATIVA' | 'PENDENTE' | 'VENCIDA' | 'SUSPENSA';
+  plan: { id: string; name: string; cycleDays: number; limitOrders: number; commissionPercent: number };
+}
+
 const FinancialScreen = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
   
   const [supplier, setSupplier] = useState<SupplierData | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
+  const [subscription, setSubscription] = useState<SupplierSubscriptionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -149,6 +158,7 @@ const FinancialScreen = () => {
         const financialRes = await api.get(`/financial/supplier/${firstSupplier.id}`);
         setSupplier(financialRes.data.supplier);
         setLedger(financialRes.data.ledger);
+        setSubscription(financialRes.data.subscription || null);
       } else {
         throw new Error('No supplier found');
       }
@@ -534,7 +544,16 @@ const FinancialScreen = () => {
         <View style={styles.walletCard}>
             <View style={styles.walletHeader}>
                 <Text style={styles.walletLabel}>Saldo Disponível</Text>
-                <TouchableOpacity onPress={() => setWithdrawModalVisible(true)} style={styles.withdrawButton}>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (supplier?.financialStatus !== 'ACTIVE' || (subscription && subscription.status !== 'ATIVA')) {
+                      Alert.alert('Saque bloqueado', 'Seu plano está pendente ou vencido.');
+                      return;
+                    }
+                    setWithdrawModalVisible(true);
+                  }}
+                  style={styles.withdrawButton}
+                >
                     <Text style={styles.withdrawButtonText}>SACAR</Text>
                     <Ionicons name="arrow-up-circle-outline" size={20} color="#FFF" style={{ marginLeft: 4 }} />
                 </TouchableOpacity>

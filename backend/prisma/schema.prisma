@@ -26,6 +26,11 @@ model Plan {
   name         String
   monthlyPrice Float
   cycleDays    Int        @default(30)
+  // Business rules
+  limitProducts   Int      @default(100)
+  limitOrders     Int      @default(1000)
+  commissionPercent Float  @default(10.0)
+  priorityLevel   Int      @default(1)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   suppliers    Supplier[]
@@ -45,6 +50,7 @@ model Supplier {
   commissionRate  Float     @default(10.0) // Percentage
   walletBalance   Float     @default(0.0)
   nextBillingDate DateTime?
+  scheduledPlanId String?
 
   // Billing Info
   billingName     String?
@@ -55,6 +61,7 @@ model Supplier {
   products        ProductSupplier[]
   orders          Order[]
   ledger          FinancialLedger[]
+  subscriptions   SupplierSubscription[]
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -160,6 +167,20 @@ model FinancialLedger {
   createdAt   DateTime @default(now())
 }
 
+model SupplierSubscription {
+  id            String   @id @default(uuid())
+  supplierId    String
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  planId        String
+  plan          Plan     @relation(fields: [planId], references: [id])
+  startDate     DateTime
+  endDate       DateTime
+  status        String   // ATIVA | PENDENTE | VENCIDA | SUSPENSA
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([supplierId, status])
+}
 model Notification {
   id        String   @id @default(uuid())
   title     String

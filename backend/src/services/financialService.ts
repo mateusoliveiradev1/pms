@@ -9,6 +9,14 @@ interface FinancialCalculation {
 }
 
 export const FinancialService = {
+  // Returns active subscription for a supplier
+  getActiveSubscription: async (supplierId: string) => {
+    const now = new Date();
+    return prisma.supplierSubscription.findFirst({
+      where: { supplierId, status: 'ATIVA', endDate: { gt: now } },
+      include: { plan: true }
+    });
+  },
   /**
    * Calculates the financial split for an order
    */
@@ -85,6 +93,13 @@ export const FinancialService = {
           status: 'COMPLETED'
         }
       });
+      await tx.log.create({
+        data: {
+          level: 'INFO',
+          message: 'Comissão aplicada em pedido',
+          context: JSON.stringify({ orderId: order.id, supplierId: order.supplier.id, commission: order.platformCommission })
+        }
+      });
 
       // 5. Update Order Financial Status
       const updatedOrder = await tx.order.update({
@@ -101,48 +116,61 @@ export const FinancialService = {
    */
   processSubscriptionPayment: async (supplierId: string, amount: number, method: 'BALANCE' | 'CARD' = 'CARD') => {
     return await prisma.$transaction(async (tx) => {
-      const supplier = await tx.supplier.findUnique({ 
-          where: { id: supplierId }, 
-          include: { plan: true } 
-      });
+      const supplier = await tx.supplier.findUnique({ where: { id: supplierId }, include: { plan: true } });
       if (!supplier) throw new Error('Supplier not found');
+      if (!supplier.planId) throw new Error('Supplier has no plan assigned');
 
       if (method === 'BALANCE' && supplier.walletBalance < amount) {
         throw new Error('Insufficient wallet balance');
       }
 
-      // Calculate new date
-      // If currently overdue (date in past), start from NOW.
-      // If active (date in future), add to current date.
       const now = new Date();
-      const currentNextDate = supplier.nextBillingDate ? new Date(supplier.nextBillingDate) : now;
-      
-      let baseDate = currentNextDate < now ? now : currentNextDate;
-      
       const cycleDays = supplier.plan?.cycleDays || 30;
-      const nextDate = new Date(baseDate);
-      nextDate.setDate(nextDate.getDate() + cycleDays);
+      const endDate = new Date(now);
+      endDate.setDate(endDate.getDate() + cycleDays);
 
-      // Create Ledger
       await tx.financialLedger.create({
         data: {
           type: 'SUBSCRIPTION_PAYMENT',
-          amount: amount,
+          amount,
           supplierId: supplier.id,
           description: method === 'BALANCE' ? 'Pagamento de Mensalidade (Saldo)' : 'Pagamento de Mensalidade (Cartão)',
           status: 'COMPLETED'
         }
       });
 
-      // Update Supplier
+      const activeSub = await tx.supplierSubscription.findFirst({
+        where: { supplierId, status: 'ATIVA' }
+      });
+      if (activeSub) {
+        await tx.supplierSubscription.update({
+          where: { id: activeSub.id },
+          data: { planId: supplier.planId, startDate: now, endDate, status: 'ATIVA' }
+        });
+      } else {
+        await tx.supplierSubscription.create({
+          data: { supplierId, planId: supplier.planId, startDate: now, endDate, status: 'ATIVA' }
+        });
+      }
+
+      // Apply scheduled downgrade at renewal
+      const finalPlanId = supplier.scheduledPlanId ? supplier.scheduledPlanId : supplier.planId;
+
       const updatedSupplier = await tx.supplier.update({
         where: { id: supplierId },
         data: {
-          nextBillingDate: nextDate,
+          planId: finalPlanId,
+          scheduledPlanId: null,
+          nextBillingDate: endDate,
           financialStatus: 'ACTIVE',
-          status: 'ACTIVE', // Reactivate if paused
+          status: 'ACTIVE',
           walletBalance: method === 'BALANCE' ? { decrement: amount } : undefined
-        }
+        },
+        include: { plan: true }
+      });
+
+      await tx.log.create({
+        data: { level: 'INFO', message: 'Assinatura ativada após pagamento', context: JSON.stringify({ supplierId, planId: updatedSupplier.planId }) }
       });
 
       return updatedSupplier;
@@ -158,6 +186,9 @@ export const FinancialService = {
       
       const supplier = await tx.supplier.findUnique({ where: { id: supplierId } });
       if (!supplier) throw new Error('Supplier not found');
+      if (supplier.financialStatus !== 'ACTIVE') throw new Error('Withdraw blocked: supplier not active');
+      const sub = await tx.supplierSubscription.findFirst({ where: { supplierId, status: 'ATIVA' } });
+      if (!sub || sub.endDate < new Date()) throw new Error('Withdraw blocked: subscription overdue');
       if (supplier.walletBalance < amount) throw new Error('Insufficient wallet balance');
 
       const updatedSupplier = await tx.supplier.update({
@@ -188,20 +219,38 @@ export const FinancialService = {
     return await prisma.$transaction(async (tx) => {
       const plan = await tx.plan.findUnique({ where: { id: planId } });
       if (!plan) throw new Error('Plan not found');
-      
-      const supplier = await tx.supplier.findUnique({ where: { id: supplierId } });
+      const supplier = await tx.supplier.findUnique({ where: { id: supplierId }, include: { plan: true } });
       if (!supplier) throw new Error('Supplier not found');
-      
-      const updated = await tx.supplier.update({
-        where: { id: supplierId },
-        data: {
-          planId: planId,
-          // Keep nextBillingDate as is; new plan applies next cycle
-          financialStatus: supplier.financialStatus === 'SUSPENDED' ? 'ACTIVE' : supplier.financialStatus,
-          status: supplier.status === 'PAUSED' ? 'ACTIVE' : supplier.status
-        },
-        include: { plan: true }
-      });
+      const currentPriority = supplier.plan?.priorityLevel ?? 1;
+      const isUpgrade = plan.priorityLevel > currentPriority || plan.monthlyPrice >= (supplier.plan?.monthlyPrice ?? 0);
+
+      let updated;
+      if (isUpgrade) {
+        const now = new Date();
+        const endDate = new Date(now);
+        endDate.setDate(endDate.getDate() + (plan.cycleDays || 30));
+
+        const activeSub = await tx.supplierSubscription.findFirst({ where: { supplierId, status: 'ATIVA' } });
+        if (activeSub) {
+          await tx.supplierSubscription.update({ where: { id: activeSub.id }, data: { planId: plan.id, startDate: now, endDate, status: 'ATIVA' } });
+        } else {
+          await tx.supplierSubscription.create({ data: { supplierId, planId: plan.id, startDate: now, endDate, status: 'ATIVA' } });
+        }
+
+        updated = await tx.supplier.update({
+          where: { id: supplierId },
+          data: { planId: plan.id, nextBillingDate: endDate, scheduledPlanId: null, financialStatus: 'ACTIVE', status: 'ACTIVE' },
+          include: { plan: true }
+        });
+        await tx.log.create({ data: { level: 'INFO', message: 'Upgrade de plano imediato', context: JSON.stringify({ supplierId, planId: plan.id }) } });
+      } else {
+        updated = await tx.supplier.update({
+          where: { id: supplierId },
+          data: { scheduledPlanId: plan.id },
+          include: { plan: true }
+        });
+        await tx.log.create({ data: { level: 'INFO', message: 'Downgrade agendado para próximo ciclo', context: JSON.stringify({ supplierId, planId: plan.id }) } });
+      }
       
       await tx.financialLedger.create({
         data: {
@@ -244,7 +293,11 @@ export const FinancialService = {
               }
           });
           results.push(updated);
-          
+          // Suspend active subscription
+          const activeSub = await prisma.supplierSubscription.findFirst({ where: { supplierId: s.id, status: 'ATIVA' } });
+          if (activeSub) {
+            await prisma.supplierSubscription.update({ where: { id: activeSub.id }, data: { status: 'SUSPENSA' } });
+          }
           // Log it
           await prisma.log.create({
               data: {
@@ -272,8 +325,8 @@ export const FinancialService = {
     if (supplier.status !== 'ACTIVE') return false;
     if (supplier.financialStatus === 'SUSPENDED') return false;
 
-    // TODO: Add date check logic here (nextBillingDate < now -> suspend)
-    // For now, relies on the explicit status field
+    const sub = await prisma.supplierSubscription.findFirst({ where: { supplierId, status: 'ATIVA' } });
+    if (!sub || sub.endDate < new Date()) return false;
     return true;
   }
 };

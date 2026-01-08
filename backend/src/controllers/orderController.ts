@@ -103,11 +103,28 @@ export const createOrder = async (req: Request, res: Response) => {
                 
                 // Capture Supplier Info for the Order (from the first item that has a supplier)
                 if (!orderSupplierId) {
-                    if (supplierRel.supplier.status !== 'ACTIVE' || supplierRel.supplier.financialStatus === 'SUSPENDED') {
-                        throw new Error(`Supplier ${supplierRel.supplier.name} is not active/suspended. Cannot process order.`);
-                    }
-                    orderSupplierId = supplierRel.supplierId;
-                    orderCommissionRate = supplierRel.supplier.commissionRate || 10; // Default 10%
+                if (supplierRel.supplier.status !== 'ACTIVE' || supplierRel.supplier.financialStatus !== 'ACTIVE') {
+                    throw new Error(`Supplier ${supplierRel.supplier.name} is not active. Cannot process order.`);
+                }
+                // Enforce active subscription and limits
+                const activeSub = await tx.supplierSubscription.findFirst({
+                  where: { supplierId: supplierRel.supplierId, status: 'ATIVA' },
+                  include: { plan: true }
+                });
+                if (!activeSub || activeSub.endDate < new Date()) {
+                  throw new Error(`Supplier ${supplierRel.supplier.name} subscription is overdue. Cannot create order.`);
+                }
+                // Limit orders in current cycle
+                const cycleStart = activeSub.startDate;
+                const cycleEnd = activeSub.endDate;
+                const ordersInCycle = await tx.order.count({
+                  where: { supplierId: supplierRel.supplierId, createdAt: { gte: cycleStart, lt: cycleEnd } }
+                });
+                if (ordersInCycle >= (activeSub.plan.limitOrders || 0)) {
+                  throw new Error(`Order limit reached for current plan cycle.`);
+                }
+                orderSupplierId = supplierRel.supplierId;
+                orderCommissionRate = activeSub.plan.commissionPercent || 10; // Commission from plan
                 }
 
                 await tx.productSupplier.update({

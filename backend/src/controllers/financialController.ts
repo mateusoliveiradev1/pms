@@ -57,10 +57,16 @@ export const getSupplierFinancials = async (req: Request, res: Response) => {
             orderBy: { createdAt: 'desc' },
             take: 20
         });
+        
+        const subscription = await prisma.supplierSubscription.findFirst({
+            where: { supplierId: id, status: 'ATIVA' },
+            include: { plan: true }
+        });
 
         res.json({
             supplier,
-            ledger
+            ledger,
+            subscription
         });
     } catch (error: any) {
         res.status(500).json({ message: 'Error fetching supplier financials', error: error.message });
