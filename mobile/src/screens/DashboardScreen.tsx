@@ -6,7 +6,8 @@ import {
   ScrollView, 
   RefreshControl, 
   Dimensions, 
-  TouchableOpacity 
+  TouchableOpacity,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
@@ -30,6 +31,18 @@ interface DashboardStats {
   lowStockProducts: number;
   pendingOrders: number;
   totalSales: number;
+}
+
+interface SalesChartItem {
+    date: string;
+    fullDate: string;
+    value: number;
+}
+  
+interface SalesStatsResponse {
+    totalSales: number;
+    totalOrders: number;
+    chartData: SalesChartItem[];
 }
 
 interface StatCardProps {
@@ -65,42 +78,61 @@ const DashboardScreen = () => {
     pendingOrders: 0,
     totalSales: 0
   });
+  const [weeklyChartData, setWeeklyChartData] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+  const [weeklyLabels, setWeeklyLabels] = useState<string[]>(['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom']);
+  
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      setLoading(true);
-      // In a real app, you might have a dedicated dashboard endpoint
-      // For now, we'll fetch products and mock some stats if the stats endpoint doesn't exist
+      // Don't show full screen loader on refresh
+      if (!refreshing) setLoading(true);
       
-      const [productsRes, statsRes] = await Promise.all([
+      const [productsRes, salesRes] = await Promise.all([
         api.get<Product[]>('/products'),
-        api.get<DashboardStats>('/dashboard/stats').catch(() => ({ data: null })) // Fallback if stats endpoint fails
+        api.get<SalesStatsResponse>('/reports/sales').catch(() => ({ data: null }))
       ]);
 
-      setProducts(productsRes.data.slice(0, 5)); // Show only 5 recent products
+      const allProducts = productsRes.data;
+      setProducts(allProducts.slice(0, 5));
 
-      if (statsRes.data) {
-        setStats(statsRes.data);
-      } else {
-        // Calculate stats locally if endpoint missing
-        const allProducts = productsRes.data;
-        setStats({
-          totalProducts: allProducts.length,
-          totalOrders: 12, // Mock
-          lowStockProducts: allProducts.filter((p) => p.stockAvailable < 5).length,
-          pendingOrders: 3, // Mock
-          totalSales: 1540.50 // Mock
-        });
+      // Process Sales Data for Dashboard
+      let realTotalSales = 0;
+      let realTotalOrders = 0;
+      let chartValues = [0, 0, 0, 0, 0, 0, 0];
+      let chartLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']; // Default
+
+      if (salesRes.data) {
+          realTotalSales = salesRes.data.totalSales;
+          realTotalOrders = salesRes.data.totalOrders;
+
+          // Get last 7 days data for the chart
+          // The backend returns 30 days ordered by date
+          const last7Days = salesRes.data.chartData.slice(-7);
+          
+          chartValues = last7Days.map(d => d.value);
+          chartLabels = last7Days.map(d => d.date.split('/')[0]); // Just the day number
       }
+
+      setWeeklyChartData(chartValues);
+      setWeeklyLabels(chartLabels);
+
+      setStats({
+        totalProducts: allProducts.length,
+        totalOrders: realTotalOrders, 
+        lowStockProducts: allProducts.filter((p) => p.stockAvailable < 5).length,
+        pendingOrders: 0, // Need a specific endpoint for this later
+        totalSales: realTotalSales
+      });
+
     } catch (error) {
       console.log('Error loading dashboard data', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [refreshing]);
 
   useEffect(() => {
     if (isFocused) {
@@ -110,7 +142,9 @@ const DashboardScreen = () => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadData();
+    // Trigger loadData via dependency change or direct call logic
+    // loadData handles the refreshing state logic internally if needed
+    // but here we just need to ensure it runs
   };
 
   const getGreeting = () => {
@@ -119,8 +153,6 @@ const DashboardScreen = () => {
     if (hour < 18) return 'Boa tarde';
     return 'Boa noite';
   };
-
-
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -164,7 +196,7 @@ const DashboardScreen = () => {
             onPress={() => navigation.navigate('ProductsList' as never, { filter: 'LOW_STOCK' } as never)}
           />
           <StatCard 
-            title="Vendas (Mês)" 
+            title="Vendas (30d)" 
             value={`R$ ${stats.totalSales.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon="cash-outline" 
             color={colors.success} 
@@ -173,89 +205,105 @@ const DashboardScreen = () => {
         </View>
 
         <TouchableOpacity style={styles.chartContainer} onPress={() => navigation.navigate('Relatórios' as never)}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-             <Text style={styles.sectionTitle}>Vendas da Semana</Text>
-             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-          </View>
-          <LineChart
-            data={{
-              labels: ["Seg", "Ter", "Qua", "Qui", "Sex", "Sab", "Dom"],
-              datasets: [
-                {
-                  data: [
-                    Math.random() * 100,
-                    Math.random() * 100,
-                    Math.random() * 100,
-                    Math.random() * 100,
-                    Math.random() * 100,
-                    Math.random() * 100,
-                    Math.random() * 100
-                  ]
-                }
-              ]
-            }}
-            width={Dimensions.get("window").width - 32}
-            height={220}
-            yAxisLabel="R$ "
-            yAxisSuffix=""
-            yAxisInterval={1}
-            chartConfig={{
-              backgroundColor: "#ffffff",
-              backgroundGradientFrom: "#ffffff",
-              backgroundGradientTo: "#ffffff",
-              decimalPlaces: 0,
-              color: (opacity: number = 1) => `rgba(0, 123, 255, ${opacity})`,
-              labelColor: (opacity: number = 1) => `rgba(0, 0, 0, ${opacity})`,
-              style: {
-                borderRadius: 16
-              },
-              propsForDots: {
-                r: "6",
-                strokeWidth: "2",
-                stroke: "#007bff"
-              }
-            }}
-            bezier
-            style={{
-              marginVertical: 8,
-              borderRadius: 16
-            }}
-          />
-        </TouchableOpacity>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Produtos Recentes</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('ProductsList' as never)}>
-              <Text style={styles.seeAll}>Ver todos</Text>
-            </TouchableOpacity>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+             <View>
+               <Text style={styles.sectionTitle}>Vendas da Semana</Text>
+               <Text style={styles.weeklyTotal}>
+                 R$ {weeklyChartData.reduce((a, b) => a + b, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+               </Text>
+             </View>
+             <View style={styles.seeMoreButton}>
+                <Text style={styles.seeMoreText}>Detalhes</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+             </View>
           </View>
           
-          {products.map(product => (
-            <TouchableOpacity 
-              key={product.id} 
-              style={styles.productRow}
-              onPress={() => navigation.navigate('ProductDetails' as never, { productId: product.id } as never)}
-            >
-              <View style={styles.productInfo}>
-                <Text style={styles.productName}>{product.name}</Text>
-                <Text style={styles.productSku}>{product.sku}</Text>
-              </View>
-              <View style={styles.productMeta}>
-                <Text style={[
-                  styles.stockBadge, 
-                  { color: product.stockAvailable < 5 ? colors.error : colors.success }
-                ]}>
-                  {product.stockAvailable} un
-                </Text>
-                <Text style={styles.productPrice}>
-                  R$ {product.finalPrice.toFixed(2)}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+          {loading && !refreshing && weeklyChartData.every(v => v === 0) ? (
+             <View style={{ height: 220, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator color={colors.primary} />
+             </View>
+          ) : (
+            <LineChart
+                data={{
+                labels: weeklyLabels,
+                datasets: [
+                    {
+                    data: weeklyChartData,
+                    color: (opacity = 1) => colors.primary,
+                    strokeWidth: 3
+                    }
+                ]
+                }}
+                width={Dimensions.get("window").width - 48} // Adjusted width for padding
+                height={200}
+                withDots={true}
+                withInnerLines={false} // Cleaner look
+                withOuterLines={false}
+                withVerticalLines={false}
+                withHorizontalLines={true}
+                yAxisLabel="R$"
+                yAxisSuffix=""
+                yAxisInterval={1}
+                chartConfig={{
+                backgroundColor: "#fff",
+                backgroundGradientFrom: "#fff",
+                backgroundGradientTo: "#fff",
+                decimalPlaces: 0,
+                color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`, // Primary Blue
+                labelColor: (opacity = 1) => `#999`,
+                fillShadowGradientFrom: colors.primary,
+                fillShadowGradientTo: "#fff",
+                fillShadowGradientOpacity: 0.3,
+                style: {
+                    borderRadius: 16
+                },
+                propsForDots: {
+                    r: "4",
+                    strokeWidth: "2",
+                    stroke: "#fff"
+                },
+                propsForBackgroundLines: {
+                    strokeDasharray: "", // Solid lines
+                    stroke: "#f5f5f5"
+                }
+                }}
+                bezier
+                style={{
+                marginVertical: 8,
+                borderRadius: 16,
+                paddingRight: 20 // Fix label cut-off
+                }}
+            />
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Produtos Recentes</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('ProductsList' as never)}>
+            <Text style={styles.seeAllText}>Ver todos</Text>
+          </TouchableOpacity>
         </View>
 
+        {products.map((product) => (
+          <View key={product.id} style={styles.productCard}>
+            <View style={styles.productIcon}>
+              <Ionicons name="cube-outline" size={24} color={colors.primary} />
+            </View>
+            <View style={styles.productInfo}>
+              <Text style={styles.productName}>{product.name}</Text>
+              <Text style={styles.productSku}>{product.sku}</Text>
+            </View>
+            <View style={styles.productMeta}>
+              <Text style={styles.productPrice}>R$ {product.finalPrice.toFixed(2)}</Text>
+              <Text style={[
+                styles.stockBadge, 
+                { color: product.stockAvailable < 5 ? colors.error : colors.success }
+              ]}>
+                {product.stockAvailable} un
+              </Text>
+            </View>
+          </View>
+        ))}
       </ScrollView>
     </SafeAreaView>
   );
@@ -264,11 +312,7 @@ const DashboardScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
+    backgroundColor: '#F5F5F5',
   },
   header: {
     flexDirection: 'row',
@@ -276,41 +320,66 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
+  content: {
+    padding: 16,
+  },
   greeting: {
     fontSize: 14,
-    color: '#666',
+    color: colors.textSecondary,
   },
   userName: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.text,
   },
   dateBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e6f0ff',
+    backgroundColor: '#fff',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    gap: 6,
+    ...shadow.small,
   },
   dateText: {
-    color: colors.primary,
-    fontWeight: '600',
+    marginLeft: 6,
     fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  weeklyTotal: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 4,
+  },
+  seeMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9FF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  seeMoreText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+    marginRight: 2,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    marginHorizontal: -6,
     marginBottom: 24,
   },
   statCard: {
+    width: '46%', // approximate for 2 columns with margin
     backgroundColor: '#fff',
-    width: '48%',
-    padding: 16,
     borderRadius: 16,
-    ...shadow.card,
+    padding: 16,
+    margin: '2%',
+    ...shadow.small,
   },
   iconBox: {
     width: 40,
@@ -323,25 +392,19 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 2,
+    color: colors.text,
+    marginBottom: 4,
   },
   statTitle: {
     fontSize: 12,
-    color: '#666',
+    color: colors.textSecondary,
   },
   chartContainer: {
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
     marginBottom: 24,
-    ...shadow.card,
-  },
-  section: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    ...shadow.card,
+    ...shadow.small,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -350,47 +413,58 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: colors.text,
   },
-  seeAll: {
-    color: colors.primary,
+  seeAllText: {
     fontSize: 14,
+    color: colors.primary,
     fontWeight: '600',
   },
-  productRow: {
+  productCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    ...shadow.small,
+  },
+  productIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   productInfo: {
     flex: 1,
   },
   productName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 2,
+    color: colors.text,
+    marginBottom: 4,
   },
   productSku: {
     fontSize: 12,
-    color: '#999',
+    color: colors.textSecondary,
   },
   productMeta: {
     alignItems: 'flex-end',
   },
+  productPrice: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 4,
+  },
   stockBadge: {
     fontSize: 12,
     fontWeight: '600',
-    marginBottom: 2,
-  },
-  productPrice: {
-    fontSize: 14,
-    color: '#666',
   },
 });
 
