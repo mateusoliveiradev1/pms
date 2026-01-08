@@ -21,6 +21,58 @@ async function main() {
   });
 
   console.log({ admin });
+
+  // Seed Plans
+  const plans = [
+    {
+      id: 'basic',
+      name: 'Plano Básico',
+      monthlyPrice: 49.90,
+      cycleDays: 30,
+      commissionPercent: 12.0,
+      limitOrders: 200,
+      limitProducts: 200,
+      priorityLevel: 1
+    },
+    {
+      id: 'pro',
+      name: 'Plano Profissional',
+      monthlyPrice: 99.90,
+      cycleDays: 30,
+      commissionPercent: 10.0,
+      limitOrders: 1000,
+      limitProducts: 1000,
+      priorityLevel: 2
+    },
+    {
+      id: 'enterprise',
+      name: 'Plano Enterprise',
+      monthlyPrice: 199.90,
+      cycleDays: 30,
+      commissionPercent: 8.0,
+      limitOrders: 5000,
+      limitProducts: 5000,
+      priorityLevel: 3
+    }
+  ];
+
+  for (const p of plans) {
+    await prisma.plan.upsert({
+      where: { id: p.id },
+      update: {
+        name: p.name,
+        monthlyPrice: p.monthlyPrice,
+        cycleDays: p.cycleDays,
+        commissionPercent: p.commissionPercent,
+        limitOrders: p.limitOrders,
+        limitProducts: p.limitProducts,
+        priorityLevel: p.priorityLevel
+      },
+      create: p
+    });
+  }
+  
+  console.log('Plans seeded successfully');
 }
 
 main()

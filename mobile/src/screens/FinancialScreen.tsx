@@ -137,7 +137,7 @@ const FinancialScreen = () => {
   const [withdrawPixKey, setWithdrawPixKey] = useState('');
   
   // Plans State
-  const [plans, setPlans] = useState<Array<{ id: string; name: string; monthlyPrice: number; cycleDays: number }>>([]);
+  const [plans, setPlans] = useState<Array<{ id: string; name: string; monthlyPrice: number; cycleDays: number; commissionPercent: number; limitOrders: number; limitProducts: number; priorityLevel: number }>>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [loadingPlans, setLoadingPlans] = useState(false);
 
@@ -195,7 +195,16 @@ const FinancialScreen = () => {
       setLoadingPlans(true);
       try {
           const res = await api.get('/plans');
-          const loadedPlans = res.data || [];
+          const loadedPlans = (res.data || []).map((p: any) => ({
+              id: String(p.id),
+              name: String(p.name ?? ''),
+              monthlyPrice: Number(p.monthlyPrice ?? 0),
+              cycleDays: Number(p.cycleDays ?? 30),
+              commissionPercent: Number(p.commissionPercent ?? 10),
+              limitOrders: Number(p.limitOrders ?? 1000),
+              limitProducts: Number(p.limitProducts ?? 100),
+              priorityLevel: Number(p.priorityLevel ?? 1)
+          }));
           setPlans(loadedPlans);
           
           // Pre-select current plan if exists
@@ -210,19 +219,7 @@ const FinancialScreen = () => {
               setSelectedPlanId(loadedPlans[0]?.id || null);
           }
       } catch (e) {
-          const mockPlans = [
-              { id: 'basic', name: 'Plano Básico', monthlyPrice: 49.9, cycleDays: 30 },
-              { id: 'pro', name: 'Plano Profissional', monthlyPrice: 99.9, cycleDays: 30 },
-              { id: 'enterprise', name: 'Plano Enterprise', monthlyPrice: 199.9, cycleDays: 30 },
-          ];
-          setPlans(mockPlans);
-          
-          // Fallback selection logic
-          if (supplier?.plan?.id && mockPlans.some(p => p.id === supplier.plan?.id)) {
-              setSelectedPlanId(supplier.plan.id);
-          } else {
-              setSelectedPlanId('pro');
-          }
+          Alert.alert('Erro', 'Não foi possível carregar os planos. Tente novamente.');
       } finally {
           setLoadingPlans(false);
           setPlanModalVisible(true);
@@ -563,7 +560,7 @@ const FinancialScreen = () => {
             </Text>
             <View style={styles.walletFooter}>
                 <Text style={styles.walletSubtext}>
-                    {supplier?.plan?.name || 'Plano Básico'}
+                    {supplier?.plan?.name || 'Plano Básico'} • {subscription ? `Comissão ${subscription.plan.commissionPercent}%` : ''}
                 </Text>
                 <View style={[styles.statusPill, { backgroundColor: supplier?.financialStatus === 'ACTIVE' ? 'rgba(40, 167, 69, 0.3)' : 'rgba(220, 53, 69, 0.3)' }]}>
                     <Text style={styles.statusPillText}>
@@ -890,7 +887,9 @@ const FinancialScreen = () => {
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={styles.planName}>{p.name}</Text>
-                        <Text style={styles.planCycle}>Ciclo: {p.cycleDays} dias</Text>
+                        <Text style={styles.planCycle}>Ciclo: {p.cycleDays} dias • Comissão: {p.commissionPercent}%</Text>
+                        <Text style={styles.planCycle}>Limite Pedidos: {p.limitOrders} • Limite Produtos: {p.limitProducts}</Text>
+                        <Text style={styles.planCycle}>Prioridade: {p.priorityLevel}</Text>
                       </View>
                       <Text style={styles.planPrice}>R$ {p.monthlyPrice.toFixed(2)}</Text>
                       <Ionicons 
