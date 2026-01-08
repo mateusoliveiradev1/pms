@@ -145,7 +145,9 @@ const DashboardScreen = () => {
     // Trigger loadData via dependency change or direct call logic
     // loadData handles the refreshing state logic internally if needed
     // but here we just need to ensure it runs
+    loadData();
   };
+
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -201,6 +203,13 @@ const DashboardScreen = () => {
             icon="cash-outline" 
             color={colors.success} 
             onPress={() => navigation.navigate('Relatórios' as never)}
+          />
+          <StatCard 
+            title="Financeiro" 
+            value="Carteira"
+            icon="wallet-outline" 
+            color={colors.info} 
+            onPress={() => navigation.navigate('Financial' as never)}
           />
         </View>
 

@@ -12,6 +12,8 @@ import dashboardRoutes from './routes/dashboardRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import mercadoLivreRoutes from './routes/mercadoLivreRoutes';
 import reportsRoutes from './routes/reportsRoutes';
+import plansRoutes from './routes/plansRoutes';
+import financialRoutes from './routes/financialRoutes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -36,6 +38,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/mercadolivre', mercadoLivreRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/plans', plansRoutes);
+app.use('/api/financial', financialRoutes);
 
 app.get('/', (req, res) => {
   res.send('Dropshipping PMS API Running');

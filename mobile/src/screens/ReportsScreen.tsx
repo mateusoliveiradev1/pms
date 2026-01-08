@@ -199,9 +199,10 @@ const ReportsScreen: React.FC = () => {
               <Text style={styles.chartTitle}>Evolução de Vendas</Text>
               <LineChart
                   data={lineChartData}
-                  width={screenWidth - 48}
+                  width={screenWidth - 64} // Reduced width to prevent overflow
                   height={220}
                   yAxisLabel="R$ "
+                  yAxisInterval={1}
                   chartConfig={{
                       backgroundColor: "#ffffff",
                       backgroundGradientFrom: "#ffffff",
@@ -210,10 +211,14 @@ const ReportsScreen: React.FC = () => {
                       color: (opacity: number = 1) => colors.primary,
                       labelColor: (opacity: number = 1) => `rgba(0, 0, 0, ${opacity})`,
                       style: { borderRadius: 16 },
-                      propsForDots: { r: "4", strokeWidth: "2", stroke: colors.primary }
+                      propsForDots: { r: "4", strokeWidth: "2", stroke: colors.primary },
+                      propsForBackgroundLines: { strokeDasharray: "" } // Solid lines
                   }}
                   bezier
-                  style={{ marginVertical: 8, borderRadius: 16 }}
+                  style={{ marginVertical: 8, borderRadius: 16 }} // Removed extra paddingRight that might push it out
+                  withInnerLines={true}
+                  withOuterLines={false}
+                  withVerticalLines={false}
               />
           </View>
         )}
@@ -223,7 +228,7 @@ const ReportsScreen: React.FC = () => {
               <Text style={styles.chartTitle}>Vendas por Dia da Semana</Text>
               <BarChart
                   data={weekdayChartData}
-                  width={screenWidth - 48}
+                  width={screenWidth - 64} // Reduced width
                   height={220}
                   yAxisLabel="R$ "
                   yAxisSuffix=""
@@ -235,10 +240,13 @@ const ReportsScreen: React.FC = () => {
                       color: (opacity: number = 1) => colors.secondary,
                       labelColor: (opacity: number = 1) => `rgba(0, 0, 0, ${opacity})`,
                       barPercentage: 0.7,
+                      propsForBackgroundLines: { strokeDasharray: "" }
                   }}
                   style={{ marginVertical: 8, borderRadius: 16 }}
                   showValuesOnTopOfBars
                   fromZero
+                  withInnerLines={true}
+                  withVerticalLines={false}
               />
           </View>
         )}

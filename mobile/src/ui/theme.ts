@@ -9,6 +9,7 @@ export const colors = {
   background: '#f5f5f5',
   surface: '#FFFFFF',
   text: '#333333',
+  textSecondary: '#666666',
   muted: '#666666',
   border: '#e0e0e0',
 };

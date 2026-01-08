@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
 import { createNotification } from './notificationController';
+import { FinancialService } from '../services/financialService';
 
 export const getOrders = async (req: Request, res: Response) => {
   try {
@@ -73,17 +74,20 @@ export const exportOrdersCsv = async (req: Request, res: Response) => {
 };
 
 export const createOrder = async (req: Request, res: Response) => {
-  const { customerName, customerAddress, items, totalAmount, mercadoLivreId } = req.body;
+  const { customerName, customerAddress, items, totalAmount, mercadoLivreId, marketplaceFee = 0 } = req.body;
 
   // items should be an array of { productId, quantity, price }
 
   try {
     const order = await prisma.$transaction(async (tx) => {
+        let orderSupplierId: string | null = null;
+        let orderCommissionRate = 0;
+
         // 1. Check stock and update
         for (const item of items) {
             const product = await tx.product.findUnique({ 
                 where: { id: item.productId },
-                include: { suppliers: true }
+                include: { suppliers: { include: { supplier: true } } }
             });
             if (!product) throw new Error(`Product ${item.productId} not found`);
             
@@ -95,8 +99,17 @@ export const createOrder = async (req: Request, res: Response) => {
             // Deduct stock from Supplier (Virtual Stock)
             if (product.suppliers && product.suppliers.length > 0) {
                 // For MVP, we deduct from the first supplier found.
-                // In a real scenario, we'd pick based on logic (cheapest, fastest, etc.)
                 const supplierRel = product.suppliers[0];
+                
+                // Capture Supplier Info for the Order (from the first item that has a supplier)
+                if (!orderSupplierId) {
+                    if (supplierRel.supplier.status !== 'ACTIVE' || supplierRel.supplier.financialStatus === 'SUSPENDED') {
+                        throw new Error(`Supplier ${supplierRel.supplier.name} is not active/suspended. Cannot process order.`);
+                    }
+                    orderSupplierId = supplierRel.supplierId;
+                    orderCommissionRate = supplierRel.supplier.commissionRate || 10; // Default 10%
+                }
+
                 await tx.productSupplier.update({
                     where: { id: supplierRel.id },
                     data: { virtualStock: { decrement: item.quantity } }
@@ -120,6 +133,28 @@ export const createOrder = async (req: Request, res: Response) => {
             });
         }
 
+        // Calculate Financials
+        let financialData = {
+            marketplaceFee: 0,
+            platformCommission: 0,
+            supplierPayout: 0,
+            financialStatus: 'PENDING'
+        };
+
+        if (orderSupplierId) {
+            const financials = FinancialService.calculateOrderFinancials(
+                totalAmount,
+                orderCommissionRate,
+                marketplaceFee
+            );
+            financialData = {
+                marketplaceFee: financials.marketplaceFee,
+                platformCommission: financials.platformCommission,
+                supplierPayout: financials.supplierPayout,
+                financialStatus: 'PENDING'
+            };
+        }
+
         // 2. Create Order
         return await tx.order.create({
             data: {
@@ -127,6 +162,8 @@ export const createOrder = async (req: Request, res: Response) => {
                 customerAddress,
                 totalAmount,
                 mercadoLivreId,
+                supplierId: orderSupplierId,
+                ...financialData,
                 items: {
                     create: items.map((item: any) => ({
                         productId: item.productId,
@@ -234,6 +271,19 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
             where: { id },
             data: { status, trackingCode }
         });
+
+        // Trigger Payout if Delivered
+        if (status === 'DELIVERED') {
+            try {
+                await FinancialService.processOrderPayout(id);
+                console.log(`Payout processed for order ${id}`);
+            } catch (payoutError: any) {
+                console.error(`Failed to process payout for order ${id}:`, payoutError.message);
+                // Optionally: We could notify admin or retry later. 
+                // For now, we just log it. The financialStatus will remain PENDING.
+            }
+        }
+
         res.json(order);
     } catch (error) {
         res.status(500).json({ message: 'Error updating order', error });
