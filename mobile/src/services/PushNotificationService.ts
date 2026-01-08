@@ -50,7 +50,6 @@ export async function registerForPushNotificationsAsync() {
   try {
     // Check if running in Expo Go to avoid "functionality removed" error
     if (Constants.appOwnership === 'expo') {
-        console.log('Skipping Push Notification registration in Expo Go.');
         return null;
     }
 

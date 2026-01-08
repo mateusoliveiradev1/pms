@@ -35,6 +35,8 @@ interface SupplierData {
   id: string;
   name: string;
   walletBalance: number;
+  pendingBalance?: number;
+  blockedBalance?: number;
   financialStatus: string;
   nextBillingDate: string | null;
   planId?: string;
@@ -103,10 +105,10 @@ const FinancialScreen = () => {
     }
   };
 
-  const handleSearchCep = async () => {
-    const cep = billingCep.replace(/\D/g, '');
+  const handleSearchCep = async (cepToSearch?: string) => {
+    const cep = cepToSearch || billingCep.replace(/\D/g, '');
     if (cep.length !== 8) {
-      Alert.alert('CEP Inválido', 'O CEP deve conter 8 dígitos.');
+      if (!cepToSearch) Alert.alert('CEP Inválido', 'O CEP deve conter 8 dígitos.');
       return;
     }
     setLoadingCep(true);
@@ -141,11 +143,8 @@ const FinancialScreen = () => {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [loadingPlans, setLoadingPlans] = useState(false);
 
-  // Cards State (Mock)
-  const [cards, setCards] = useState([
-    { id: '1', brand: 'mastercard', last4: '4242', expiry: '12/28', default: true },
-    { id: '2', brand: 'visa', last4: '1234', expiry: '08/26', default: false }
-  ]);
+  // Cards State
+  const [cards, setCards] = useState<any[]>([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -160,35 +159,17 @@ const FinancialScreen = () => {
         setLedger(financialRes.data.ledger);
         setSubscription(financialRes.data.subscription || null);
       } else {
-        throw new Error('No supplier found');
+        console.log('Nenhum fornecedor encontrado.');
+        Alert.alert('Aviso', 'Nenhum fornecedor vinculado a este usuário.');
       }
     } catch (error) {
       console.log('Error loading financial data', error);
-      // Fallback Mock Data for UI Testing
-      if (!supplier) {
-          setSupplier({
-              id: 'mock-supplier-id',
-              name: 'Fornecedor Demo',
-              walletBalance: 1250.50,
-              financialStatus: 'OVERDUE',
-              nextBillingDate: new Date().toISOString(),
-              plan: {
-                  id: 'pro',
-                  name: 'Plano Profissional',
-                  monthlyPrice: 99.90
-              }
-          });
-          setLedger([
-              { id: 'mock-1', type: 'SALE_COMMISSION', amount: 45.00, description: 'Comissão Venda #1001', status: 'COMPLETED', createdAt: new Date(Date.now() - 3600000).toISOString() },
-              { id: 'mock-2', type: 'PAYOUT', amount: 500.00, description: 'Saque Automático', status: 'COMPLETED', createdAt: new Date(Date.now() - 86400000).toISOString() },
-              { id: 'mock-3', type: 'SUBSCRIPTION_PAYMENT', amount: 99.90, description: 'Mensalidade Anterior', status: 'COMPLETED', createdAt: new Date(Date.now() - 2592000000).toISOString() }
-          ]);
-      }
+      Alert.alert('Erro', 'Não foi possível carregar os dados financeiros.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [refreshing, supplier]);
+  }, [refreshing]);
 
   const openPlanModal = async () => {
       setSettingsModalVisible(false); // Close settings modal to avoid overlap
@@ -358,45 +339,22 @@ const FinancialScreen = () => {
       try {
         setPaying(true);
         
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
         // Try API first
-        try {
-          await api.post('/financial/subscription/pay', {
-              supplierId: supplier.id,
-              amount: supplier.plan?.monthlyPrice,
-              method // Send method to backend
-          });
-        } catch (e) {
-           console.log('API payment failed, simulating success for demo', e);
-           
-           // Manually update local state
-           const newNextBillingDate = new Date();
-           newNextBillingDate.setDate(newNextBillingDate.getDate() + 30);
+        const res = await api.post('/financial/subscription/pay', {
+            supplierId: supplier.id,
+            amount: supplier.plan?.monthlyPrice,
+            method // Send method to backend
+        });
 
-           setSupplier(prev => prev ? ({
-               ...prev,
-               financialStatus: 'ACTIVE',
-               nextBillingDate: newNextBillingDate.toISOString(),
-               walletBalance: method === 'BALANCE' ? prev.walletBalance - (prev.plan?.monthlyPrice || 0) : prev.walletBalance
-           }) : null);
-
-           // Add fake ledger entry
-           const newEntry: LedgerEntry = {
-               id: 'temp-' + Date.now(),
-               type: 'SUBSCRIPTION_PAYMENT',
-               amount: supplier.plan?.monthlyPrice || 0,
-               description: method === 'BALANCE' ? 'Pagamento via Saldo' : 'Pagamento via Cartão',
-               status: 'COMPLETED',
-               createdAt: new Date().toISOString()
-           };
-           
-           setLedger(prev => [newEntry, ...prev]);
+        // Update state from API response if available
+        if (res.data.supplier) {
+            setSupplier(res.data.supplier);
+            // Refresh full data to ensure sync
+            loadData(); 
+            Alert.alert('Sucesso', 'Pagamento realizado com sucesso!');
         }
-
-        Alert.alert('Sucesso', 'Pagamento realizado com sucesso!');
       } catch (error) {
+        console.log('Payment failed', error);
         Alert.alert('Erro', 'Falha ao processar pagamento.');
       } finally {
         setPaying(false);
@@ -439,47 +397,38 @@ const FinancialScreen = () => {
                               amount,
                               pixKey: withdrawPixKey
                           });
+                          
+                          // Update local state on success
+                          setSupplier(prev => prev ? ({
+                              ...prev,
+                              walletBalance: prev.walletBalance - amount,
+                              blockedBalance: (prev.blockedBalance || 0) + amount
+                          }) : null);
+
+                          const newEntry: LedgerEntry = {
+                              id: 'temp-withdraw-' + Date.now(),
+                              type: 'PAYOUT',
+                              amount: amount,
+                              description: `Saque solicitado (PIX: ${withdrawPixKey})`,
+                              status: 'PENDING', 
+                              createdAt: new Date().toISOString()
+                          };
+
+                          setLedger(prev => [newEntry, ...prev]);
+                          Alert.alert('Solicitação Recebida', 'Seu saque foi processado e será enviado em breve.');
+
                       } catch (e) {
-                          // Fallback simulation
-                          await new Promise(resolve => setTimeout(resolve, 2000));
+                          console.log(e);
+                          Alert.alert('Erro', 'Não foi possível solicitar o saque. Tente novamente.');
+                      } finally {
+                          setLoading(false);
+                          setWithdrawAmount('');
+                          setWithdrawPixKey('');
                       }
-
-                      setSupplier(prev => prev ? ({
-                          ...prev,
-                          walletBalance: prev.walletBalance - amount
-                      }) : null);
-
-                      const newEntry: LedgerEntry = {
-                          id: 'temp-withdraw-' + Date.now(),
-                          type: 'PAYOUT',
-                          amount: amount,
-                          description: `Saque PIX (${withdrawPixKey})`,
-                          status: 'COMPLETED', // In real app, might be PENDING
-                          createdAt: new Date().toISOString()
-                      };
-
-                      setLedger(prev => [newEntry, ...prev]);
-                      setLoading(false);
-                      setWithdrawAmount('');
-                      setWithdrawPixKey('');
-                      Alert.alert('Solicitação Recebida', 'Seu saque foi processado e será enviado em breve.');
                   }
               }
           ]
       );
-  };
-
-  // Helper to reset status for testing
-  const resetStatusForTesting = () => {
-      if (supplier) {
-          setSupplier({
-              ...supplier,
-              financialStatus: 'OVERDUE',
-              nextBillingDate: new Date(new Date().setDate(new Date().getDate() - 5)).toISOString()
-          });
-          setSettingsModalVisible(false);
-          Alert.alert('Status Resetado', 'O status da conta foi alterado para Pendente/Vencido para testes.');
-      }
   };
 
   const getStatusColor = (status: string) => {
@@ -493,7 +442,8 @@ const FinancialScreen = () => {
 
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case 'PAYOUT': return 'Repasse de Venda';
+      case 'SALE_REVENUE': return 'Venda Aprovada';
+      case 'PAYOUT': return 'Saque Realizado';
       case 'SUBSCRIPTION_PAYMENT': return 'Pagamento Mensalidade';
       case 'SALE_COMMISSION': return 'Comissão da Plataforma';
       case 'ADJUSTMENT': return 'Ajuste Manual';
@@ -503,7 +453,8 @@ const FinancialScreen = () => {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'PAYOUT': return 'arrow-down-circle';
+      case 'PAYOUT': return 'arrow-up-circle-outline';
+      case 'SALE_REVENUE': return 'cash-outline';
       case 'SUBSCRIPTION_PAYMENT': return 'card-outline';
       case 'SALE_COMMISSION': return 'pricetag-outline';
       default: return 'swap-horizontal-outline';
@@ -511,7 +462,7 @@ const FinancialScreen = () => {
   };
 
   const isCredit = (type: string) => {
-      return type === 'PAYOUT' || type === 'ADJUSTMENT';
+      return type === 'SALE_REVENUE';
   };
 
   if (loading && !refreshing) {
@@ -558,6 +509,23 @@ const FinancialScreen = () => {
             <Text style={styles.walletValue}>
                 R$ {supplier?.walletBalance.toFixed(2) || '0.00'}
             </Text>
+            
+            {(supplier?.blockedBalance || 0) > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="lock-closed-outline" size={14} color="rgba(255,255,255,0.7)" />
+                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginLeft: 4 }}>
+                        Bloqueado/Em Saque: R$ {supplier?.blockedBalance?.toFixed(2)}
+                    </Text>
+                </View>
+            )}
+            {(supplier?.pendingBalance || 0) > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                    <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.7)" />
+                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginLeft: 4 }}>
+                        A Liberar: R$ {supplier?.pendingBalance?.toFixed(2)}
+                    </Text>
+                </View>
+            )}
             <View style={styles.walletFooter}>
                 <Text style={styles.walletSubtext}>
                     {supplier?.plan?.name || 'Plano Básico'} • {subscription ? `Comissão ${subscription.plan.commissionPercent}%` : ''}
@@ -599,7 +567,9 @@ const FinancialScreen = () => {
                 <View>
                     <Text style={styles.subscriptionLabel}>Próximo Vencimento</Text>
                     <Text style={styles.subscriptionDate}>
-                        {supplier?.nextBillingDate ? new Date(supplier.nextBillingDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}
+                        {(supplier?.nextBillingDate || subscription?.endDate) 
+                            ? new Date(supplier?.nextBillingDate || subscription?.endDate!).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) 
+                            : 'N/A'}
                     </Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
@@ -608,7 +578,10 @@ const FinancialScreen = () => {
                 </View>
             </View>
 
-            {supplier?.financialStatus !== 'ACTIVE' || (supplier?.nextBillingDate && new Date(supplier.nextBillingDate) < new Date()) ? (
+            {(supplier?.financialStatus !== 'ACTIVE' || 
+              (supplier?.nextBillingDate && new Date(supplier.nextBillingDate) < new Date()) ||
+              (subscription?.endDate && new Date(subscription.endDate) < new Date())
+            ) ? (
                 <TouchableOpacity 
                     style={styles.payButton}
                     onPress={handlePaySubscription}
@@ -624,9 +597,11 @@ const FinancialScreen = () => {
                     )}
                 </TouchableOpacity>
             ) : (
-                <View style={styles.activeBadge}>
-                    <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                    <Text style={styles.activeText}>Mensalidade em dia</Text>
+                <View style={{ width: '100%' }}>
+                    <View style={styles.activeBadge}>
+                        <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                        <Text style={styles.activeText}>Mensalidade em dia</Text>
+                    </View>
                 </View>
             )}
         </View>
@@ -665,7 +640,7 @@ const FinancialScreen = () => {
                         <Text style={[styles.transactionAmount, { 
                             color: isCredit(item.type) ? colors.success : colors.error 
                         }]}>
-                            {isCredit(item.type) ? '+' : '-'} R$ {item.amount.toFixed(2)}
+                            {isCredit(item.type) ? '+' : '-'} R$ {Math.abs(item.amount).toFixed(2)}
                         </Text>
                     </View>
                 ))}
@@ -713,7 +688,7 @@ const FinancialScreen = () => {
                             <Text style={[styles.transactionAmount, { 
                                 color: isCredit(item.type) ? colors.success : colors.error 
                             }]}>
-                                {isCredit(item.type) ? '+' : '-'} R$ {item.amount.toFixed(2)}
+                                {isCredit(item.type) ? '+' : '-'} R$ {Math.abs(item.amount).toFixed(2)}
                             </Text>
                           </View>
                       ))}
@@ -845,14 +820,6 @@ const FinancialScreen = () => {
                   >
                       <Text style={styles.settingLabel}>Dados de Faturamento</Text>
                       <Ionicons name="chevron-forward" size={20} color={colors.muted} />
-                  </TouchableOpacity>
-
-                  <View style={styles.divider} />
-
-                  <Text style={styles.devTitle}>Área de Testes (Dev)</Text>
-                  <TouchableOpacity style={styles.resetButton} onPress={resetStatusForTesting}>
-                      <Ionicons name="refresh-circle" size={24} color="#FFF" />
-                      <Text style={styles.resetText}>Resetar Status para Pendente</Text>
                   </TouchableOpacity>
               </View>
           </View>
@@ -996,7 +963,13 @@ const FinancialScreen = () => {
                               style={[styles.input, { flex: 1, marginBottom: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]}
                               placeholder="00000-000"
                               value={billingCep}
-                              onChangeText={(t) => setBillingCep(t.replace(/\D/g, ''))}
+                              onChangeText={(t) => {
+                                  const clean = t.replace(/\D/g, '');
+                                  setBillingCep(clean);
+                                  if (clean.length === 8) {
+                                      handleSearchCep(clean);
+                                  }
+                              }}
                               keyboardType="numeric"
                               maxLength={8}
                           />
@@ -1009,7 +982,7 @@ const FinancialScreen = () => {
                                 borderTopRightRadius: 8,
                                 borderBottomRightRadius: 8
                             }}
-                            onPress={handleSearchCep}
+                            onPress={() => handleSearchCep()}
                             disabled={loadingCep}
                           >
                               {loadingCep ? (

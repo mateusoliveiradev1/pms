@@ -76,7 +76,7 @@ export const getSupplierFinancials = async (req: Request, res: Response) => {
 export const withdrawFunds = async (req: Request, res: Response) => {
   const { supplierId, amount, pixKey } = req.body;
   try {
-    const result = await FinancialService.processWithdraw(
+    const result = await FinancialService.requestWithdrawal(
       String(supplierId),
       Number(amount),
       String(pixKey)
@@ -116,4 +116,54 @@ export const updateBillingInfo = async (req: Request, res: Response) => {
   } catch (error: any) {
     res.status(500).json({ message: 'Error updating billing info', error: error.message });
   }
+};
+
+// ==========================================
+// ADMIN ACTIONS
+// ==========================================
+
+export const getAdminDashboard = async (req: Request, res: Response) => {
+    try {
+        const dashboard = await FinancialService.getAdminDashboard();
+        res.json(dashboard);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error fetching admin dashboard', error: error.message });
+    }
+};
+
+export const listWithdrawalRequests = async (req: Request, res: Response) => {
+    const { status } = req.query;
+    try {
+        const requests = await FinancialService.getWithdrawalRequests(status ? String(status) : 'PENDING');
+        res.json(requests);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error fetching withdrawal requests', error: error.message });
+    }
+};
+
+export const approveWithdraw = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    // @ts-ignore
+    const adminId = req.user?.id || 'admin'; // Fallback if no user attached (should be protected by auth middleware)
+    
+    try {
+        const request = await FinancialService.approveWithdrawal(id, adminId);
+        res.json({ message: 'Withdrawal approved', request });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error approving withdrawal', error: error.message });
+    }
+};
+
+export const rejectWithdraw = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+    // @ts-ignore
+    const adminId = req.user?.id || 'admin';
+
+    try {
+        const request = await FinancialService.rejectWithdrawal(id, reason, adminId);
+        res.json({ message: 'Withdrawal rejected', request });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error rejecting withdrawal', error: error.message });
+    }
 };

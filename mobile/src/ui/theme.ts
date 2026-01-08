@@ -26,9 +26,17 @@ export const radius = {
   sm: 8,
   md: 12,
   lg: 16,
+  xl: 24,
 };
 
 export const shadow = {
+  sm: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.18,
+    shadowRadius: 1.0,
+    elevation: 1,
+  },
   small: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -42,6 +50,13 @@ export const shadow = {
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+  },
+  lg: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.30,
+    shadowRadius: 4.65,
+    elevation: 8,
   },
   card: {
     shadowColor: '#000',

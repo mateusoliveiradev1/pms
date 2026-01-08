@@ -246,7 +246,6 @@ const ReportsScreen: React.FC = () => {
                   showValuesOnTopOfBars
                   fromZero
                   withInnerLines={true}
-                  withVerticalLines={false}
               />
           </View>
         )}

@@ -1,4 +1,13 @@
-import { PrismaClient } from '@prisma/client';
+import { 
+  PrismaClient, 
+  Prisma, 
+  Supplier, 
+  SupplierSubscription, 
+  Plan, 
+  FinancialLedger, 
+  WithdrawalRequest, 
+  Order 
+} from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -8,9 +17,32 @@ interface FinancialCalculation {
   supplierPayout: number;
 }
 
+interface SupplierWallet {
+  balances: {
+    available: number;
+    pending: number;
+    blocked: number;
+  };
+  status: {
+    verified: boolean;
+    active: boolean;
+  };
+  history: FinancialLedger[];
+  withdrawals: WithdrawalRequest[];
+}
+
+interface AdminDashboardStats {
+  revenue: {
+    commissions: number;
+    subscriptions: number;
+    total: number;
+  };
+  pendingWithdrawals: number;
+}
+
 export const FinancialService = {
   // Returns active subscription for a supplier
-  getActiveSubscription: async (supplierId: string) => {
+  getActiveSubscription: async (supplierId: string): Promise<(SupplierSubscription & { plan: Plan }) | null> => {
     const now = new Date();
     return prisma.supplierSubscription.findFirst({
       where: { supplierId, status: 'ATIVA', endDate: { gt: now } },
@@ -41,7 +73,7 @@ export const FinancialService = {
   // CARTEIRA DO FORNECEDOR (SUPPLIER WALLET)
   // ==========================================
 
-  getSupplierWallet: async (supplierId: string) => {
+  getSupplierWallet: async (supplierId: string): Promise<SupplierWallet> => {
     const supplier = await prisma.supplier.findUnique({
       where: { id: supplierId },
       select: {
@@ -84,8 +116,8 @@ export const FinancialService = {
     };
   },
 
-  requestWithdrawal: async (supplierId: string, amount: number) => {
-    return await prisma.$transaction(async (tx) => {
+  requestWithdrawal: async (supplierId: string, amount: number, pixKey?: string): Promise<WithdrawalRequest> => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const supplier = await tx.supplier.findUnique({ where: { id: supplierId } });
       if (!supplier) throw new Error('Supplier not found');
 
@@ -124,6 +156,7 @@ export const FinancialService = {
         data: {
           supplierId,
           amount,
+          pixKey,
           status: 'PENDING'
         }
       });
@@ -136,7 +169,7 @@ export const FinancialService = {
   // FINANCEIRO DA PLATAFORMA (ADMIN)
   // ==========================================
 
-  getAdminDashboard: async () => {
+  getAdminDashboard: async (): Promise<AdminDashboardStats> => {
     // Totais acumulados
     const totalCommission = await prisma.financialLedger.aggregate({
       where: { type: 'SALE_COMMISSION' },
@@ -162,7 +195,7 @@ export const FinancialService = {
     };
   },
 
-  getWithdrawalRequests: async (status: string = 'PENDING') => {
+  getWithdrawalRequests: async (status: string = 'PENDING'): Promise<(WithdrawalRequest & { supplier: { name: string; billingDoc: string | null } })[]> => {
     return await prisma.withdrawalRequest.findMany({
       where: { status },
       include: { supplier: { select: { name: true, billingDoc: true } } },
@@ -170,8 +203,8 @@ export const FinancialService = {
     });
   },
 
-  approveWithdrawal: async (requestId: string, adminId: string) => {
-    return await prisma.$transaction(async (tx) => {
+  approveWithdrawal: async (requestId: string, adminId: string): Promise<WithdrawalRequest> => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const req = await tx.withdrawalRequest.findUnique({ 
         where: { id: requestId },
         include: { supplier: true }
@@ -211,8 +244,8 @@ export const FinancialService = {
     });
   },
 
-  rejectWithdrawal: async (requestId: string, reason: string, adminId: string) => {
-    return await prisma.$transaction(async (tx) => {
+  rejectWithdrawal: async (requestId: string, reason: string, adminId: string): Promise<WithdrawalRequest> => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const req = await tx.withdrawalRequest.findUnique({ where: { id: requestId } });
       if (!req || req.status !== 'PENDING') throw new Error('Request not pending');
 
@@ -242,8 +275,8 @@ export const FinancialService = {
   // AUTOMATION & INTERNAL
   // ==========================================
 
-  processOrderPayout: async (orderId: string) => {
-    return await prisma.$transaction(async (tx) => {
+  processOrderPayout: async (orderId: string): Promise<Order> => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const order = await tx.order.findUnique({
         where: { id: orderId },
         include: { supplier: true }
@@ -296,8 +329,8 @@ export const FinancialService = {
     });
   },
   
-  processSubscriptionPayment: async (supplierId: string, amount: number, method: 'BALANCE' | 'CARD' = 'CARD') => {
-    return await prisma.$transaction(async (tx) => {
+  processSubscriptionPayment: async (supplierId: string, amount: number, method: 'BALANCE' | 'CARD' = 'CARD'): Promise<Supplier> => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const supplier = await tx.supplier.findUnique({
         where: { id: supplierId },
         include: { plan: true }
@@ -349,10 +382,14 @@ export const FinancialService = {
           });
       }
       
+      if (!supplier.planId) {
+          throw new Error('Supplier has no plan assigned to renew subscription');
+      }
+
       await tx.supplierSubscription.create({
           data: {
               supplierId: supplier.id,
-              planId: supplier.planId!,
+              planId: supplier.planId,
               startDate: now,
               endDate: nextDate,
               status: 'ATIVA'
@@ -363,8 +400,8 @@ export const FinancialService = {
     });
   },
 
-  assignPlanToSupplier: async (supplierId: string, planId: string) => {
-    return await prisma.$transaction(async (tx) => {
+  assignPlanToSupplier: async (supplierId: string, planId: string): Promise<Supplier> => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const plan = await tx.plan.findUnique({ where: { id: planId } });
       if (!plan) throw new Error('Plan not found');
 
@@ -379,7 +416,7 @@ export const FinancialService = {
     });
   },
 
-  updateOverdueSuppliers: async () => {
+  updateOverdueSuppliers: async (): Promise<string[]> => {
     const now = new Date();
     const overdueSubs = await prisma.supplierSubscription.findMany({
       where: {
@@ -389,7 +426,7 @@ export const FinancialService = {
       include: { supplier: true }
     });
 
-    const results = [];
+    const results: string[] = [];
     for (const sub of overdueSubs) {
       await prisma.supplierSubscription.update({
         where: { id: sub.id },

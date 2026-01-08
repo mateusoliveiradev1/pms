@@ -117,6 +117,7 @@ model WithdrawalRequest {
   supplierId  String
   supplier    Supplier @relation(fields: [supplierId], references: [id])
   amount      Float
+  pixKey      String?  // Chave PIX ou dados bancários para pagamento
   status      String   @default("PENDING") // PENDING, APPROVED, REJECTED, PAID
   notes       String?
   requestedAt DateTime @default(now())
