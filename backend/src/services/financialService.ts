@@ -480,7 +480,7 @@ export const FinancialService = {
     });
   },
   
-  processSubscriptionPayment: async (supplierId: string, amount: number, method: 'BALANCE' | 'CARD' = 'CARD'): Promise<Supplier> => {
+  processSubscriptionPayment: async (supplierId: string, amount: number, method: 'BALANCE' | 'CARD' = 'CARD', paymentToken?: string): Promise<Supplier> => {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const supplier = await tx.supplier.findUnique({
         where: { id: supplierId },
@@ -496,6 +496,17 @@ export const FinancialService = {
               where: { id: supplierId },
               data: { walletBalance: { decrement: amount } }
           });
+      } else if (method === 'CARD') {
+          // SECURITY CHECK: Verify Token
+          if (!paymentToken) {
+              throw new Error('Payment token required for card transaction.');
+          }
+          // Here we would call Stripe/MercadoPago API to charge the token
+          // await PaymentGateway.charge(paymentToken, amount);
+          
+          if (!paymentToken.startsWith('tok_')) {
+              throw new Error('Invalid payment token.');
+          }
       }
 
       const now = new Date();
@@ -508,7 +519,7 @@ export const FinancialService = {
           type: 'SUBSCRIPTION_PAYMENT',
           amount: amount,
           supplierId: supplier.id,
-          description: method === 'BALANCE' ? 'Pagamento de Mensalidade (Saldo)' : 'Pagamento de Mensalidade (Cartão)',
+          description: method === 'BALANCE' ? 'Pagamento de Mensalidade (Saldo)' : `Pagamento de Mensalidade (Cartão - ${paymentToken?.slice(0, 15)}...)`,
           status: 'COMPLETED'
         }
       });

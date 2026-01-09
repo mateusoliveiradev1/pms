@@ -12,7 +12,7 @@ export const checkOverdue = async (req: Request, res: Response) => {
 };
 
 export const paySubscription = async (req: Request, res: Response) => {
-  const { supplierId, amount, method } = req.body;
+  const { supplierId, amount, method, paymentToken } = req.body;
   try {
     const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
     if (!authUser?.userId) {
@@ -35,7 +35,8 @@ export const paySubscription = async (req: Request, res: Response) => {
     const result = await FinancialService.processSubscriptionPayment(
       String(supplierId),
       Number(amount),
-      method === 'BALANCE' ? 'BALANCE' : 'CARD'
+      method === 'BALANCE' ? 'BALANCE' : 'CARD',
+      paymentToken
     );
     res.json({ message: 'Subscription paid successfully', supplier: result });
   } catch (error: any) {
