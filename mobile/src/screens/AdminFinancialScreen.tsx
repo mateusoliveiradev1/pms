@@ -500,13 +500,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingTop: 50,
-    paddingHorizontal: spacing.medium,
-    paddingBottom: spacing.medium,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
     backgroundColor: '#fff',
     ...shadow.small,
   },
   backButton: {
-    marginRight: spacing.medium,
+    marginRight: spacing.md,
   },
   title: {
     fontSize: 20,
@@ -516,53 +516,53 @@ const styles = StyleSheet.create({
   tabs: {
       flexDirection: 'row',
       backgroundColor: '#fff',
-      paddingVertical: spacing.small,
-      paddingHorizontal: spacing.small,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.sm,
   },
   tab: {
       paddingHorizontal: 16,
       paddingVertical: 8,
       marginRight: 8,
       borderRadius: 20,
-      backgroundColor: colors.lightGray,
+      backgroundColor: colors.border,
   },
   activeTab: {
       backgroundColor: colors.primary,
   },
   tabText: {
       fontWeight: '600',
-      color: colors.textDim,
+      color: colors.textSecondary,
       fontSize: 12,
   },
   activeTabText: {
       color: '#fff',
   },
   scrollContent: {
-    padding: spacing.medium,
+    padding: spacing.md,
   },
   tabContent: {
-      gap: spacing.medium,
+      gap: spacing.md,
   },
   sectionTitle: {
       fontSize: 18,
       fontWeight: 'bold',
       color: colors.text,
-      marginBottom: spacing.small,
+      marginBottom: spacing.sm,
   },
   kpiContainer: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      gap: spacing.small,
+      gap: spacing.sm,
   },
   kpiCard: {
       flex: 1,
-      padding: spacing.medium,
-      borderRadius: radius.medium,
+      padding: spacing.md,
+      borderRadius: radius.md,
       ...shadow.small,
   },
   kpiLabel: {
       fontSize: 12,
-      color: colors.textDim,
+      color: colors.textSecondary,
       marginBottom: 4,
   },
   kpiValue: {
@@ -587,22 +587,22 @@ const styles = StyleSheet.create({
   },
   chartContainer: {
       backgroundColor: '#fff',
-      padding: spacing.medium,
-      borderRadius: radius.medium,
+      padding: spacing.md,
+      borderRadius: radius.md,
       ...shadow.small,
       alignItems: 'center',
   },
   emptyText: {
       textAlign: 'center',
-      color: colors.textDim,
+      color: colors.textSecondary,
       marginVertical: 20,
   },
   // Withdrawals
   withdrawalCard: {
       backgroundColor: '#fff',
-      padding: spacing.medium,
-      borderRadius: radius.medium,
-      marginBottom: spacing.small,
+      padding: spacing.md,
+      borderRadius: radius.md,
+      marginBottom: spacing.sm,
       ...shadow.small,
   },
   withdrawalHeader: {
@@ -622,11 +622,11 @@ const styles = StyleSheet.create({
       color: colors.primary,
   },
   withdrawalInfo: {
-      color: colors.textDim,
+      color: colors.textSecondary,
       fontSize: 14,
   },
   withdrawalDate: {
-      color: colors.textDim,
+      color: colors.textSecondary,
       fontSize: 12,
       marginTop: 4,
   },
@@ -654,13 +654,13 @@ const styles = StyleSheet.create({
   // Suppliers
   supplierCard: {
       backgroundColor: '#fff',
-      padding: spacing.medium,
-      borderRadius: radius.medium,
-      marginBottom: spacing.small,
+      padding: spacing.md,
+      borderRadius: radius.md,
+      marginBottom: spacing.sm,
       ...shadow.small,
   },
   supplierPlan: {
-      color: colors.textDim,
+      color: colors.textSecondary,
       fontSize: 14,
   },
   rowBetween: {
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
   },
   divider: {
       height: 1,
-      backgroundColor: colors.lightGray,
+      backgroundColor: colors.border,
       marginVertical: 10,
   },
   statusBadge: {
@@ -685,7 +685,7 @@ const styles = StyleSheet.create({
   },
   label: {
       fontSize: 12,
-      color: colors.textDim,
+      color: colors.textSecondary,
   },
   value: {
       fontSize: 14,
@@ -695,8 +695,8 @@ const styles = StyleSheet.create({
   // Settings
   formCard: {
       backgroundColor: '#fff',
-      padding: spacing.medium,
-      borderRadius: radius.medium,
+      padding: spacing.md,
+      borderRadius: radius.md,
       ...shadow.small,
   },
   inputLabel: {
@@ -708,7 +708,7 @@ const styles = StyleSheet.create({
   },
   input: {
       borderWidth: 1,
-      borderColor: colors.lightGray,
+      borderColor: colors.border,
       borderRadius: 8,
       padding: 10,
       fontSize: 16,
@@ -728,9 +728,9 @@ const styles = StyleSheet.create({
   // Audit
   logCard: {
       backgroundColor: '#fff',
-      padding: spacing.medium,
-      borderRadius: radius.medium,
-      marginBottom: spacing.small,
+      padding: spacing.md,
+      borderRadius: radius.md,
+      marginBottom: spacing.sm,
       borderLeftWidth: 4,
       borderLeftColor: colors.primary,
       ...shadow.small,
@@ -740,7 +740,7 @@ const styles = StyleSheet.create({
       color: colors.text,
   },
   logDetails: {
-      color: colors.textDim,
+      color: colors.textSecondary,
       fontSize: 12,
       marginVertical: 4,
   },
@@ -751,7 +751,7 @@ const styles = StyleSheet.create({
   },
   logDate: {
       fontSize: 10,
-      color: colors.textDim,
+      color: colors.textSecondary,
   },
   // Modal
   modalOverlay: {
@@ -762,8 +762,8 @@ const styles = StyleSheet.create({
   },
   modalContent: {
       backgroundColor: '#fff',
-      borderRadius: radius.medium,
-      padding: spacing.medium,
+      borderRadius: radius.md,
+      padding: spacing.md,
   },
   modalTitle: {
       fontSize: 18,
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
   },
   modalInput: {
       borderWidth: 1,
-      borderColor: colors.lightGray,
+      borderColor: colors.border,
       borderRadius: 8,
       padding: 10,
       height: 100,
@@ -788,7 +788,7 @@ const styles = StyleSheet.create({
       padding: 10,
   },
   modalCancelText: {
-      color: colors.textDim,
+      color: colors.textSecondary,
   },
   modalConfirm: {
       backgroundColor: colors.error,
