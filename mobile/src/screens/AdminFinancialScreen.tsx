@@ -515,12 +515,21 @@ const AdminFinancialScreen = () => {
       </View>
   );
 
+  const formatActionName = (action: string) => {
+      switch (action) {
+          case 'APPROVE_WITHDRAWAL': return 'Aprovação de Saque';
+          case 'REJECT_WITHDRAWAL': return 'Rejeição de Saque';
+          case 'UPDATE_SETTINGS': return 'Alteração de Configurações';
+          default: return action.replace(/_/g, ' ');
+      }
+  };
+
   const renderAudit = () => (
       <View style={styles.tabContent}>
           <Text style={styles.sectionTitle}>Auditoria & Logs</Text>
           {auditLogs.map(log => (
               <View key={log.id} style={styles.logCard}>
-                  <Text style={styles.logAction}>{log.action}</Text>
+                  <Text style={styles.logAction}>{formatActionName(log.action)}</Text>
                   <Text style={styles.logDetails}>{log.details}</Text>
                   <View style={styles.rowBetween}>
                       <Text style={styles.logUser}>{log.adminName}</Text>
