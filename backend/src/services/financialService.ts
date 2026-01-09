@@ -289,21 +289,67 @@ export const FinancialService = {
   // FINANCEIRO DA PLATAFORMA (ADMIN)
   // ==========================================
 
-  getAdminDashboard: async (): Promise<AdminDashboardStats> => {
-    // Totais acumulados
+  getAdminDashboard: async (): Promise<any> => {
+    // 1. KPI: Total Commissions (Platform Revenue from Sales)
     const totalCommission = await prisma.financialLedger.aggregate({
       where: { type: 'SALE_COMMISSION' },
       _sum: { amount: true }
     });
     
+    // 2. KPI: Total Subscriptions (MRR / Platform Revenue from Plans)
     const totalSubscription = await prisma.financialLedger.aggregate({
       where: { type: 'SUBSCRIPTION_PAYMENT' },
       _sum: { amount: true }
     });
 
-    const pendingWithdrawals = await prisma.withdrawalRequest.count({
+    // 3. KPI: Total Paid Withdrawals
+    const totalPaidWithdrawals = await prisma.withdrawalRequest.aggregate({
+      where: { status: 'PAID' },
+      _sum: { amount: true }
+    });
+
+    // 4. KPI: Total Pending Balance (Held by Suppliers)
+    const totalPendingBalance = await prisma.supplier.aggregate({
+      _sum: {
+        walletBalance: true,
+        pendingBalance: true,
+        blockedBalance: true
+      }
+    });
+
+    // 5. KPI: Pending Withdrawal Requests Count
+    const pendingWithdrawalsCount = await prisma.withdrawalRequest.count({
       where: { status: 'PENDING' }
     });
+
+    // 6. CHART: Revenue Evolution (Last 6 Months) - Simple Grouping
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    
+    const revenueEntries = await prisma.financialLedger.findMany({
+        where: {
+            createdAt: { gte: sixMonthsAgo },
+            type: { in: ['SALE_COMMISSION', 'SUBSCRIPTION_PAYMENT'] }
+        },
+        select: {
+            createdAt: true,
+            amount: true
+        }
+    });
+
+    // Group by Month (YYYY-MM)
+    const revenueByMonth: Record<string, number> = {};
+    revenueEntries.forEach(entry => {
+        const monthKey = entry.createdAt.toISOString().slice(0, 7); // YYYY-MM
+        revenueByMonth[monthKey] = (revenueByMonth[monthKey] || 0) + entry.amount;
+    });
+
+    const chartData = {
+        labels: Object.keys(revenueByMonth).sort(),
+        datasets: [{
+            data: Object.keys(revenueByMonth).sort().map(key => revenueByMonth[key])
+        }]
+    };
 
     return {
       revenue: {
@@ -311,8 +357,75 @@ export const FinancialService = {
         subscriptions: totalSubscription._sum.amount || 0,
         total: (totalCommission._sum.amount || 0) + (totalSubscription._sum.amount || 0)
       },
-      pendingWithdrawals
+      payouts: {
+        totalPaid: totalPaidWithdrawals._sum.amount || 0,
+        pendingCount: pendingWithdrawalsCount
+      },
+      balance: {
+        totalHeld: (totalPendingBalance._sum.walletBalance || 0) + 
+                   (totalPendingBalance._sum.pendingBalance || 0) + 
+                   (totalPendingBalance._sum.blockedBalance || 0)
+      },
+      charts: {
+          revenue: chartData
+      }
     };
+  },
+
+  getAdminSupplierFinancials: async (): Promise<any[]> => {
+      const suppliers = await prisma.supplier.findMany({
+          select: {
+              id: true,
+              name: true,
+              financialStatus: true,
+              walletBalance: true,
+              pendingBalance: true,
+              blockedBalance: true,
+              plan: {
+                  select: { name: true }
+              },
+              _count: {
+                  select: { orders: true }
+              }
+          }
+      });
+
+      // Enrich with total commission generated (This could be heavy, ideally use aggregate per supplier)
+      // For now, let's keep it simple or do a separate aggregate if performance is issue.
+      // Doing a separate aggregate for commissions per supplier is better.
+      const commissions = await prisma.financialLedger.groupBy({
+          by: ['supplierId'],
+          where: { type: 'SALE_COMMISSION' },
+          _sum: { amount: true }
+      });
+      
+      const commissionMap = new Map(commissions.map(c => [c.supplierId, c._sum.amount || 0]));
+
+      return suppliers.map(s => ({
+          ...s,
+          totalCommission: commissionMap.get(s.id) || 0,
+          totalBalance: s.walletBalance + s.pendingBalance + s.blockedBalance
+      }));
+  },
+
+  getAdminAuditLogs: async (): Promise<any[]> => {
+      return await prisma.adminLog.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: 50
+      });
+  },
+
+  logAdminAction: async (adminId: string, adminName: string, action: string, targetId?: string, details?: string, reason?: string) => {
+      await prisma.adminLog.create({
+          data: {
+              adminId,
+              adminName,
+              action,
+              targetId,
+              details,
+              reason
+          }
+      });
   },
 
   getWithdrawalRequests: async (status: string = 'PENDING'): Promise<(WithdrawalRequest & { supplier: { name: string; billingDoc: string | null } })[]> => {

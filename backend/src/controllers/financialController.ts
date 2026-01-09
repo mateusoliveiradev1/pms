@@ -301,18 +301,35 @@ export const updateFinancialSettings = async (req: Request, res: Response) => {
         const adminId = req.user?.userId;
         if (adminId) {
              const adminUser = await prisma.user.findUnique({ where: { id: adminId } });
-             await prisma.adminLog.create({
-                 data: {
-                     adminId,
-                     adminName: adminUser?.name || 'Admin',
-                     action: 'UPDATE_SETTINGS',
-                     details: JSON.stringify(settings)
-                 }
-             });
+             await FinancialService.logAdminAction(
+                 adminId,
+                 adminUser?.name || 'Admin',
+                 'UPDATE_SETTINGS',
+                 'global',
+                 JSON.stringify(settings)
+             );
         }
 
         res.json({ message: 'Settings updated', settings });
     } catch (error: any) {
         res.status(500).json({ message: 'Error updating settings', error: error.message });
+    }
+};
+
+export const getAdminSupplierFinancials = async (req: Request, res: Response) => {
+    try {
+        const data = await FinancialService.getAdminSupplierFinancials();
+        res.json(data);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error fetching supplier financials', error: error.message });
+    }
+};
+
+export const getAdminAuditLogs = async (req: Request, res: Response) => {
+    try {
+        const logs = await FinancialService.getAdminAuditLogs();
+        res.json(logs);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error fetching audit logs', error: error.message });
     }
 };

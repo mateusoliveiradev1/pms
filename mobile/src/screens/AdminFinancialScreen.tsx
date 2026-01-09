@@ -1,11 +1,14 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, Modal, TextInput, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert, Modal, TextInput, ActivityIndicator, Dimensions, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, shadow } from '../ui/theme';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { LineChart } from 'react-native-chart-kit';
+
+const { width } = Dimensions.get('window');
 
 interface AdminDashboardStats {
   revenue: {
@@ -13,7 +16,32 @@ interface AdminDashboardStats {
     subscriptions: number;
     total: number;
   };
-  pendingWithdrawals: number;
+  payouts: {
+      totalPaid: number;
+      pendingCount: number;
+  };
+  balance: {
+      totalHeld: number;
+  };
+  charts: {
+      revenue: {
+          labels: string[];
+          datasets: { data: number[] }[];
+      }
+  }
+}
+
+interface SupplierFinancial {
+    id: string;
+    name: string;
+    financialStatus: string;
+    walletBalance: number;
+    pendingBalance: number;
+    blockedBalance: number;
+    totalCommission: number;
+    plan: { name: string } | null;
+    _count: { orders: number };
+    totalBalance: number;
 }
 
 interface WithdrawalRequest {
@@ -21,16 +49,49 @@ interface WithdrawalRequest {
   amount: number;
   requestedAt: string;
   pixKey: string;
+  status: string;
   supplier: {
     name: string;
     billingDoc: string | null;
   };
 }
 
+interface AdminLog {
+    id: string;
+    adminName: string;
+    action: string;
+    details: string | null;
+    createdAt: string;
+}
+
+interface FinancialSettings {
+    defaultReleaseDays: number;
+    defaultMinWithdrawal: number;
+    defaultWithdrawalLimit: number;
+}
+
 const AdminFinancialScreen = () => {
   const { user } = useAuth();
   const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'SUPPLIERS' | 'WITHDRAWALS' | 'SETTINGS' | 'AUDIT'>('DASHBOARD');
+
+  // Data
+  const [stats, setStats] = useState<AdminDashboardStats | null>(null);
+  const [suppliers, setSuppliers] = useState<SupplierFinancial[]>([]);
+  const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AdminLog[]>([]);
+  const [settings, setSettings] = useState<FinancialSettings | null>(null);
+
+  // Settings Form
+  const [editSettings, setEditSettings] = useState<FinancialSettings | null>(null);
+
+  // Action States
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<WithdrawalRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [processingAction, setProcessingAction] = useState(false);
 
   useEffect(() => {
     if (user && user.role !== 'ADMIN') {
@@ -38,19 +99,11 @@ const AdminFinancialScreen = () => {
     }
   }, [user, navigation]);
 
-  const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState<AdminDashboardStats | null>(null);
-  const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
-  
-  // Reject Modal State
-  const [rejectModalVisible, setRejectModalVisible] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState<WithdrawalRequest | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
-  const [processingAction, setProcessingAction] = useState(false);
-
   const loadData = async () => {
     try {
       setLoading(true);
+      
+      // Load Dashboard & Withdrawals always (Summary)
       const [statsRes, withdrawalsRes] = await Promise.all([
         api.get('/financial/admin/dashboard'),
         api.get('/financial/admin/withdrawals?status=PENDING')
@@ -58,6 +111,13 @@ const AdminFinancialScreen = () => {
 
       setStats(statsRes.data);
       setWithdrawals(withdrawalsRes.data);
+
+      // Lazy load others based on tab? For simplicity load all or just essential.
+      // Let's load others on tab change or if active.
+      if (activeTab === 'SUPPLIERS') fetchSuppliers();
+      if (activeTab === 'SETTINGS') fetchSettings();
+      if (activeTab === 'AUDIT') fetchAudit();
+
     } catch (error) {
       console.error(error);
       Alert.alert('Erro', 'Não foi possível carregar os dados financeiros.');
@@ -66,6 +126,40 @@ const AdminFinancialScreen = () => {
       setRefreshing(false);
     }
   };
+
+  const fetchSuppliers = async () => {
+      try {
+          const res = await api.get('/financial/admin/suppliers');
+          setSuppliers(res.data);
+      } catch (e) { console.error(e); }
+  };
+
+  const fetchSettings = async () => {
+      try {
+          const res = await api.get('/financial/admin/settings');
+          const data = res.data || {
+              defaultReleaseDays: 14,
+              defaultMinWithdrawal: 50,
+              defaultWithdrawalLimit: 4
+          };
+          setSettings(data);
+          setEditSettings(data);
+      } catch (e) { console.error(e); }
+  };
+
+  const fetchAudit = async () => {
+      try {
+          const res = await api.get('/financial/admin/audit');
+          setAuditLogs(res.data);
+      } catch (e) { console.error(e); }
+  };
+
+  // Trigger fetch on tab change
+  useEffect(() => {
+      if (activeTab === 'SUPPLIERS') fetchSuppliers();
+      if (activeTab === 'SETTINGS') fetchSettings();
+      if (activeTab === 'AUDIT') fetchAudit();
+  }, [activeTab]);
 
   useFocusEffect(
     useCallback(() => {
@@ -78,7 +172,7 @@ const AdminFinancialScreen = () => {
     loadData();
   };
 
-  const handleApprove = (request: WithdrawalRequest) => {
+  const handleApproveWithdraw = (request: WithdrawalRequest) => {
     Alert.alert(
       'Confirmar Aprovação',
       `Deseja aprovar o saque de R$ ${request.amount.toFixed(2)} para ${request.supplier.name}?`,
@@ -91,7 +185,7 @@ const AdminFinancialScreen = () => {
               setProcessingAction(true);
               await api.post(`/financial/admin/withdrawals/${request.id}/approve`);
               Alert.alert('Sucesso', 'Saque aprovado e processado.');
-              loadData(); // Refresh list
+              loadData(); 
             } catch (error) {
               Alert.alert('Erro', 'Falha ao aprovar saque.');
             } finally {
@@ -103,31 +197,35 @@ const AdminFinancialScreen = () => {
     );
   };
 
-  const handleRejectPress = (request: WithdrawalRequest) => {
-    setSelectedRequest(request);
-    setRejectReason('');
-    setRejectModalVisible(true);
+  const handleRejectWithdraw = async () => {
+      if (!selectedRequest || !rejectReason) return;
+      try {
+          setProcessingAction(true);
+          await api.post(`/financial/admin/withdrawals/${selectedRequest.id}/reject`, { reason: rejectReason });
+          setRejectModalVisible(false);
+          setRejectReason('');
+          setSelectedRequest(null);
+          Alert.alert('Sucesso', 'Saque rejeitado.');
+          loadData();
+      } catch (error) {
+          Alert.alert('Erro', 'Falha ao rejeitar saque.');
+      } finally {
+          setProcessingAction(false);
+      }
   };
 
-  const confirmReject = async () => {
-    if (!rejectReason.trim()) {
-      Alert.alert('Atenção', 'Informe o motivo da rejeição.');
-      return;
-    }
-
-    try {
-      setProcessingAction(true);
-      await api.post(`/financial/admin/withdrawals/${selectedRequest?.id}/reject`, {
-        reason: rejectReason
-      });
-      setRejectModalVisible(false);
-      Alert.alert('Sucesso', 'Saque rejeitado.');
-      loadData();
-    } catch (error) {
-      Alert.alert('Erro', 'Falha ao rejeitar saque.');
-    } finally {
-      setProcessingAction(false);
-    }
+  const handleSaveSettings = async () => {
+      if (!editSettings) return;
+      try {
+          setProcessingAction(true);
+          await api.put('/financial/admin/settings', editSettings);
+          Alert.alert('Sucesso', 'Configurações atualizadas.');
+          fetchSettings(); // refresh
+      } catch (error) {
+          Alert.alert('Erro', 'Falha ao salvar configurações.');
+      } finally {
+          setProcessingAction(false);
+      }
   };
 
   const formatCurrency = (value: number) => {
@@ -137,153 +235,257 @@ const AdminFinancialScreen = () => {
     }).format(value);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  const renderDashboard = () => (
+      <View style={styles.tabContent}>
+          {stats && (
+              <>
+                  <View style={styles.kpiContainer}>
+                      <View style={[styles.kpiCard, { backgroundColor: colors.primary }]}>
+                          <Text style={styles.kpiLabelLight}>Receita Bruta</Text>
+                          <Text style={styles.kpiValueLight}>{formatCurrency(stats.revenue.total)}</Text>
+                          <Text style={styles.kpiSubLight}>Comissões: {formatCurrency(stats.revenue.commissions)}</Text>
+                      </View>
+                      <View style={[styles.kpiCard, { backgroundColor: '#fff' }]}>
+                          <Text style={styles.kpiLabel}>MRR (Planos)</Text>
+                          <Text style={styles.kpiValue}>{formatCurrency(stats.revenue.subscriptions)}</Text>
+                      </View>
+                  </View>
+
+                  <View style={styles.kpiContainer}>
+                      <View style={[styles.kpiCard, { backgroundColor: '#fff' }]}>
+                          <Text style={styles.kpiLabel}>Total Pago</Text>
+                          <Text style={[styles.kpiValue, { color: colors.success }]}>{formatCurrency(stats.payouts.totalPaid)}</Text>
+                      </View>
+                      <View style={[styles.kpiCard, { backgroundColor: '#fff' }]}>
+                          <Text style={styles.kpiLabel}>Saldo Retido</Text>
+                          <Text style={[styles.kpiValue, { color: colors.warning }]}>{formatCurrency(stats.balance.totalHeld)}</Text>
+                      </View>
+                  </View>
+
+                  <View style={styles.chartContainer}>
+                      <Text style={styles.sectionTitle}>Evolução da Receita (6 Meses)</Text>
+                      {stats.charts?.revenue && stats.charts.revenue.labels.length > 0 ? (
+                          <LineChart
+                              data={stats.charts.revenue}
+                              width={width - 40}
+                              height={220}
+                              chartConfig={{
+                                  backgroundColor: "#ffffff",
+                                  backgroundGradientFrom: "#ffffff",
+                                  backgroundGradientTo: "#ffffff",
+                                  decimalPlaces: 0,
+                                  color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
+                                  labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                                  style: { borderRadius: 16 },
+                                  propsForDots: { r: "6", strokeWidth: "2", stroke: colors.primary }
+                              }}
+                              bezier
+                              style={{ marginVertical: 8, borderRadius: 16 }}
+                          />
+                      ) : (
+                          <Text style={styles.emptyText}>Sem dados suficientes para o gráfico.</Text>
+                      )}
+                  </View>
+              </>
+          )}
+      </View>
+  );
+
+  const renderWithdrawals = () => (
+      <View style={styles.tabContent}>
+          <Text style={styles.sectionTitle}>Solicitações Pendentes ({withdrawals.length})</Text>
+          {withdrawals.length === 0 ? (
+              <Text style={styles.emptyText}>Nenhuma solicitação pendente.</Text>
+          ) : (
+              withdrawals.map(req => (
+                  <View key={req.id} style={styles.withdrawalCard}>
+                      <View style={styles.withdrawalHeader}>
+                          <Text style={styles.supplierName}>{req.supplier.name}</Text>
+                          <Text style={styles.withdrawalAmount}>{formatCurrency(req.amount)}</Text>
+                      </View>
+                      <Text style={styles.withdrawalInfo}>Chave PIX: {req.pixKey}</Text>
+                      <Text style={styles.withdrawalDate}>Solicitado em: {new Date(req.requestedAt).toLocaleDateString()}</Text>
+                      
+                      <View style={styles.withdrawalActions}>
+                          <TouchableOpacity 
+                              style={[styles.actionButton, styles.rejectButton]}
+                              onPress={() => {
+                                  setSelectedRequest(req);
+                                  setRejectModalVisible(true);
+                              }}
+                          >
+                              <Text style={styles.actionButtonText}>Rejeitar</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                              style={[styles.actionButton, styles.approveButton]}
+                              onPress={() => handleApproveWithdraw(req)}
+                          >
+                              <Text style={styles.actionButtonText}>Aprovar</Text>
+                          </TouchableOpacity>
+                      </View>
+                  </View>
+              ))
+          )}
+      </View>
+  );
+
+  const renderSuppliers = () => (
+      <View style={styles.tabContent}>
+          <Text style={styles.sectionTitle}>Visão por Fornecedor</Text>
+          {suppliers.map(sup => (
+              <View key={sup.id} style={styles.supplierCard}>
+                  <View style={styles.rowBetween}>
+                      <Text style={styles.supplierName}>{sup.name}</Text>
+                      <View style={[styles.statusBadge, sup.financialStatus === 'OVERDUE' ? { backgroundColor: colors.error } : { backgroundColor: colors.success }]}>
+                          <Text style={styles.statusText}>{sup.financialStatus}</Text>
+                      </View>
+                  </View>
+                  <Text style={styles.supplierPlan}>Plano: {sup.plan?.name || 'Sem plano'}</Text>
+                  
+                  <View style={styles.divider} />
+                  
+                  <View style={styles.rowBetween}>
+                      <View>
+                          <Text style={styles.label}>Saldo Total</Text>
+                          <Text style={styles.value}>{formatCurrency(sup.totalBalance)}</Text>
+                      </View>
+                      <View>
+                          <Text style={styles.label}>Comissões Geradas</Text>
+                          <Text style={styles.value}>{formatCurrency(sup.totalCommission)}</Text>
+                      </View>
+                  </View>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.label}>Pedidos: {sup._count.orders}</Text>
+                  </View>
+              </View>
+          ))}
+      </View>
+  );
+
+  const renderSettings = () => (
+      <View style={styles.tabContent}>
+          <Text style={styles.sectionTitle}>Configurações Financeiras Globais</Text>
+          {editSettings && (
+              <View style={styles.formCard}>
+                  <Text style={styles.inputLabel}>Dias para Liberação (D+N)</Text>
+                  <TextInput 
+                      style={styles.input}
+                      keyboardType="numeric"
+                      value={String(editSettings.defaultReleaseDays)}
+                      onChangeText={t => setEditSettings({...editSettings, defaultReleaseDays: parseInt(t) || 0})}
+                  />
+
+                  <Text style={styles.inputLabel}>Saque Mínimo (R$)</Text>
+                  <TextInput 
+                      style={styles.input}
+                      keyboardType="numeric"
+                      value={String(editSettings.defaultMinWithdrawal)}
+                      onChangeText={t => setEditSettings({...editSettings, defaultMinWithdrawal: parseFloat(t) || 0})}
+                  />
+
+                  <Text style={styles.inputLabel}>Limite de Saques Mensais</Text>
+                  <TextInput 
+                      style={styles.input}
+                      keyboardType="numeric"
+                      value={String(editSettings.defaultWithdrawalLimit)}
+                      onChangeText={t => setEditSettings({...editSettings, defaultWithdrawalLimit: parseInt(t) || 0})}
+                  />
+
+                  <TouchableOpacity 
+                      style={styles.saveSettingsButton}
+                      onPress={handleSaveSettings}
+                      disabled={processingAction}
+                  >
+                      {processingAction ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Salvar Configurações</Text>}
+                  </TouchableOpacity>
+              </View>
+          )}
+      </View>
+  );
+
+  const renderAudit = () => (
+      <View style={styles.tabContent}>
+          <Text style={styles.sectionTitle}>Auditoria & Logs</Text>
+          {auditLogs.map(log => (
+              <View key={log.id} style={styles.logCard}>
+                  <Text style={styles.logAction}>{log.action}</Text>
+                  <Text style={styles.logDetails}>{log.details}</Text>
+                  <View style={styles.rowBetween}>
+                      <Text style={styles.logUser}>{log.adminName}</Text>
+                      <Text style={styles.logDate}>{new Date(log.createdAt).toLocaleString()}</Text>
+                  </View>
+              </View>
+          ))}
+      </View>
+  );
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Financeiro da Plataforma</Text>
-        <Text style={styles.headerSubtitle}>Gestão Administrativa</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Gestão Financeira</Text>
       </View>
 
-      <ScrollView
+      <View style={styles.tabs}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {['DASHBOARD', 'WITHDRAWALS', 'SUPPLIERS', 'SETTINGS', 'AUDIT'].map((tab) => (
+                  <TouchableOpacity 
+                      key={tab} 
+                      style={[styles.tab, activeTab === tab && styles.activeTab]}
+                      onPress={() => setActiveTab(tab as any)}
+                  >
+                      <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+                          {tab === 'WITHDRAWALS' ? 'SAQUES' : 
+                           tab === 'SUPPLIERS' ? 'FORNECEDORES' : 
+                           tab === 'SETTINGS' ? 'CONFIG' : 
+                           tab === 'AUDIT' ? 'AUDITORIA' : 'DASHBOARD'}
+                      </Text>
+                  </TouchableOpacity>
+              ))}
+          </ScrollView>
+      </View>
+
+      <ScrollView 
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* Dashboard Cards */}
-        <View style={styles.statsContainer}>
-          <View style={[styles.statCard, { backgroundColor: colors.primary }]}>
-            <View style={styles.statHeader}>
-              <Ionicons name="wallet-outline" size={24} color="#FFF" />
-              <Text style={styles.statLabel}>Receita Total</Text>
-            </View>
-            <Text style={styles.statValue}>
-              {stats ? formatCurrency(stats.revenue.total) : 'R$ 0,00'}
-            </Text>
-          </View>
-
-          <View style={styles.row}>
-            <View style={[styles.statCardSmall, { backgroundColor: colors.success }]}>
-               <Text style={styles.statLabelSmall}>Comissões</Text>
-               <Text style={styles.statValueSmall}>
-                 {stats ? formatCurrency(stats.revenue.commissions) : 'R$ 0,00'}
-               </Text>
-            </View>
-            <View style={[styles.statCardSmall, { backgroundColor: colors.info }]}>
-               <Text style={styles.statLabelSmall}>Mensalidades</Text>
-               <Text style={styles.statValueSmall}>
-                 {stats ? formatCurrency(stats.revenue.subscriptions) : 'R$ 0,00'}
-               </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Pending Withdrawals */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Solicitações de Saque</Text>
-          {stats?.pendingWithdrawals ? (
-             <View style={styles.badge}>
-               <Text style={styles.badgeText}>{stats.pendingWithdrawals}</Text>
-             </View>
-          ) : null}
-        </View>
-
-        {withdrawals.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="checkmark-circle-outline" size={48} color={colors.muted} />
-            <Text style={styles.emptyText}>Nenhuma solicitação pendente.</Text>
-          </View>
-        ) : (
-          withdrawals.map((req) => (
-            <View key={req.id} style={styles.requestCard}>
-              <View style={styles.requestHeader}>
-                <View>
-                  <Text style={styles.supplierName}>{req.supplier.name}</Text>
-                  <Text style={styles.requestDate}>{formatDate(req.requestedAt)}</Text>
-                </View>
-                <Text style={styles.requestAmount}>{formatCurrency(req.amount)}</Text>
-              </View>
-
-              <View style={styles.pixContainer}>
-                <Text style={styles.pixLabel}>Chave PIX:</Text>
-                <Text style={styles.pixValue}>{req.pixKey || 'Não informada'}</Text>
-              </View>
-
-              <View style={styles.actions}>
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.rejectButton]}
-                  onPress={() => handleRejectPress(req)}
-                  disabled={processingAction}
-                >
-                  <Ionicons name="close-circle-outline" size={20} color="#FFF" />
-                  <Text style={styles.actionText}>Rejeitar</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity 
-                  style={[styles.actionButton, styles.approveButton]}
-                  onPress={() => handleApprove(req)}
-                  disabled={processingAction}
-                >
-                  <Ionicons name="checkmark-circle-outline" size={20} color="#FFF" />
-                  <Text style={styles.actionText}>Aprovar</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))
-        )}
+          {loading && !refreshing ? (
+              <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 20 }} />
+          ) : (
+              <>
+                  {activeTab === 'DASHBOARD' && renderDashboard()}
+                  {activeTab === 'WITHDRAWALS' && renderWithdrawals()}
+                  {activeTab === 'SUPPLIERS' && renderSuppliers()}
+                  {activeTab === 'SETTINGS' && renderSettings()}
+                  {activeTab === 'AUDIT' && renderAudit()}
+              </>
+          )}
       </ScrollView>
 
       {/* Reject Modal */}
-      <Modal
-        visible={rejectModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setRejectModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Rejeitar Saque</Text>
-            <Text style={styles.modalSubtitle}>
-              Informe o motivo da rejeição para o fornecedor:
-            </Text>
-            
-            <TextInput
-              style={styles.input}
-              placeholder="Ex: Dados bancários incorretos"
-              value={rejectReason}
-              onChangeText={setRejectReason}
-              multiline
-            />
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setRejectModalVisible(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.confirmButton]}
-                onPress={confirmReject}
-                disabled={processingAction}
-              >
-                {processingAction ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={styles.confirmButtonText}>Confirmar Rejeição</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+      <Modal visible={rejectModalVisible} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Motivo da Rejeição</Text>
+                  <TextInput
+                      style={styles.modalInput}
+                      placeholder="Digite o motivo..."
+                      value={rejectReason}
+                      onChangeText={setRejectReason}
+                      multiline
+                  />
+                  <View style={styles.modalActions}>
+                      <TouchableOpacity onPress={() => setRejectModalVisible(false)} style={styles.modalCancel}>
+                          <Text style={styles.modalCancelText}>Cancelar</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={handleRejectWithdraw} style={styles.modalConfirm}>
+                          <Text style={styles.modalConfirmText}>Confirmar Rejeição</Text>
+                      </TouchableOpacity>
+                  </View>
+              </View>
           </View>
-        </View>
       </Modal>
     </View>
   );
@@ -295,226 +497,307 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    paddingTop: 60,
-    paddingBottom: 20,
-    paddingHorizontal: spacing.lg,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: colors.muted,
-    marginTop: 4,
-  },
-  scrollContent: {
-    padding: spacing.lg,
-  },
-  statsContainer: {
-    marginBottom: spacing.xl,
-  },
-  statCard: {
-    padding: spacing.lg,
-    borderRadius: radius.lg,
-    marginBottom: spacing.md,
-    ...shadow.medium,
-  },
-  statHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm,
+    paddingTop: 50,
+    paddingHorizontal: spacing.medium,
+    paddingBottom: spacing.medium,
+    backgroundColor: '#fff',
+    ...shadow.small,
   },
-  statLabel: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 16,
-    marginLeft: spacing.sm,
+  backButton: {
+    marginRight: spacing.medium,
   },
-  statValue: {
-    color: '#FFFFFF',
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statCardSmall: {
-    flex: 0.48,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    ...shadow.sm,
-  },
-  statLabelSmall: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  statValueSmall: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginRight: spacing.sm,
-  },
-  badge: {
-    backgroundColor: colors.danger,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-  },
-  badgeText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  emptyState: {
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  emptyText: {
-    marginTop: spacing.sm,
-    color: colors.muted,
-    fontSize: 16,
-  },
-  requestCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    ...shadow.sm,
-  },
-  requestHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.sm,
-  },
-  supplierName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.text,
-  },
-  requestDate: {
-    fontSize: 12,
-    color: colors.muted,
-  },
-  requestAmount: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.primary,
-  },
-  pixContainer: {
-    backgroundColor: colors.background,
-    padding: spacing.sm,
-    borderRadius: radius.sm,
-    marginBottom: spacing.md,
-  },
-  pixLabel: {
-    fontSize: 12,
-    color: colors.muted,
-    marginBottom: 2,
-  },
-  pixValue: {
-    fontSize: 14,
-    color: colors.text,
-    fontWeight: '500',
-  },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  actionButton: {
-    flex: 0.48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-  },
-  approveButton: {
-    backgroundColor: colors.success,
-  },
-  rejectButton: {
-    backgroundColor: colors.danger,
-  },
-  actionText: {
-    color: '#FFF',
-    fontWeight: 'bold',
-    marginLeft: 6,
-  },
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: spacing.lg,
-  },
-  modalContent: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    ...shadow.lg,
-  },
-  modalTitle: {
+  title: {
     fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: spacing.xs,
   },
-  modalSubtitle: {
-    fontSize: 14,
-    color: colors.muted,
-    marginBottom: spacing.md,
+  tabs: {
+      flexDirection: 'row',
+      backgroundColor: '#fff',
+      paddingVertical: spacing.small,
+      paddingHorizontal: spacing.small,
+  },
+  tab: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      marginRight: 8,
+      borderRadius: 20,
+      backgroundColor: colors.lightGray,
+  },
+  activeTab: {
+      backgroundColor: colors.primary,
+  },
+  tabText: {
+      fontWeight: '600',
+      color: colors.textDim,
+      fontSize: 12,
+  },
+  activeTabText: {
+      color: '#fff',
+  },
+  scrollContent: {
+    padding: spacing.medium,
+  },
+  tabContent: {
+      gap: spacing.medium,
+  },
+  sectionTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: colors.text,
+      marginBottom: spacing.small,
+  },
+  kpiContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: spacing.small,
+  },
+  kpiCard: {
+      flex: 1,
+      padding: spacing.medium,
+      borderRadius: radius.medium,
+      ...shadow.small,
+  },
+  kpiLabel: {
+      fontSize: 12,
+      color: colors.textDim,
+      marginBottom: 4,
+  },
+  kpiValue: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: colors.text,
+  },
+  kpiLabelLight: {
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.8)',
+      marginBottom: 4,
+  },
+  kpiValueLight: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: '#fff',
+  },
+  kpiSubLight: {
+      fontSize: 10,
+      color: 'rgba(255,255,255,0.8)',
+      marginTop: 4,
+  },
+  chartContainer: {
+      backgroundColor: '#fff',
+      padding: spacing.medium,
+      borderRadius: radius.medium,
+      ...shadow.small,
+      alignItems: 'center',
+  },
+  emptyText: {
+      textAlign: 'center',
+      color: colors.textDim,
+      marginVertical: 20,
+  },
+  // Withdrawals
+  withdrawalCard: {
+      backgroundColor: '#fff',
+      padding: spacing.medium,
+      borderRadius: radius.medium,
+      marginBottom: spacing.small,
+      ...shadow.small,
+  },
+  withdrawalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+  },
+  supplierName: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: colors.text,
+  },
+  withdrawalAmount: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: colors.primary,
+  },
+  withdrawalInfo: {
+      color: colors.textDim,
+      fontSize: 14,
+  },
+  withdrawalDate: {
+      color: colors.textDim,
+      fontSize: 12,
+      marginTop: 4,
+  },
+  withdrawalActions: {
+      flexDirection: 'row',
+      marginTop: 12,
+      gap: 10,
+  },
+  actionButton: {
+      flex: 1,
+      padding: 10,
+      borderRadius: 8,
+      alignItems: 'center',
+  },
+  rejectButton: {
+      backgroundColor: '#ffebee',
+  },
+  approveButton: {
+      backgroundColor: '#e8f5e9',
+  },
+  actionButtonText: {
+      fontWeight: '600',
+      fontSize: 14,
+  },
+  // Suppliers
+  supplierCard: {
+      backgroundColor: '#fff',
+      padding: spacing.medium,
+      borderRadius: radius.medium,
+      marginBottom: spacing.small,
+      ...shadow.small,
+  },
+  supplierPlan: {
+      color: colors.textDim,
+      fontSize: 14,
+  },
+  rowBetween: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+  },
+  divider: {
+      height: 1,
+      backgroundColor: colors.lightGray,
+      marginVertical: 10,
+  },
+  statusBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+  },
+  statusText: {
+      color: '#fff',
+      fontSize: 10,
+      fontWeight: 'bold',
+  },
+  label: {
+      fontSize: 12,
+      color: colors.textDim,
+  },
+  value: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.text,
+  },
+  // Settings
+  formCard: {
+      backgroundColor: '#fff',
+      padding: spacing.medium,
+      borderRadius: radius.medium,
+      ...shadow.small,
+  },
+  inputLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: 6,
+      marginTop: 10,
   },
   input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    padding: spacing.md,
-    height: 100,
-    textAlignVertical: 'top',
-    marginBottom: spacing.lg,
-    fontSize: 16,
+      borderWidth: 1,
+      borderColor: colors.lightGray,
+      borderRadius: 8,
+      padding: 10,
+      fontSize: 16,
+  },
+  saveSettingsButton: {
+      backgroundColor: colors.primary,
+      padding: 15,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginTop: 20,
+  },
+  saveButtonText: {
+      color: '#fff',
+      fontWeight: 'bold',
+      fontSize: 16,
+  },
+  // Audit
+  logCard: {
+      backgroundColor: '#fff',
+      padding: spacing.medium,
+      borderRadius: radius.medium,
+      marginBottom: spacing.small,
+      borderLeftWidth: 4,
+      borderLeftColor: colors.primary,
+      ...shadow.small,
+  },
+  logAction: {
+      fontWeight: 'bold',
+      color: colors.text,
+  },
+  logDetails: {
+      color: colors.textDim,
+      fontSize: 12,
+      marginVertical: 4,
+  },
+  logUser: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.primary,
+  },
+  logDate: {
+      fontSize: 10,
+      color: colors.textDim,
+  },
+  // Modal
+  modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      padding: 20,
+  },
+  modalContent: {
+      backgroundColor: '#fff',
+      borderRadius: radius.medium,
+      padding: spacing.medium,
+  },
+  modalTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      marginBottom: 10,
+  },
+  modalInput: {
+      borderWidth: 1,
+      borderColor: colors.lightGray,
+      borderRadius: 8,
+      padding: 10,
+      height: 100,
+      textAlignVertical: 'top',
+      marginBottom: 20,
   },
   modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 10,
   },
-  modalButton: {
-    flex: 0.48,
-    paddingVertical: spacing.md,
-    borderRadius: radius.sm,
-    alignItems: 'center',
+  modalCancel: {
+      padding: 10,
   },
-  cancelButton: {
-    backgroundColor: colors.background,
-    borderWidth: 1,
-    borderColor: colors.border,
+  modalCancelText: {
+      color: colors.textDim,
   },
-  confirmButton: {
-    backgroundColor: colors.danger,
+  modalConfirm: {
+      backgroundColor: colors.error,
+      padding: 10,
+      borderRadius: 8,
   },
-  cancelButtonText: {
-    color: colors.text,
-    fontWeight: 'bold',
-  },
-  confirmButtonText: {
-    color: '#FFF',
-    fontWeight: 'bold',
+  modalConfirmText: {
+      color: '#fff',
+      fontWeight: 'bold',
   },
 });
 

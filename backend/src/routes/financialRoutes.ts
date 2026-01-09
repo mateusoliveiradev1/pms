@@ -12,7 +12,9 @@ import {
     approveWithdraw,
     rejectWithdraw,
     getFinancialSettings,
-    updateFinancialSettings
+    updateFinancialSettings,
+    getAdminSupplierFinancials,
+    getAdminAuditLogs
 } from '../controllers/financialController';
 import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
 
@@ -20,6 +22,8 @@ const router = Router();
 
 // Admin Routes
 router.get('/admin/dashboard', authenticateToken, requireRole('ADMIN'), getAdminDashboard);
+router.get('/admin/suppliers', authenticateToken, requireRole('ADMIN'), getAdminSupplierFinancials);
+router.get('/admin/audit', authenticateToken, requireRole('ADMIN'), getAdminAuditLogs);
 router.get('/admin/withdrawals', authenticateToken, requireRole('ADMIN'), listWithdrawalRequests);
 router.post('/admin/withdrawals/:id/approve', authenticateToken, requireRole('ADMIN'), approveWithdraw);
 router.post('/admin/withdrawals/:id/reject', authenticateToken, requireRole('ADMIN'), rejectWithdraw);
