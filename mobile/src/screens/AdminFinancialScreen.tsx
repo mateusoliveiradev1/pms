@@ -6,7 +6,7 @@ import { colors, spacing, radius, shadow } from '../ui/theme';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
-import { LineChart } from 'react-native-chart-kit';
+import { LineChart, PieChart } from 'react-native-chart-kit';
 
 const { width } = Dimensions.get('window');
 
@@ -84,6 +84,11 @@ const AdminFinancialScreen = () => {
   const [auditLogs, setAuditLogs] = useState<AdminLog[]>([]);
   const [settings, setSettings] = useState<FinancialSettings | null>(null);
 
+  // Filters
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('ALL');
+  const [withdrawalFilter, setWithdrawalFilter] = useState('PENDING');
+
   // Settings Form
   const [editSettings, setEditSettings] = useState<FinancialSettings | null>(null);
 
@@ -99,37 +104,27 @@ const AdminFinancialScreen = () => {
     }
   }, [user, navigation]);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      
-      // Load Dashboard & Withdrawals always (Summary)
-      const [statsRes, withdrawalsRes] = await Promise.all([
-        api.get('/financial/admin/dashboard'),
-        api.get('/financial/admin/withdrawals?status=PENDING')
-      ]);
+  const fetchDashboard = async () => {
+      try {
+          const res = await api.get('/financial/admin/dashboard');
+          setStats(res.data);
+      } catch (e) { console.error(e); }
+  };
 
-      setStats(statsRes.data);
-      setWithdrawals(withdrawalsRes.data);
-
-      // Lazy load others based on tab? For simplicity load all or just essential.
-      // Let's load others on tab change or if active.
-      if (activeTab === 'SUPPLIERS') fetchSuppliers();
-      if (activeTab === 'SETTINGS') fetchSettings();
-      if (activeTab === 'AUDIT') fetchAudit();
-
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Erro', 'Não foi possível carregar os dados financeiros.');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const fetchWithdrawals = async () => {
+      try {
+          const res = await api.get('/financial/admin/withdrawals', {
+              params: { status: withdrawalFilter }
+          });
+          setWithdrawals(res.data);
+      } catch (e) { console.error(e); }
   };
 
   const fetchSuppliers = async () => {
       try {
-          const res = await api.get('/financial/admin/suppliers');
+          const res = await api.get('/financial/admin/suppliers', {
+              params: { search: supplierSearch, status: supplierFilter }
+          });
           setSuppliers(res.data);
       } catch (e) { console.error(e); }
   };
@@ -154,9 +149,40 @@ const AdminFinancialScreen = () => {
       } catch (e) { console.error(e); }
   };
 
-  // Trigger fetch on tab change
+  const loadData = async () => {
+    setLoading(true);
+    await Promise.all([
+        fetchDashboard(),
+        fetchWithdrawals() // Always load withdrawals as it's critical
+    ]);
+    
+    if (activeTab === 'SUPPLIERS') fetchSuppliers();
+    if (activeTab === 'SETTINGS') fetchSettings();
+    if (activeTab === 'AUDIT') fetchAudit();
+    
+    setLoading(false);
+    setRefreshing(false);
+  };
+
+  // Trigger fetch on tab change or filter change
   useEffect(() => {
       if (activeTab === 'SUPPLIERS') fetchSuppliers();
+  }, [activeTab, supplierFilter]); // Debounce search? Handled by explicit search or effect? Let's add effect for filter, search maybe debounce.
+
+  useEffect(() => {
+     if (activeTab === 'SUPPLIERS') {
+         const timeout = setTimeout(() => {
+             fetchSuppliers();
+         }, 500);
+         return () => clearTimeout(timeout);
+     }
+  }, [supplierSearch]);
+
+  useEffect(() => {
+      if (activeTab === 'WITHDRAWALS') fetchWithdrawals();
+  }, [activeTab, withdrawalFilter]);
+
+  useEffect(() => {
       if (activeTab === 'SETTINGS') fetchSettings();
       if (activeTab === 'AUDIT') fetchAudit();
   }, [activeTab]);
@@ -235,7 +261,25 @@ const AdminFinancialScreen = () => {
     }).format(value);
   };
 
-  const renderDashboard = () => (
+  const renderDashboard = () => {
+      const pieData = stats ? [
+          {
+              name: 'Comissões',
+              population: stats.revenue.commissions,
+              color: colors.primary,
+              legendFontColor: '#7F7F7F',
+              legendFontSize: 12
+          },
+          {
+              name: 'Mensalidades',
+              population: stats.revenue.subscriptions,
+              color: colors.success,
+              legendFontColor: '#7F7F7F',
+              legendFontSize: 12
+          }
+      ] : [];
+
+      return (
       <View style={styles.tabContent}>
           {stats && (
               <>
@@ -260,6 +304,25 @@ const AdminFinancialScreen = () => {
                           <Text style={styles.kpiLabel}>Saldo Retido</Text>
                           <Text style={[styles.kpiValue, { color: colors.warning }]}>{formatCurrency(stats.balance.totalHeld)}</Text>
                       </View>
+                  </View>
+
+                  <View style={styles.chartContainer}>
+                      <Text style={styles.sectionTitle}>Fonte de Receita</Text>
+                      {(stats.revenue.commissions > 0 || stats.revenue.subscriptions > 0) ? (
+                          <PieChart
+                              data={pieData}
+                              width={width - 40}
+                              height={200}
+                              chartConfig={{
+                                  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                              }}
+                              accessor={"population"}
+                              backgroundColor={"transparent"}
+                              paddingLeft={"15"}
+                              center={[10, 0]}
+                              absolute
+                          />
+                      ) : <Text style={styles.emptyText}>Sem dados de receita.</Text>}
                   </View>
 
                   <View style={styles.chartContainer}>
@@ -289,40 +352,63 @@ const AdminFinancialScreen = () => {
               </>
           )}
       </View>
-  );
+      );
+  };
 
   const renderWithdrawals = () => (
       <View style={styles.tabContent}>
-          <Text style={styles.sectionTitle}>Solicitações Pendentes ({withdrawals.length})</Text>
+          <Text style={styles.sectionTitle}>Solicitações ({withdrawals.length})</Text>
+          
+          <View style={styles.filterRow}>
+            {['PENDING', 'HISTORY'].map(f => (
+                <TouchableOpacity 
+                    key={f} 
+                    style={[styles.filterChip, withdrawalFilter === f && styles.activeFilterChip]}
+                    onPress={() => setWithdrawalFilter(f)}
+                >
+                    <Text style={[styles.filterText, withdrawalFilter === f && styles.activeFilterText]}>
+                        {f === 'PENDING' ? 'Pendentes' : 'Histórico'}
+                    </Text>
+                </TouchableOpacity>
+            ))}
+          </View>
+
           {withdrawals.length === 0 ? (
-              <Text style={styles.emptyText}>Nenhuma solicitação pendente.</Text>
+              <Text style={styles.emptyText}>Nenhuma solicitação encontrada.</Text>
           ) : (
               withdrawals.map(req => (
                   <View key={req.id} style={styles.withdrawalCard}>
                       <View style={styles.withdrawalHeader}>
                           <Text style={styles.supplierName}>{req.supplier.name}</Text>
-                          <Text style={styles.withdrawalAmount}>{formatCurrency(req.amount)}</Text>
+                          <Text style={[
+                              styles.withdrawalAmount, 
+                              req.status === 'REJECTED' ? { color: colors.error } : 
+                              req.status === 'PAID' ? { color: colors.success } : {}
+                          ]}>{formatCurrency(req.amount)}</Text>
                       </View>
+                      <Text style={styles.withdrawalInfo}>Status: {req.status === 'PENDING' ? 'Pendente' : req.status === 'PAID' ? 'Pago' : 'Rejeitado'}</Text>
                       <Text style={styles.withdrawalInfo}>Chave PIX: {req.pixKey}</Text>
                       <Text style={styles.withdrawalDate}>Solicitado em: {new Date(req.requestedAt).toLocaleDateString()}</Text>
                       
-                      <View style={styles.withdrawalActions}>
-                          <TouchableOpacity 
-                              style={[styles.actionButton, styles.rejectButton]}
-                              onPress={() => {
-                                  setSelectedRequest(req);
-                                  setRejectModalVisible(true);
-                              }}
-                          >
-                              <Text style={styles.actionButtonText}>Rejeitar</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity 
-                              style={[styles.actionButton, styles.approveButton]}
-                              onPress={() => handleApproveWithdraw(req)}
-                          >
-                              <Text style={styles.actionButtonText}>Aprovar</Text>
-                          </TouchableOpacity>
-                      </View>
+                      {req.status === 'PENDING' && (
+                          <View style={styles.withdrawalActions}>
+                              <TouchableOpacity 
+                                  style={[styles.actionButton, styles.rejectButton]}
+                                  onPress={() => {
+                                      setSelectedRequest(req);
+                                      setRejectModalVisible(true);
+                                  }}
+                              >
+                                  <Text style={styles.actionButtonText}>Rejeitar</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity 
+                                  style={[styles.actionButton, styles.approveButton]}
+                                  onPress={() => handleApproveWithdraw(req)}
+                              >
+                                  <Text style={styles.actionButtonText}>Aprovar</Text>
+                              </TouchableOpacity>
+                          </View>
+                      )}
                   </View>
               ))
           )}
@@ -332,7 +418,32 @@ const AdminFinancialScreen = () => {
   const renderSuppliers = () => (
       <View style={styles.tabContent}>
           <Text style={styles.sectionTitle}>Visão por Fornecedor</Text>
-          {suppliers.map(sup => (
+          
+          <TextInput 
+            style={styles.searchInput}
+            placeholder="Buscar por nome..."
+            value={supplierSearch}
+            onChangeText={setSupplierSearch}
+          />
+
+          <View style={styles.filterRow}>
+            {['ALL', 'ACTIVE', 'OVERDUE', 'BLOCKED'].map(f => (
+                <TouchableOpacity 
+                    key={f} 
+                    style={[styles.filterChip, supplierFilter === f && styles.activeFilterChip]}
+                    onPress={() => setSupplierFilter(f)}
+                >
+                    <Text style={[styles.filterText, supplierFilter === f && styles.activeFilterText]}>
+                        {f === 'ALL' ? 'Todos' : f === 'ACTIVE' ? 'Ativos' : f === 'OVERDUE' ? 'Em Atraso' : 'Bloqueados'}
+                    </Text>
+                </TouchableOpacity>
+            ))}
+          </View>
+
+          {suppliers.length === 0 ? (
+             <Text style={styles.emptyText}>Nenhum fornecedor encontrado.</Text>
+          ) : (
+             suppliers.map(sup => (
               <View key={sup.id} style={styles.supplierCard}>
                   <View style={styles.rowBetween}>
                       <Text style={styles.supplierName}>{sup.name}</Text>
@@ -358,7 +469,8 @@ const AdminFinancialScreen = () => {
                     <Text style={styles.label}>Pedidos: {sup._count.orders}</Text>
                   </View>
               </View>
-          ))}
+             ))
+          )}
       </View>
   );
 
@@ -798,6 +910,39 @@ const styles = StyleSheet.create({
   modalConfirmText: {
       color: '#fff',
       fontWeight: 'bold',
+  },
+  searchInput: {
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 10,
+      marginBottom: 10,
+  },
+  filterRow: {
+      flexDirection: 'row',
+      marginBottom: 15,
+      gap: 8,
+  },
+  filterChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+  },
+  activeFilterChip: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+  },
+  filterText: {
+      fontSize: 12,
+      color: colors.textSecondary,
+  },
+  activeFilterText: {
+      color: '#fff',
+      fontWeight: '600',
   },
 });
 

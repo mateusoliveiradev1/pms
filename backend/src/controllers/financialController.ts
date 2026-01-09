@@ -318,7 +318,11 @@ export const updateFinancialSettings = async (req: Request, res: Response) => {
 
 export const getAdminSupplierFinancials = async (req: Request, res: Response) => {
     try {
-        const data = await FinancialService.getAdminSupplierFinancials();
+        const { search, status } = req.query;
+        const data = await FinancialService.getAdminSupplierFinancials(
+            search ? String(search) : undefined,
+            status ? String(status) : undefined
+        );
         res.json(data);
     } catch (error: any) {
         res.status(500).json({ message: 'Error fetching supplier financials', error: error.message });
@@ -327,7 +331,8 @@ export const getAdminSupplierFinancials = async (req: Request, res: Response) =>
 
 export const getAdminAuditLogs = async (req: Request, res: Response) => {
     try {
-        const logs = await FinancialService.getAdminAuditLogs();
+        const { action } = req.query;
+        const logs = await FinancialService.getAdminAuditLogs(action ? String(action) : undefined);
         res.json(logs);
     } catch (error: any) {
         res.status(500).json({ message: 'Error fetching audit logs', error: error.message });

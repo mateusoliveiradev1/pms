@@ -372,8 +372,19 @@ export const FinancialService = {
     };
   },
 
-  getAdminSupplierFinancials: async (): Promise<any[]> => {
+  getAdminSupplierFinancials: async (search?: string, statusFilter?: string): Promise<any[]> => {
+      const where: any = {};
+      
+      if (search) {
+          where.name = { contains: search, mode: 'insensitive' };
+      }
+      
+      if (statusFilter && statusFilter !== 'ALL') {
+          where.financialStatus = statusFilter;
+      }
+
       const suppliers = await prisma.supplier.findMany({
+          where,
           select: {
               id: true,
               name: true,
@@ -408,8 +419,14 @@ export const FinancialService = {
       }));
   },
 
-  getAdminAuditLogs: async (): Promise<any[]> => {
+  getAdminAuditLogs: async (actionFilter?: string): Promise<any[]> => {
+      const where: any = {};
+      if (actionFilter && actionFilter !== 'ALL') {
+          where.action = actionFilter;
+      }
+
       return await prisma.adminLog.findMany({
+          where,
           orderBy: { createdAt: 'desc' },
           take: 50
       });
@@ -429,10 +446,18 @@ export const FinancialService = {
   },
 
   getWithdrawalRequests: async (status: string = 'PENDING'): Promise<(WithdrawalRequest & { supplier: { name: string; billingDoc: string | null } })[]> => {
+    let whereStatus: any = status;
+    
+    if (status === 'HISTORY') {
+        whereStatus = { in: ['PAID', 'REJECTED'] };
+    } else if (status === 'ALL') {
+        whereStatus = undefined; // No filter
+    }
+
     return await prisma.withdrawalRequest.findMany({
-      where: { status },
+      where: status !== 'ALL' ? { status: whereStatus } : undefined,
       include: { supplier: { select: { name: true, billingDoc: true } } },
-      orderBy: { requestedAt: 'asc' }
+      orderBy: { requestedAt: 'desc' } // Changed to desc for history to make sense
     });
   },
 
