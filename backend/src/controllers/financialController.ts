@@ -14,6 +14,24 @@ export const checkOverdue = async (req: Request, res: Response) => {
 export const paySubscription = async (req: Request, res: Response) => {
   const { supplierId, amount, method } = req.body;
   try {
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    if (!authUser?.userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    if (authUser.role !== 'ADMIN') {
+      const supplier = await prisma.supplier.findUnique({ where: { id: String(supplierId) }, select: { userId: true } });
+      if (!supplier) {
+        res.status(404).json({ message: 'Supplier not found' });
+        return;
+      }
+      if (supplier.userId !== authUser.userId) {
+        res.status(403).json({ message: 'Forbidden' });
+        return;
+      }
+    }
+
     const result = await FinancialService.processSubscriptionPayment(
       String(supplierId),
       Number(amount),
@@ -27,8 +45,32 @@ export const paySubscription = async (req: Request, res: Response) => {
 
 export const getLedger = async (req: Request, res: Response) => {
   try {
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    if (!authUser?.userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
     const { supplierId } = req.query;
-    const where = supplierId ? { supplierId: String(supplierId) } : {};
+    if (supplierId && authUser.role !== 'ADMIN') {
+      const supplier = await prisma.supplier.findUnique({ where: { id: String(supplierId) }, select: { userId: true } });
+      if (!supplier) {
+        res.status(404).json({ message: 'Supplier not found' });
+        return;
+      }
+      if (supplier.userId !== authUser.userId) {
+        res.status(403).json({ message: 'Forbidden' });
+        return;
+      }
+    }
+
+    let where: any = {};
+    if (supplierId) {
+      where = { supplierId: String(supplierId) };
+    } else if (authUser.role !== 'ADMIN') {
+      const suppliers = await prisma.supplier.findMany({ where: { userId: authUser.userId }, select: { id: true } });
+      where = { supplierId: { in: suppliers.map(s => s.id) } };
+    }
     
     const ledger = await prisma.financialLedger.findMany({
       where,
@@ -45,29 +87,27 @@ export const getLedger = async (req: Request, res: Response) => {
 export const getSupplierFinancials = async (req: Request, res: Response) => {
     const { id } = req.params;
     try {
-        const supplier = await prisma.supplier.findUnique({
-            where: { id },
-            include: { plan: true }
-        });
-        
-        if (!supplier) return res.status(404).json({ message: 'Supplier not found' });
+        const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+        if (!authUser?.userId) {
+          res.status(401).json({ message: 'Unauthorized' });
+          return;
+        }
 
-        const ledger = await prisma.financialLedger.findMany({
-            where: { supplierId: id },
-            orderBy: { createdAt: 'desc' },
-            take: 20
-        });
-        
-        const subscription = await prisma.supplierSubscription.findFirst({
-            where: { supplierId: id, status: 'ATIVA' },
-            include: { plan: true }
-        });
+        // Permission check
+        if (authUser.role !== 'ADMIN') {
+             const supplierCheck = await prisma.supplier.findUnique({ where: { id }, select: { userId: true } });
+             if (!supplierCheck) {
+                 res.status(404).json({ message: 'Supplier not found' });
+                 return;
+             }
+             if (supplierCheck.userId !== authUser.userId) {
+                 res.status(403).json({ message: 'Forbidden' });
+                 return;
+             }
+        }
 
-        res.json({
-            supplier,
-            ledger,
-            subscription
-        });
+        const data = await FinancialService.getSupplierFinancials(id);
+        res.json(data);
     } catch (error: any) {
         res.status(500).json({ message: 'Error fetching supplier financials', error: error.message });
     }
@@ -76,6 +116,24 @@ export const getSupplierFinancials = async (req: Request, res: Response) => {
 export const withdrawFunds = async (req: Request, res: Response) => {
   const { supplierId, amount, pixKey } = req.body;
   try {
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    if (!authUser?.userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    if (authUser.role !== 'ADMIN') {
+      const supplier = await prisma.supplier.findUnique({ where: { id: String(supplierId) }, select: { userId: true } });
+      if (!supplier) {
+        res.status(404).json({ message: 'Supplier not found' });
+        return;
+      }
+      if (supplier.userId !== authUser.userId) {
+        res.status(403).json({ message: 'Forbidden' });
+        return;
+      }
+    }
+
     const result = await FinancialService.requestWithdrawal(
       String(supplierId),
       Number(amount),
@@ -90,6 +148,24 @@ export const withdrawFunds = async (req: Request, res: Response) => {
 export const changePlan = async (req: Request, res: Response) => {
   const { supplierId, planId } = req.body;
   try {
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    if (!authUser?.userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    if (authUser.role !== 'ADMIN') {
+      const supplier = await prisma.supplier.findUnique({ where: { id: String(supplierId) }, select: { userId: true } });
+      if (!supplier) {
+        res.status(404).json({ message: 'Supplier not found' });
+        return;
+      }
+      if (supplier.userId !== authUser.userId) {
+        res.status(403).json({ message: 'Forbidden' });
+        return;
+      }
+    }
+
     const supplier = await FinancialService.assignPlanToSupplier(String(supplierId), String(planId));
     res.json({ message: 'Plan changed successfully', supplier });
   } catch (error: any) {
@@ -101,6 +177,24 @@ export const updateBillingInfo = async (req: Request, res: Response) => {
   const { supplierId, billingName, billingDoc, billingAddress, billingEmail } = req.body;
   
   try {
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    if (!authUser?.userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    if (authUser.role !== 'ADMIN') {
+      const supplier = await prisma.supplier.findUnique({ where: { id: String(supplierId) }, select: { userId: true } });
+      if (!supplier) {
+        res.status(404).json({ message: 'Supplier not found' });
+        return;
+      }
+      if (supplier.userId !== authUser.userId) {
+        res.status(403).json({ message: 'Forbidden' });
+        return;
+      }
+    }
+
     const supplier = await prisma.supplier.update({
       where: { id: String(supplierId) },
       data: {
@@ -144,10 +238,13 @@ export const listWithdrawalRequests = async (req: Request, res: Response) => {
 export const approveWithdraw = async (req: Request, res: Response) => {
     const { id } = req.params;
     // @ts-ignore
-    const adminId = req.user?.id || 'admin'; // Fallback if no user attached (should be protected by auth middleware)
+    const adminId = req.user?.userId;
     
     try {
-        const request = await FinancialService.approveWithdrawal(id, adminId);
+        const adminUser = await prisma.user.findUnique({ where: { id: adminId } });
+        const adminName = adminUser?.name || 'Admin';
+
+        const request = await FinancialService.approveWithdrawal(id, adminId, adminName);
         res.json({ message: 'Withdrawal approved', request });
     } catch (error: any) {
         res.status(500).json({ message: 'Error approving withdrawal', error: error.message });
@@ -158,12 +255,63 @@ export const rejectWithdraw = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { reason } = req.body;
     // @ts-ignore
-    const adminId = req.user?.id || 'admin';
+    const adminId = req.user?.userId;
 
     try {
-        const request = await FinancialService.rejectWithdrawal(id, reason, adminId);
+        const adminUser = await prisma.user.findUnique({ where: { id: adminId } });
+        const adminName = adminUser?.name || 'Admin';
+
+        const request = await FinancialService.rejectWithdrawal(id, reason, adminId, adminName);
         res.json({ message: 'Withdrawal rejected', request });
     } catch (error: any) {
         res.status(500).json({ message: 'Error rejecting withdrawal', error: error.message });
+    }
+};
+
+export const getFinancialSettings = async (req: Request, res: Response) => {
+    try {
+        const settings = await prisma.financialSettings.findUnique({ where: { id: 'global' } });
+        res.json(settings);
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error fetching settings', error: error.message });
+    }
+};
+
+export const updateFinancialSettings = async (req: Request, res: Response) => {
+    const { defaultReleaseDays, defaultMinWithdrawal, defaultWithdrawalLimit } = req.body;
+    try {
+        const settings = await prisma.financialSettings.upsert({
+            where: { id: 'global' },
+            update: {
+                defaultReleaseDays,
+                defaultMinWithdrawal,
+                defaultWithdrawalLimit
+            },
+            create: {
+                id: 'global',
+                defaultReleaseDays,
+                defaultMinWithdrawal,
+                defaultWithdrawalLimit
+            }
+        });
+        
+        // Log this action
+        // @ts-ignore
+        const adminId = req.user?.userId;
+        if (adminId) {
+             const adminUser = await prisma.user.findUnique({ where: { id: adminId } });
+             await prisma.adminLog.create({
+                 data: {
+                     adminId,
+                     adminName: adminUser?.name || 'Admin',
+                     action: 'UPDATE_SETTINGS',
+                     details: JSON.stringify(settings)
+                 }
+             });
+        }
+
+        res.json({ message: 'Settings updated', settings });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error updating settings', error: error.message });
     }
 };

@@ -17,6 +17,7 @@ model User {
   password  String
   role      String   @default("OPERATOR") // ADMIN, OPERATOR
   expoPushToken String?
+  suppliers Supplier[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -31,10 +32,35 @@ model Plan {
   limitOrders     Int      @default(1000)
   commissionPercent Float  @default(10.0)
   priorityLevel   Int      @default(1)
+  
+  // Financial Limits
+  withdrawalLimit Int      @default(4) // Withdrawals per month
+  minWithdrawal   Float    @default(50.0)
+  releaseDays     Int      @default(14) // D+14 default
+  
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   suppliers    Supplier[]
   subscriptions SupplierSubscription[]
+}
+
+model FinancialSettings {
+  id              String   @id @default("global")
+  defaultReleaseDays Int @default(14)
+  defaultMinWithdrawal Float @default(50.0)
+  defaultWithdrawalLimit Int @default(4)
+  updatedAt       DateTime @updatedAt
+}
+
+model AdminLog {
+  id        String   @id @default(uuid())
+  adminId   String
+  adminName String
+  action    String   // APPROVE_WITHDRAWAL, REJECT_WITHDRAWAL, UPDATE_SETTINGS
+  targetId  String?  // ID of the affected entity (WithdrawalRequest, Supplier, etc.)
+  details   String?  // JSON string or description
+  reason    String?  // Mandatory for rejections
+  createdAt DateTime @default(now())
 }
 
 model Supplier {
@@ -43,6 +69,9 @@ model Supplier {
   integrationType String    // MANUAL, API
   shippingDeadline Int?     // Days
   status          String    @default("ACTIVE") // ACTIVE, PAUSED
+
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id])
   
   // Financial Fields
   planId          String?
@@ -74,6 +103,8 @@ model Supplier {
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
 }
 
 model Product {
@@ -186,6 +217,7 @@ model FinancialLedger {
   order       Order?   @relation(fields: [orderId], references: [id])
   description String?
   status      String   @default("COMPLETED") // COMPLETED, PENDING
+  releaseDate DateTime? // Date when funds become available
   createdAt   DateTime @default(now())
 }
 

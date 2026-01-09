@@ -4,14 +4,35 @@ import prisma from '../prisma';
 export const getProducts = async (req: Request, res: Response) => {
   try {
     const { query } = req.query as { query?: string };
-    const where = query
-      ? {
-          OR: [
+    const authUser = (req as any).user;
+    
+    let supplierFilter = undefined;
+    
+    // Filter by supplier if not Admin
+    if (authUser && authUser.role !== 'ADMIN') {
+        const supplier = await prisma.supplier.findFirst({ where: { userId: authUser.userId } });
+        if (supplier) {
+            supplierFilter = { some: { supplierId: supplier.id } };
+        } else {
+             // User is not admin and has no supplier profile? Return empty or error?
+             // For now, return empty
+             return res.json([]);
+        }
+    }
+
+    const where: any = {};
+    
+    if (query) {
+        where.OR = [
             { name: { contains: String(query), mode: 'insensitive' } },
             { sku: { contains: String(query), mode: 'insensitive' } },
-          ],
-        }
-      : undefined;
+        ];
+    }
+    
+    if (supplierFilter) {
+        where.suppliers = supplierFilter;
+    }
+
     const products = await prisma.product.findMany({
       where,
       include: { suppliers: { include: { supplier: true } } },

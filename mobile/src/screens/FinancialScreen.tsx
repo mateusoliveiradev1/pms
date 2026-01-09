@@ -10,7 +10,8 @@ import {
   Alert,
   Dimensions,
   Modal,
-  TextInput
+  TextInput,
+  Share
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -23,12 +24,13 @@ const { width } = Dimensions.get('window');
 
 interface LedgerEntry {
   id: string;
-  type: 'SUBSCRIPTION_PAYMENT' | 'SALE_COMMISSION' | 'PAYOUT' | 'ADJUSTMENT';
+  type: 'SUBSCRIPTION_PAYMENT' | 'SALE_COMMISSION' | 'PAYOUT' | 'ADJUSTMENT' | 'SALE_REVENUE';
   amount: number;
   description: string;
   status: string;
   createdAt: string;
   orderId?: string;
+  releaseDate?: string;
 }
 
 interface SupplierData {
@@ -59,13 +61,55 @@ interface SupplierSubscriptionData {
   plan: { id: string; name: string; cycleDays: number; limitOrders: number; commissionPercent: number };
 }
 
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'ACTIVE': return colors.success;
+    case 'OVERDUE': return colors.error;
+    case 'SUSPENDED': return colors.warning;
+    default: return colors.muted;
+  }
+};
+
+const getTypeLabel = (type: string) => {
+  switch (type) {
+    case 'SALE_REVENUE': return 'Venda Aprovada';
+    case 'PAYOUT': return 'Saque Realizado';
+    case 'SUBSCRIPTION_PAYMENT': return 'Pagamento Mensalidade';
+    case 'SALE_COMMISSION': return 'Comissão da Plataforma';
+    case 'ADJUSTMENT': return 'Ajuste Manual';
+    default: return type;
+  }
+};
+
+const getTypeIcon = (type: string) => {
+  switch (type) {
+    case 'PAYOUT': return 'arrow-up-circle-outline';
+    case 'SALE_REVENUE': return 'cash-outline';
+    case 'SUBSCRIPTION_PAYMENT': return 'card-outline';
+    case 'SALE_COMMISSION': return 'pricetag-outline';
+    default: return 'swap-horizontal-outline';
+  }
+};
+
+const isCredit = (type: string) => {
+    return type === 'SALE_REVENUE';
+};
+
 const FinancialScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (user?.role === 'ADMIN') {
+      // Redirect Admin to AdminFinancial if they somehow reach here
+      navigation.replace('AdminFinancial' as never);
+    }
+  }, [user, navigation]);
   
   const [supplier, setSupplier] = useState<SupplierData | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [subscription, setSubscription] = useState<SupplierSubscriptionData | null>(null);
+  const [limits, setLimits] = useState<{ min: number; limitCount: number; usedCount: number; remaining: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -78,6 +122,9 @@ const FinancialScreen = () => {
   const [addCardMode, setAddCardMode] = useState(false);
   const [planModalVisible, setPlanModalVisible] = useState(false);
   const [billingModalVisible, setBillingModalVisible] = useState(false);
+  const [pendingHelpModalVisible, setPendingHelpModalVisible] = useState(false);
+  const [receiptModalVisible, setReceiptModalVisible] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<LedgerEntry | null>(null);
 
   // Billing Form State
   const [billingName, setBillingName] = useState('');
@@ -128,6 +175,36 @@ const FinancialScreen = () => {
     }
   };
 
+  const handleViewReceipt = (entry: LedgerEntry) => {
+      setSelectedReceipt(entry);
+      setReceiptModalVisible(true);
+  };
+
+  const handleShareReceipt = async () => {
+      if (!selectedReceipt) return;
+      try {
+          const message = `
+COMPROVANTE DE TRANSAÇÃO - PMS
+--------------------------------
+Tipo: ${getTypeLabel(selectedReceipt.type)}
+Valor: R$ ${Math.abs(selectedReceipt.amount).toFixed(2)}
+Data: ${new Date(selectedReceipt.createdAt).toLocaleString('pt-BR')}
+ID Transação: ${selectedReceipt.id}
+Descrição: ${selectedReceipt.description}
+Status: ${selectedReceipt.status === 'COMPLETED' ? 'Concluído' : selectedReceipt.status === 'PENDING' ? 'Pendente' : selectedReceipt.status}
+--------------------------------
+Este é um comprovante digital gerado pelo sistema PMS.
+          `.trim();
+
+          await Share.share({
+              message: message,
+              title: 'Comprovante PMS'
+          });
+      } catch (error: any) {
+          Alert.alert('Erro', error.message);
+      }
+  };
+
   // New Card Form State
   const [newCardNumber, setNewCardNumber] = useState('');
   const [newCardName, setNewCardName] = useState('');
@@ -158,6 +235,7 @@ const FinancialScreen = () => {
         setSupplier(financialRes.data.supplier);
         setLedger(financialRes.data.ledger);
         setSubscription(financialRes.data.subscription || null);
+        setLimits(financialRes.data.withdrawalLimits || null);
       } else {
         console.log('Nenhum fornecedor encontrado.');
         Alert.alert('Aviso', 'Nenhum fornecedor vinculado a este usuário.');
@@ -368,6 +446,17 @@ const FinancialScreen = () => {
           return;
       }
 
+      if (limits) {
+          if (amount < limits.min) {
+              Alert.alert('Valor Mínimo', `O valor mínimo para saque é R$ ${limits.min.toFixed(2)}.`);
+              return;
+          }
+          if (limits.remaining <= 0) {
+              Alert.alert('Limite Atingido', `Você atingiu o limite mensal de ${limits.limitCount} saques.`);
+              return;
+          }
+      }
+
       if (!supplier || amount > supplier.walletBalance) {
           Alert.alert('Saldo Insuficiente', 'O valor solicitado é maior que seu saldo disponível.');
           return;
@@ -431,40 +520,6 @@ const FinancialScreen = () => {
       );
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ACTIVE': return colors.success;
-      case 'OVERDUE': return colors.error;
-      case 'SUSPENDED': return colors.warning;
-      default: return colors.muted;
-    }
-  };
-
-  const getTypeLabel = (type: string) => {
-    switch (type) {
-      case 'SALE_REVENUE': return 'Venda Aprovada';
-      case 'PAYOUT': return 'Saque Realizado';
-      case 'SUBSCRIPTION_PAYMENT': return 'Pagamento Mensalidade';
-      case 'SALE_COMMISSION': return 'Comissão da Plataforma';
-      case 'ADJUSTMENT': return 'Ajuste Manual';
-      default: return type;
-    }
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'PAYOUT': return 'arrow-up-circle-outline';
-      case 'SALE_REVENUE': return 'cash-outline';
-      case 'SUBSCRIPTION_PAYMENT': return 'card-outline';
-      case 'SALE_COMMISSION': return 'pricetag-outline';
-      default: return 'swap-horizontal-outline';
-    }
-  };
-
-  const isCredit = (type: string) => {
-      return type === 'SALE_REVENUE';
-  };
-
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
@@ -519,16 +574,20 @@ const FinancialScreen = () => {
                 </View>
             )}
             {(supplier?.pendingBalance || 0) > 0 && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                    <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.7)" />
-                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginLeft: 4 }}>
+                <TouchableOpacity 
+                    onPress={() => setPendingHelpModalVisible(true)}
+                    style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, alignSelf: 'flex-start' }}
+                >
+                    <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.9)" />
+                    <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, marginLeft: 4, marginRight: 4 }}>
                         A Liberar: R$ {supplier?.pendingBalance?.toFixed(2)}
                     </Text>
-                </View>
+                    <Ionicons name="help-circle-outline" size={14} color="rgba(255,255,255,0.6)" />
+                </TouchableOpacity>
             )}
             <View style={styles.walletFooter}>
                 <Text style={styles.walletSubtext}>
-                    {supplier?.plan?.name || 'Plano Básico'} • {subscription ? `Comissão ${subscription.plan.commissionPercent}%` : ''}
+                    {supplier?.plan?.name || 'Plano Básico'} • {subscription ? `Comissão ${subscription?.plan?.commissionPercent ?? 10}%` : ''}
                 </Text>
                 <View style={[styles.statusPill, { backgroundColor: supplier?.financialStatus === 'ACTIVE' ? 'rgba(40, 167, 69, 0.3)' : 'rgba(220, 53, 69, 0.3)' }]}>
                     <Text style={styles.statusPillText}>
@@ -559,6 +618,70 @@ const FinancialScreen = () => {
                 <Text style={styles.actionLabel}>Configurar</Text>
             </TouchableOpacity>
         </View>
+
+        {/* Pending Releases */}
+        {ledger.some(item => item.status === 'PENDING' && item.releaseDate) && (
+            <View style={{ marginBottom: 24 }}>
+                <Text style={styles.sectionTitle}>Próximas Liberações</Text>
+                <View style={styles.card}>
+                    {(() => {
+                        const pendingItems = ledger
+                            .filter(item => item.status === 'PENDING' && item.releaseDate)
+                            .sort((a, b) => new Date(a.releaseDate!).getTime() - new Date(b.releaseDate!).getTime())
+                            .slice(0, 5);
+
+                        return pendingItems.map((item, index) => {
+                            const releaseDate = new Date(item.releaseDate!);
+                            const today = new Date();
+                            const isToday = releaseDate.toDateString() === today.toDateString();
+                            
+                            return (
+                                <View key={item.id} style={{ 
+                                    flexDirection: 'row', 
+                                    justifyContent: 'space-between', 
+                                    alignItems: 'center',
+                                    paddingVertical: 14,
+                                    borderBottomWidth: index < pendingItems.length - 1 ? 1 : 0,
+                                    borderBottomColor: colors.border
+                                }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                        <View style={{ 
+                                            width: 40, height: 40, borderRadius: 20, 
+                                            backgroundColor: isToday ? '#E8F5E9' : '#FFF3E0', 
+                                            alignItems: 'center', justifyContent: 'center', marginRight: 12 
+                                        }}>
+                                            <Ionicons 
+                                                name={isToday ? "checkmark-circle-outline" : "time-outline"} 
+                                                size={20} 
+                                                color={isToday ? colors.success : colors.warning} 
+                                            />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text }} numberOfLines={1}>
+                                                {item.description || 'Receita Pendente'}
+                                            </Text>
+                                            <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>
+                                                {isToday ? 'Libera Hoje' : `Libera em ${releaseDate.toLocaleDateString('pt-BR')}`}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <View style={{ alignItems: 'flex-end' }}>
+                                        <Text style={{ fontSize: 14, fontWeight: '700', color: colors.text }}>
+                                            R$ {item.amount.toFixed(2)}
+                                        </Text>
+                                        {item.orderId && (
+                                            <Text style={{ fontSize: 10, color: colors.muted, marginTop: 2 }}>
+                                                Pedido #{item.orderId.substring(0,8)}
+                                            </Text>
+                                        )}
+                                    </View>
+                                </View>
+                            );
+                        });
+                    })()}
+                </View>
+            </View>
+        )}
 
         {/* Subscription Status */}
         <Text style={styles.sectionTitle}>Assinatura</Text>
@@ -684,6 +807,15 @@ const FinancialScreen = () => {
                                 <Text style={styles.transactionDate}>
                                     {new Date(item.createdAt).toLocaleDateString('pt-BR')} • {item.description}
                                 </Text>
+                                {item.type === 'PAYOUT' && (
+                                    <TouchableOpacity 
+                                        style={{ marginTop: 4, flexDirection: 'row', alignItems: 'center' }}
+                                        onPress={() => handleViewReceipt(item)}
+                                    >
+                                        <Ionicons name="receipt-outline" size={14} color={colors.primary} />
+                                        <Text style={{ fontSize: 12, color: colors.primary, marginLeft: 4 }}>Ver Comprovante</Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
                             <Text style={[styles.transactionAmount, { 
                                 color: isCredit(item.type) ? colors.success : colors.error 
@@ -695,6 +827,76 @@ const FinancialScreen = () => {
                   </ScrollView>
               </View>
           </View>
+      </Modal>
+
+      {/* 7. Receipt Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={receiptModalVisible}
+        onRequestClose={() => setReceiptModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+            <View style={[styles.modalContent, { width: '85%' }]}>
+                <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                    <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#E8F5E9', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                        <Ionicons name="checkmark-circle" size={32} color={colors.success} />
+                    </View>
+                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text }}>Comprovante de Saque</Text>
+                    <Text style={{ fontSize: 14, color: colors.muted, marginTop: 4 }}>PMS Marketplace</Text>
+                </View>
+
+                {selectedReceipt && (
+                    <View style={{ backgroundColor: '#F8F9FA', padding: 16, borderRadius: 12, marginBottom: 20 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                            <Text style={{ color: colors.muted }}>Valor</Text>
+                            <Text style={{ fontWeight: 'bold', fontSize: 16, color: colors.text }}>
+                                R$ {Math.abs(selectedReceipt.amount).toFixed(2)}
+                            </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                            <Text style={{ color: colors.muted }}>Data</Text>
+                            <Text style={{ color: colors.text }}>
+                                {new Date(selectedReceipt.createdAt).toLocaleDateString('pt-BR')}
+                            </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 }}>
+                            <Text style={{ color: colors.muted }}>Hora</Text>
+                            <Text style={{ color: colors.text }}>
+                                {new Date(selectedReceipt.createdAt).toLocaleTimeString('pt-BR')}
+                            </Text>
+                        </View>
+                        <View style={{ marginBottom: 12 }}>
+                            <Text style={{ color: colors.muted, marginBottom: 4 }}>Descrição</Text>
+                            <Text style={{ color: colors.text, fontWeight: '500' }}>
+                                {selectedReceipt.description}
+                            </Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingTop: 12, borderTopWidth: 1, borderTopColor: '#E0E0E0' }}>
+                            <Text style={{ color: colors.muted }}>ID da Transação</Text>
+                            <Text style={{ color: colors.text, fontSize: 10 }}>
+                                {selectedReceipt.id}
+                            </Text>
+                        </View>
+                    </View>
+                )}
+
+                <TouchableOpacity 
+                    style={[styles.saveButton, { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }]} 
+                    onPress={handleShareReceipt}
+                >
+                    <Ionicons name="share-social-outline" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.saveButtonText}>Compartilhar Comprovante</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                    style={[styles.cancelButton, { marginTop: 12 }]} 
+                    onPress={() => setReceiptModalVisible(false)}
+                >
+                    <Text style={styles.cancelButtonText}>Fechar</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
       </Modal>
 
       {/* 2. Cards Modal */}
@@ -881,6 +1083,55 @@ const FinancialScreen = () => {
         </View>
       </Modal>
 
+      {/* 6. Pending Help Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={pendingHelpModalVisible}
+        onRequestClose={() => setPendingHelpModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { width: '85%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Sobre o Saldo a Liberar</Text>
+              <TouchableOpacity onPress={() => setPendingHelpModalVisible(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ paddingVertical: 10 }}>
+                <View style={{ flexDirection: 'row', marginBottom: 16 }}>
+                    <Ionicons name="time-outline" size={24} color={colors.primary} style={{ marginRight: 12 }} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 4 }}>
+                            Prazo de Liberação
+                        </Text>
+                        <Text style={{ fontSize: 14, color: colors.muted, lineHeight: 20 }}>
+                            Os valores das vendas ficam pendentes por um período de segurança (geralmente 14 a 30 dias após a entrega), conforme seu plano.
+                        </Text>
+                    </View>
+                </View>
+                <View style={{ flexDirection: 'row' }}>
+                    <Ionicons name="shield-checkmark-outline" size={24} color={colors.success} style={{ marginRight: 12 }} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 4 }}>
+                            Segurança
+                        </Text>
+                        <Text style={{ fontSize: 14, color: colors.muted, lineHeight: 20 }}>
+                            Isso garante que, em caso de devolução ou disputa, o valor possa ser estornado sem prejudicar seu saldo negativo.
+                        </Text>
+                    </View>
+                </View>
+            </View>
+            <TouchableOpacity 
+                style={[styles.saveButton, { marginTop: 20 }]} 
+                onPress={() => setPendingHelpModalVisible(false)}
+            >
+                <Text style={styles.saveButtonText}>Entendi</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* 4. Withdraw Modal */}
       <Modal
         animationType="fade"
@@ -889,7 +1140,7 @@ const FinancialScreen = () => {
         onRequestClose={() => setWithdrawModalVisible(false)}
       >
           <View style={styles.modalOverlay}>
-              <View style={[styles.modalContent, { width: '85%' }]}>
+              <View style={[styles.modalContent, { width: '90%', maxWidth: 400 }]}>
                   <View style={styles.modalHeader}>
                       <Text style={styles.modalTitle}>Solicitar Saque</Text>
                       <TouchableOpacity onPress={() => setWithdrawModalVisible(false)}>
@@ -897,15 +1148,50 @@ const FinancialScreen = () => {
                       </TouchableOpacity>
                   </View>
                   
+                  {limits && (
+                      <View style={{ marginBottom: 20, backgroundColor: '#F8F9FA', padding: 12, borderRadius: 8 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
+                              <Text style={{ fontSize: 12, color: colors.muted }}>Limite Mensal</Text>
+                              <Text style={{ fontSize: 12, fontWeight: '600', color: colors.text }}>
+                                  {limits.usedCount} / {limits.limitCount} saques
+                              </Text>
+                          </View>
+                          <View style={{ height: 6, backgroundColor: '#E0E0E0', borderRadius: 3, overflow: 'hidden' }}>
+                              <View style={{ 
+                                  width: `${Math.min((limits.usedCount / limits.limitCount) * 100, 100)}%`, 
+                                  height: '100%', 
+                                  backgroundColor: limits.remaining > 0 ? colors.success : colors.error 
+                              }} />
+                          </View>
+                          <Text style={{ fontSize: 11, color: colors.muted, marginTop: 6 }}>
+                              Mínimo por saque: R$ {limits.min.toFixed(2)}
+                          </Text>
+                      </View>
+                  )}
+
                   <Text style={styles.withdrawLabel}>Valor do Saque (R$)</Text>
-                  <TextInput 
-                      style={styles.input}
-                      keyboardType="numeric"
-                      placeholder="0.00"
-                      value={withdrawAmount}
-                      onChangeText={setWithdrawAmount}
-                  />
-                  <Text style={styles.balanceHint}>Disponível: R$ {supplier?.walletBalance.toFixed(2)}</Text>
+                  <View style={{ 
+                      flexDirection: 'row', alignItems: 'center', 
+                      borderWidth: 1, borderColor: '#DDD', borderRadius: 8, 
+                      paddingHorizontal: 12, marginBottom: 4, backgroundColor: '#FAFAFA' 
+                  }}>
+                    <Text style={{ fontSize: 16, color: colors.text, marginRight: 8, fontWeight: '600' }}>R$</Text>
+                    <TextInput 
+                        style={{ flex: 1, height: 48, fontSize: 16, color: colors.text }}
+                        keyboardType="numeric"
+                        placeholder="0.00"
+                        value={withdrawAmount}
+                        onChangeText={setWithdrawAmount}
+                    />
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 }}>
+                      <Text style={styles.balanceHint}>
+                          Disponível: R$ {supplier?.walletBalance.toFixed(2)}
+                      </Text>
+                      <TouchableOpacity onPress={() => setWithdrawAmount(supplier?.walletBalance.toString() || '0')}>
+                          <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '600' }}>Máximo</Text>
+                      </TouchableOpacity>
+                  </View>
 
                   <Text style={styles.withdrawLabel}>Chave PIX</Text>
                   <TextInput 
@@ -915,8 +1201,18 @@ const FinancialScreen = () => {
                       onChangeText={setWithdrawPixKey}
                   />
 
-                  <TouchableOpacity style={styles.saveButton} onPress={handleWithdraw}>
-                      <Text style={styles.saveButtonText}>Confirmar Saque</Text>
+                  <TouchableOpacity 
+                    style={[
+                        styles.saveButton, 
+                        (limits && limits.remaining <= 0) || (parseFloat(withdrawAmount || '0') < (limits?.min || 0)) 
+                        ? { backgroundColor: '#ccc' } : {}
+                    ]} 
+                    onPress={handleWithdraw}
+                    disabled={(limits && limits.remaining <= 0)}
+                  >
+                      <Text style={styles.saveButtonText}>
+                          {limits && limits.remaining <= 0 ? 'Limite Atingido' : 'Confirmar Saque'}
+                      </Text>
                   </TouchableOpacity>
               </View>
           </View>

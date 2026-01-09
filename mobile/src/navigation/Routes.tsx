@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import SplashScreen from '../screens/SplashScreen';
 
 import LoginScreen from '../screens/LoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import OrdersListScreen from '../screens/Orders/OrdersListScreen';
 import OrderFormScreen from '../screens/Orders/OrderFormScreen';
@@ -15,6 +16,7 @@ import OrderDetailsScreen from '../screens/Orders/OrderDetailsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import FinancialScreen from '../screens/FinancialScreen';
+import AdminFinancialScreen from '../screens/AdminFinancialScreen';
 
 import SuppliersListScreen from '../screens/Suppliers/SuppliersListScreen';
 import SupplierFormScreen from '../screens/Suppliers/SupplierFormScreen';
@@ -94,9 +96,13 @@ const Routes = () => {
             <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
             <Stack.Screen name="Reports" component={ReportsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Financial" component={FinancialScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AdminFinancial" component={AdminFinancialScreen} options={{ headerShown: false }} />
           </>
         ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

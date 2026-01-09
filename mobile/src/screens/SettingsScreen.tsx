@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import api from '../services/api';
@@ -10,7 +11,8 @@ import Header from '../ui/components/Header';
 import { colors, shadow } from '../ui/theme';
 
 const SettingsScreen = () => {
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
   const [mlConnected, setMlConnected] = useState(false);
   const [mlSellerId, setMlSellerId] = useState<string | null>(null);
@@ -70,7 +72,6 @@ const SettingsScreen = () => {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Integrações</Text>
-          
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={styles.cardIcon}>

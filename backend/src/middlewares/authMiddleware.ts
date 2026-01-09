@@ -10,12 +10,14 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
+    console.log('Auth Error: No token provided');
     res.sendStatus(401);
     return; 
   }
 
   jwt.verify(token, process.env.JWT_SECRET as string, (err: any, user: any) => {
     if (err) {
+        console.log('Auth Error: Invalid token', err.message);
         res.sendStatus(403);
         return;
     }

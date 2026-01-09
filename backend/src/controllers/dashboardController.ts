@@ -3,12 +3,37 @@ import prisma from '../prisma';
 
 export const getDashboardStats = async (req: Request, res: Response) => {
   try {
-    const totalProducts = await prisma.product.count();
-    const totalOrders = await prisma.order.count();
+    const authUser = (req as any).user;
+    let supplierId: string | undefined = undefined;
+
+    if (authUser && authUser.role !== 'ADMIN') {
+        const supplier = await prisma.supplier.findFirst({ where: { userId: authUser.userId } });
+        if (supplier) {
+            supplierId = supplier.id;
+        } else {
+            // No supplier profile found for non-admin user
+            return res.json({
+                totalProducts: 0,
+                totalOrders: 0,
+                lowStockProducts: 0,
+                pendingOrders: 0,
+                totalSales: 0,
+                totalProfit: 0
+            });
+        }
+    }
+
+    // Filters
+    const productWhere = supplierId ? { suppliers: { some: { supplierId } } } : {};
+    const orderWhere = supplierId ? { supplierId } : {}; // Assuming Order has supplierId linked
+
+    const totalProducts = await prisma.product.count({ where: productWhere });
+    const totalOrders = await prisma.order.count({ where: orderWhere });
     
     // Produtos com estoque baixo (ex: < 5)
     const lowStockProducts = await prisma.product.count({
         where: {
+            ...productWhere,
             stockAvailable: {
                 lt: 5
             }
@@ -18,6 +43,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
     // Pedidos pendentes (ex: NEW ou SENT_TO_SUPPLIER)
     const pendingOrders = await prisma.order.count({
         where: {
+            ...orderWhere,
             status: {
                 in: ['NEW', 'SENT_TO_SUPPLIER']
             }
@@ -30,6 +56,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
             totalAmount: true
         },
         where: {
+            ...orderWhere,
             status: {
                 not: 'CANCELLED'
             }
@@ -39,18 +66,36 @@ export const getDashboardStats = async (req: Request, res: Response) => {
     const totalSales = totalSalesAggregate._sum.totalAmount || 0;
 
     // Lucro estimado: soma de (preço venda - custo fornecedor principal) * qtd, em pedidos não cancelados
-    const ordersForProfit = await prisma.order.findMany({
-        where: { status: { not: 'CANCELLED' } },
-        include: { items: { include: { product: { include: { suppliers: true } } } } }
-    });
+    // Se for Supplier, o lucro dele é (Preço Pago pelo Admin - Custo Dele)? 
+    // Ou (Preço Venda - Comissao)?
+    // O model atual tem `supplierPayout` no Order.
+    // Se supplierId definido, vamos usar supplierPayout.
+    
     let totalProfit = 0;
-    for (const order of ordersForProfit) {
-        for (const item of order.items) {
-            const product = item.product as any;
-            const primarySupplier = (product.suppliers || [])[0];
-            const cost = primarySupplier ? Number(primarySupplier.supplierPrice) : 0;
-            const revenue = Number(item.price);
-            totalProfit += (revenue - cost) * Number(item.quantity);
+
+    if (supplierId) {
+        // For Supplier: Profit is the Payout sum? Or Payout - (Virtual Cost)?
+        // Let's assume Profit = Payouts for now (Revenue for Supplier).
+        const payoutAggregate = await prisma.order.aggregate({
+            _sum: { supplierPayout: true },
+            where: { ...orderWhere, status: { not: 'CANCELLED' } }
+        });
+        totalProfit = payoutAggregate._sum.supplierPayout || 0;
+    } else {
+        // For Admin: Existing logic (Revenue - Cost)
+        const ordersForProfit = await prisma.order.findMany({
+            where: { status: { not: 'CANCELLED' } },
+            include: { items: { include: { product: { include: { suppliers: true } } } } }
+        });
+        
+        for (const order of ordersForProfit) {
+            for (const item of order.items) {
+                const product = item.product as any;
+                const primarySupplier = (product.suppliers || [])[0];
+                const cost = primarySupplier ? Number(primarySupplier.supplierPrice) : 0;
+                const revenue = Number(item.price);
+                totalProfit += (revenue - cost) * Number(item.quantity);
+            }
         }
     }
 

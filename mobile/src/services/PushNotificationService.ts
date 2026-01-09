@@ -15,6 +15,15 @@ Notifications.setNotificationHandler({
 });
 
 export async function registerForPushNotificationsAsync() {
+  // Check if running in Expo Go to avoid "functionality removed" error
+  // SDK 53+ removes remote notifications from Expo Go entirely
+  const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+    
+  if (isExpoGo) {
+      console.log('Push Notifications are disabled in Expo Go (SDK 53+ restriction).');
+      return null;
+  }
+
   if (Platform.OS === 'android') {
     try {
       await Notifications.setNotificationChannelAsync('default', {
@@ -49,7 +58,11 @@ export async function registerForPushNotificationsAsync() {
   
   try {
     // Check if running in Expo Go to avoid "functionality removed" error
-    if (Constants.appOwnership === 'expo') {
+    // SDK 53+ removes remote notifications from Expo Go entirely
+    const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+    
+    if (isExpoGo) {
+        console.log('Push Notifications are disabled in Expo Go (SDK 53+ restriction).');
         return null;
     }
 

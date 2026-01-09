@@ -68,7 +68,7 @@ const StatCard = ({ title, value, icon, color, onPress }: StatCardProps) => (
 const DashboardScreen = () => {
   const { user } = useAuth();
   const isFocused = useIsFocused();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   
   const [products, setProducts] = useState<Product[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
@@ -206,10 +206,16 @@ const DashboardScreen = () => {
           />
           <StatCard 
             title="Financeiro" 
-            value="Carteira"
+            value={user?.role === 'ADMIN' ? 'Plataforma' : 'Carteira'}
             icon="wallet-outline" 
             color={colors.info} 
-            onPress={() => navigation.navigate('Financial' as never)}
+            onPress={() => {
+              if (user?.role === 'ADMIN') {
+                navigation.navigate('AdminFinancial' as never);
+              } else {
+                navigation.navigate('Financial' as never);
+              }
+            }}
           />
         </View>
 

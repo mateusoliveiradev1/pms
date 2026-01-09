@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Input from '../ui/components/Input';
@@ -12,6 +13,7 @@ const LoginScreen = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
+  const navigation = useNavigation();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -68,6 +70,10 @@ const LoginScreen = () => {
           <Button title={loading ? 'Entrando...' : 'Entrar'} onPress={handleLogin} disabled={loading} />
         </View>
 
+        <TouchableOpacity style={styles.registerButton} onPress={() => navigation.navigate('Register' as never)}>
+            <Text style={styles.registerText}>Não tem uma conta? <Text style={styles.registerLink}>Cadastre-se</Text></Text>
+        </TouchableOpacity>
+
         <View style={styles.footer}>
             <Text style={styles.footerText}>Versão 1.0.0</Text>
         </View>
@@ -122,6 +128,18 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: 14,
     fontWeight: '500',
+  },
+  registerButton: {
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  registerText: {
+    color: '#6E7687',
+    fontSize: 14,
+  },
+  registerLink: {
+    color: colors.primary,
+    fontWeight: 'bold',
   },
   footer: {
     marginTop: 40,

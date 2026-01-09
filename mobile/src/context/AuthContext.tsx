@@ -3,18 +3,26 @@ import * as SecureStore from 'expo-secure-store';
 import api from '../services/api';
 import { registerForPushNotificationsAsync } from '../services/PushNotificationService';
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
 interface AuthContextData {
   signed: boolean;
-  user: object | null;
+  user: User | null;
   loading: boolean;
   signIn: (email: string, pass: string) => Promise<void>;
+  signUp: (data: any) => Promise<void>;
   signOut: () => void;
 }
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<object | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -52,6 +60,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     registerForPushNotificationsAsync().catch(console.log);
   }
 
+  async function signUp(data: any) {
+    const response = await api.post('/auth/register', data);
+    const { token, user } = response.data;
+
+    await SecureStore.setItemAsync('token', token);
+    await SecureStore.setItemAsync('user', JSON.stringify(user));
+
+    api.defaults.headers['Authorization'] = `Bearer ${token}`;
+    setUser(user);
+
+    registerForPushNotificationsAsync().catch(console.log);
+  }
+
   async function signOut() {
     await SecureStore.deleteItemAsync('token');
     await SecureStore.deleteItemAsync('user');
@@ -59,7 +80,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   return (
-    <AuthContext.Provider value={{ signed: !!user, user, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ signed: !!user, user, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

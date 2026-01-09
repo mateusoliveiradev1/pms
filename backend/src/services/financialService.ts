@@ -73,7 +73,49 @@ export const FinancialService = {
   // CARTEIRA DO FORNECEDOR (SUPPLIER WALLET)
   // ==========================================
 
+  processReleases: async (supplierId: string) => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const now = new Date();
+        
+        // Find pending items that are ready to be released
+        const releasableItems = await tx.financialLedger.findMany({
+            where: {
+                supplierId,
+                status: 'PENDING',
+                releaseDate: { lte: now }
+            }
+        });
+
+        if (releasableItems.length === 0) return { releasedAmount: 0, count: 0 };
+
+        let totalReleased = 0;
+        
+        for (const item of releasableItems) {
+            totalReleased += item.amount;
+            await tx.financialLedger.update({
+                where: { id: item.id },
+                data: { status: 'COMPLETED' }
+            });
+        }
+
+        if (totalReleased > 0) {
+            await tx.supplier.update({
+                where: { id: supplierId },
+                data: {
+                    walletBalance: { increment: totalReleased },
+                    pendingBalance: { decrement: totalReleased }
+                }
+            });
+        }
+
+        return { releasedAmount: totalReleased, count: releasableItems.length };
+    });
+  },
+
   getSupplierWallet: async (supplierId: string): Promise<SupplierWallet> => {
+    // Process releases before fetching
+    await FinancialService.processReleases(supplierId);
+
     const supplier = await prisma.supplier.findUnique({
       where: { id: supplierId },
       select: {
@@ -81,7 +123,8 @@ export const FinancialService = {
         pendingBalance: true,
         blockedBalance: true,
         verificationStatus: true,
-        financialStatus: true
+        financialStatus: true,
+        plan: true
       }
     });
     
@@ -116,10 +159,87 @@ export const FinancialService = {
     };
   },
 
+  getSupplierFinancials: async (supplierId: string): Promise<any> => {
+    // Process releases first
+    await FinancialService.processReleases(supplierId);
+
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      include: { plan: true }
+    });
+    if (!supplier) throw new Error('Supplier not found');
+
+    const ledger = await prisma.financialLedger.findMany({
+      where: { supplierId },
+      orderBy: { createdAt: 'desc' },
+      take: 50
+    });
+
+    const subscription = await prisma.supplierSubscription.findFirst({
+      where: { supplierId, status: 'ATIVA' },
+      include: { plan: true }
+    });
+
+    // Calculate Limits
+    const settings = await prisma.financialSettings.findUnique({ where: { id: 'global' } });
+    const minWithdrawal = supplier.plan?.minWithdrawal || settings?.defaultMinWithdrawal || 50;
+    const limitCount = supplier.plan?.withdrawalLimit || settings?.defaultWithdrawalLimit || 4;
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0,0,0,0);
+
+    const usedCount = await prisma.withdrawalRequest.count({
+      where: {
+        supplierId,
+        requestedAt: { gte: startOfMonth }
+      }
+    });
+
+    return { 
+      supplier, 
+      ledger, 
+      subscription,
+      withdrawalLimits: {
+        min: minWithdrawal,
+        limitCount: limitCount,
+        usedCount: usedCount,
+        remaining: Math.max(0, limitCount - usedCount)
+      }
+    };
+  },
+
   requestWithdrawal: async (supplierId: string, amount: number, pixKey?: string): Promise<WithdrawalRequest> => {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const supplier = await tx.supplier.findUnique({ where: { id: supplierId } });
+      const supplier = await tx.supplier.findUnique({ 
+          where: { id: supplierId },
+          include: { plan: true } 
+      });
       if (!supplier) throw new Error('Supplier not found');
+
+      const settings = await tx.financialSettings.findUnique({ where: { id: 'global' } });
+      const minWithdrawal = supplier.plan?.minWithdrawal || settings?.defaultMinWithdrawal || 50;
+      const withdrawalLimit = supplier.plan?.withdrawalLimit || settings?.defaultWithdrawalLimit || 4;
+
+      if (amount < minWithdrawal) {
+          throw new Error(`O valor mínimo para saque é R$ ${minWithdrawal.toFixed(2)}`);
+      }
+
+      // Check monthly limit
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0,0,0,0);
+      
+      const withdrawalsThisMonth = await tx.withdrawalRequest.count({
+          where: {
+              supplierId,
+              requestedAt: { gte: startOfMonth }
+          }
+      });
+
+      if (withdrawalsThisMonth >= withdrawalLimit) {
+          throw new Error(`Limite mensal de saques atingido (${withdrawalLimit}).`);
+      }
 
       if (supplier.verificationStatus !== 'VERIFIED') {
         throw new Error('Conta não verificada. Complete a verificação para sacar.');
@@ -203,7 +323,7 @@ export const FinancialService = {
     });
   },
 
-  approveWithdrawal: async (requestId: string, adminId: string): Promise<WithdrawalRequest> => {
+  approveWithdrawal: async (requestId: string, adminId: string, adminName: string): Promise<WithdrawalRequest> => {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const req = await tx.withdrawalRequest.findUnique({ 
         where: { id: requestId },
@@ -223,7 +343,7 @@ export const FinancialService = {
       const updatedReq = await tx.withdrawalRequest.update({
         where: { id: requestId },
         data: {
-          status: 'APPROVED', 
+          status: 'PAID', 
           processedAt: new Date(),
           processedBy: adminId
         }
@@ -240,11 +360,22 @@ export const FinancialService = {
         }
       });
 
+      // 4. Admin Log
+      await tx.adminLog.create({
+          data: {
+              adminId,
+              adminName,
+              action: 'APPROVE_WITHDRAWAL',
+              targetId: requestId,
+              details: `Approved withdrawal of R$ ${req.amount}`
+          }
+      });
+
       return updatedReq;
     });
   },
 
-  rejectWithdrawal: async (requestId: string, reason: string, adminId: string): Promise<WithdrawalRequest> => {
+  rejectWithdrawal: async (requestId: string, reason: string, adminId: string, adminName: string): Promise<WithdrawalRequest> => {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const req = await tx.withdrawalRequest.findUnique({ where: { id: requestId } });
       if (!req || req.status !== 'PENDING') throw new Error('Request not pending');
@@ -259,7 +390,7 @@ export const FinancialService = {
       });
 
       // 2. Update Request
-      return await tx.withdrawalRequest.update({
+      const updatedReq = await tx.withdrawalRequest.update({
         where: { id: requestId },
         data: {
           status: 'REJECTED',
@@ -268,6 +399,20 @@ export const FinancialService = {
           processedBy: adminId
         }
       });
+
+      // 3. Admin Log
+      await tx.adminLog.create({
+        data: {
+            adminId,
+            adminName,
+            action: 'REJECT_WITHDRAWAL',
+            targetId: requestId,
+            reason: reason,
+            details: `Rejected withdrawal of R$ ${req.amount}`
+        }
+      });
+
+      return updatedReq;
     });
   },
 
@@ -279,7 +424,7 @@ export const FinancialService = {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const order = await tx.order.findUnique({
         where: { id: orderId },
-        include: { supplier: true }
+        include: { supplier: { include: { plan: true } } }
       });
 
       if (!order) throw new Error('Order not found');
@@ -287,12 +432,17 @@ export const FinancialService = {
       if (order.financialStatus === 'RELEASED') throw new Error('Payout already released for this order');
       if (!order.supplier) throw new Error('Order has no linked supplier');
 
-      // Move from Pending to Available
+      // Calculate Release Date
+      const settings = await tx.financialSettings.findUnique({ where: { id: 'global' } });
+      const releaseDays = order.supplier.plan?.releaseDays || settings?.defaultReleaseDays || 14;
+      const releaseDate = new Date();
+      releaseDate.setDate(releaseDate.getDate() + releaseDays);
+
+      // Add to Pending Balance (It will be moved to Available later by processReleases)
       await tx.supplier.update({
         where: { id: order.supplier.id },
         data: {
-          pendingBalance: { decrement: order.supplierPayout },
-          walletBalance: { increment: order.supplierPayout }
+          pendingBalance: { increment: order.supplierPayout }
         }
       });
 
@@ -301,7 +451,7 @@ export const FinancialService = {
         data: { financialStatus: 'RELEASED' }
       });
 
-      // Ledger Entry: Revenue Released to Wallet
+      // Ledger Entry: Revenue Released to Pending
       await tx.financialLedger.create({
         data: {
           type: 'SALE_REVENUE', 
@@ -309,11 +459,12 @@ export const FinancialService = {
           supplierId: order.supplier.id,
           orderId: order.id,
           description: `Receita de venda #${order.id.slice(0,8)}`,
-          status: 'COMPLETED'
+          status: 'PENDING',
+          releaseDate: releaseDate
         }
       });
 
-      // Ledger Entry: Platform Commission
+      // Ledger Entry: Platform Commission (Completed immediately)
       await tx.financialLedger.create({
         data: {
           type: 'SALE_COMMISSION',

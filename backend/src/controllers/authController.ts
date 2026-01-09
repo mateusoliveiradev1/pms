@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '../prisma';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role, supplierName } = req.body;
 
   try {
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -15,17 +15,47 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-        role: role || 'OPERATOR',
-      },
+    const result = await prisma.$transaction(async (prisma) => {
+      const user = await prisma.user.create({
+        data: {
+          name,
+          email,
+          password: hashedPassword,
+          role: role || (supplierName ? 'SUPPLIER' : 'OPERATOR'),
+        },
+      });
+
+      if (supplierName) {
+        await prisma.supplier.create({
+          data: {
+            name: supplierName,
+            integrationType: 'MANUAL',
+            status: 'ACTIVE',
+            financialStatus: 'ACTIVE',
+            verificationStatus: 'PENDING',
+            userId: user.id,
+          },
+        });
+      }
+
+      return user;
     });
 
-    res.status(201).json({ message: 'User created successfully', userId: user.id });
+    // Auto-login after registration
+    const token = jwt.sign(
+      { userId: result.id, email: result.email, role: result.role },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '30d' }
+    );
+
+    res.status(201).json({ 
+      message: 'User created successfully', 
+      token, 
+      user: { id: result.id, name: result.name, email: result.email, role: result.role } 
+    });
+
   } catch (error) {
+    console.error('Registration error:', error);
     res.status(500).json({ message: 'Error registering user', error });
   }
 };
