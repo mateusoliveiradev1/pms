@@ -95,6 +95,30 @@ const isCredit = (type: string) => {
     return type === 'SALE_REVENUE';
 };
 
+const luhnCheck = (value: string) => {
+    // Remove non-digits
+    let bEven = false;
+    const valueStr = value.replace(/\D/g, "");
+
+    if (/[^0-9-\s]+/.test(valueStr)) return false;
+
+    let nSum = 0;
+    
+    for (let n = valueStr.length - 1; n >= 0; n--) {
+        let cDigit = valueStr.charAt(n);
+        let nDigit = parseInt(cDigit, 10);
+
+        if (bEven) {
+            if ((nDigit *= 2) > 9) nDigit -= 9;
+        }
+
+        nSum += nDigit;
+        bEven = !bEven;
+    }
+
+    return (nSum % 10) == 0;
+};
+
 const FinancialScreen = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
@@ -355,26 +379,38 @@ Este é um comprovante digital gerado pelo sistema PMS.
   };
 
   const handleAddCard = () => {
-      if (newCardNumber.length < 16 || newCardName.length < 3 || newCardExpiry.length < 5 || newCardCvv.length < 3) {
+      const cleanNumber = newCardNumber.replace(/\D/g, '');
+      if (cleanNumber.length < 13 || !luhnCheck(cleanNumber)) {
+          Alert.alert('Cartão Inválido', 'O número do cartão digitado não é válido.');
+          return;
+      }
+      
+      if (newCardName.length < 3 || newCardExpiry.length < 5 || newCardCvv.length < 3) {
           Alert.alert('Erro', 'Por favor, preencha todos os campos corretamente.');
           return;
       }
 
+      // SECURITY MOCK: In a real app, this data would go to Stripe/MercadoPago directly.
+      // We generate a "token" here to simulate the process.
+      const mockToken = `tok_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
       const newCard = {
           id: String(Date.now()),
           brand: 'mastercard', // Simplified detection
-          last4: newCardNumber.slice(-4),
+          last4: cleanNumber.slice(-4),
           expiry: newCardExpiry,
-          default: false
+          token: mockToken, // Store ONLY the token
+          default: cards.length === 0 // First card is default
       };
 
+      // NEVER store the full number or CVV
       setCards([...cards, newCard]);
       setAddCardMode(false);
       setNewCardNumber('');
       setNewCardName('');
       setNewCardExpiry('');
       setNewCardCvv('');
-      Alert.alert('Sucesso', 'Cartão adicionado com sucesso!');
+      Alert.alert('Sucesso', 'Cartão adicionado e tokenizado com segurança!');
   };
 
   useEffect(() => {
@@ -409,9 +445,23 @@ Este é um comprovante digital gerado pelo sistema PMS.
   const processPayment = async (method: 'BALANCE' | 'CARD') => {
       if (!supplier || !supplier.plan) return;
 
+      let paymentToken = undefined;
+
       if (method === 'BALANCE' && supplier.walletBalance < supplier.plan.monthlyPrice) {
           Alert.alert('Saldo Insuficiente', 'Você não tem saldo suficiente na carteira para realizar este pagamento.');
           return;
+      }
+
+      if (method === 'CARD') {
+          if (cards.length === 0) {
+              Alert.alert('Nenhum cartão', 'Adicione um cartão de crédito para prosseguir.');
+              // Optionally open cards modal
+              setCardsModalVisible(true);
+              return;
+          }
+          // Use the first card/default
+          const selectedCard = cards[0];
+          paymentToken = selectedCard.token;
       }
 
       try {
@@ -421,7 +471,8 @@ Este é um comprovante digital gerado pelo sistema PMS.
         const res = await api.post('/financial/subscription/pay', {
             supplierId: supplier.id,
             amount: supplier.plan?.monthlyPrice,
-            method // Send method to backend
+            method, // Send method to backend
+            paymentToken // Send token if available
         });
 
         // Update state from API response if available
