@@ -15,8 +15,8 @@ import OrderFormScreen from '../screens/Orders/OrderFormScreen';
 import OrderDetailsScreen from '../screens/Orders/OrderDetailsScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import ReportsScreen from '../screens/ReportsScreen';
-import FinancialScreen from '../screens/FinancialScreen';
-import AdminFinancialScreen from '../screens/AdminFinancialScreen';
+import FinancialScreen from '../screens/Financial/FinancialScreen';
+import AdminFinancialScreen from '../screens/Financial/AdminFinancialScreen';
 
 import SuppliersListScreen from '../screens/Suppliers/SuppliersListScreen';
 import SupplierFormScreen from '../screens/Suppliers/SupplierFormScreen';
@@ -25,7 +25,22 @@ import ProductsListScreen from '../screens/Products/ProductsListScreen';
 import ProductDetailsScreen from '../screens/Products/ProductDetailsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
-const Stack = createNativeStackNavigator();
+export type RootStackParamList = {
+  AppTabs: undefined;
+  Login: undefined;
+  Register: undefined;
+  ProductForm: { productId?: string } | undefined;
+  ProductsList: { filter?: string } | undefined;
+  ProductDetails: { productId: string };
+  OrderForm: { orderId?: string } | undefined;
+  OrderDetails: { orderId: string };
+  Reports: undefined;
+  Financial: undefined;
+  AdminFinancial: undefined;
+  Receipt: { entry: any };
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator();
 const SuppliersStackNav = createNativeStackNavigator();
 
