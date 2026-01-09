@@ -306,6 +306,7 @@ export const updateFinancialSettings = async (req: Request, res: Response) => {
                  adminUser?.name || 'Admin',
                  'UPDATE_SETTINGS',
                  'global',
+                 'Configurações financeiras atualizadas',
                  JSON.stringify(settings)
              );
         }

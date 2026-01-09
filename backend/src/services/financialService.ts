@@ -505,7 +505,7 @@ export const FinancialService = {
               adminName,
               action: 'APPROVE_WITHDRAWAL',
               targetId: requestId,
-              details: `Approved withdrawal of R$ ${req.amount}`
+              details: `Saque aprovado de R$ ${req.amount}`
           }
       });
 
@@ -546,7 +546,7 @@ export const FinancialService = {
             action: 'REJECT_WITHDRAWAL',
             targetId: requestId,
             reason: reason,
-            details: `Rejected withdrawal of R$ ${req.amount}`
+            details: `Saque rejeitado de R$ ${req.amount}`
         }
       });
 

@@ -524,13 +524,32 @@ const AdminFinancialScreen = () => {
       }
   };
 
+  const formatLogDetails = (details: string | null) => {
+      if (!details) return '-';
+      
+      // Translate historical English logs
+      if (details.includes('Approved withdrawal of')) {
+          return details.replace('Approved withdrawal of', 'Saque aprovado de');
+      }
+      if (details.includes('Rejected withdrawal of')) {
+          return details.replace('Rejected withdrawal of', 'Saque rejeitado de');
+      }
+      
+      // Format JSON settings logs
+      if (details.startsWith('{') && details.includes('defaultReleaseDays')) {
+          return 'Configurações globais atualizadas';
+      }
+
+      return details;
+  };
+
   const renderAudit = () => (
       <View style={styles.tabContent}>
           <Text style={styles.sectionTitle}>Auditoria & Logs</Text>
           {auditLogs.map(log => (
               <View key={log.id} style={styles.logCard}>
                   <Text style={styles.logAction}>{formatActionName(log.action)}</Text>
-                  <Text style={styles.logDetails}>{log.details}</Text>
+                  <Text style={styles.logDetails}>{formatLogDetails(log.details)}</Text>
                   <View style={styles.rowBetween}>
                       <Text style={styles.logUser}>{log.adminName}</Text>
                       <Text style={styles.logDate}>{new Date(log.createdAt).toLocaleString()}</Text>
