@@ -1259,7 +1259,7 @@ Este é um comprovante digital gerado pelo sistema PMS.
                         ? { backgroundColor: '#ccc' } : {}
                     ]} 
                     onPress={handleWithdraw}
-                    disabled={(limits && limits.remaining <= 0)}
+                    disabled={!!limits && limits.remaining <= 0}
                   >
                       <Text style={styles.saveButtonText}>
                           {limits && limits.remaining <= 0 ? 'Limite Atingido' : 'Confirmar Saque'}
