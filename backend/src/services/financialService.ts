@@ -82,7 +82,8 @@ export const FinancialService = {
             where: {
                 supplierId,
                 status: 'PENDING',
-                releaseDate: { lte: now }
+                releaseDate: { lte: now },
+                type: { in: ['ORDER_CREDIT_PENDING', 'SALE_REVENUE'] } // Release both new and legacy types
             }
         });
 
@@ -92,9 +93,24 @@ export const FinancialService = {
         
         for (const item of releasableItems) {
             totalReleased += item.amount;
+            
+            // 1. Mark original entry as PROCESSED/RELEASED (History)
             await tx.financialLedger.update({
                 where: { id: item.id },
-                data: { status: 'COMPLETED' }
+                data: { status: 'RELEASED' } 
+            });
+
+            // 2. Create NEW Ledger Entry for the Release (Available Balance)
+            await tx.financialLedger.create({
+                data: {
+                    type: 'BALANCE_RELEASE',
+                    amount: item.amount,
+                    supplierId: item.supplierId,
+                    orderId: item.orderId,
+                    description: `Liberação de saldo pedido #${item.orderId?.slice(0,8)}`,
+                    status: 'COMPLETED',
+                    createdAt: now
+                }
             });
         }
 
@@ -558,7 +574,7 @@ export const FinancialService = {
   // AUTOMATION & INTERNAL
   // ==========================================
 
-  processOrderPayout: async (orderId: string): Promise<Order> => {
+  processOrderPayment: async (orderId: string): Promise<Order> => {
     return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const order = await tx.order.findUnique({
         where: { id: orderId },
@@ -566,8 +582,18 @@ export const FinancialService = {
       });
 
       if (!order) throw new Error('Order not found');
-      if (order.status !== 'DELIVERED') throw new Error('Order must be DELIVERED to process payout');
-      if (order.financialStatus === 'RELEASED') throw new Error('Payout already released for this order');
+      // Rules: Order must be completed/paid to generate financial impact
+      // We accept DELIVERED or PAID (if added in future) as triggers
+      if (!['DELIVERED', 'PAID', 'COMPLETED'].includes(order.status)) {
+           throw new Error('Order must be PAID or COMPLETED to process payment');
+      }
+      
+      // Idempotency Check
+      if (order.financialStatus === 'RELEASED') {
+          console.log(`Order ${orderId} already released financially.`);
+          return order;
+      }
+      
       if (!order.supplier) throw new Error('Order has no linked supplier');
 
       // Calculate Release Date
@@ -576,7 +602,7 @@ export const FinancialService = {
       const releaseDate = new Date();
       releaseDate.setDate(releaseDate.getDate() + releaseDays);
 
-      // Add to Pending Balance (It will be moved to Available later by processReleases)
+      // 1. Credit to Pending Balance
       await tx.supplier.update({
         where: { id: order.supplier.id },
         data: {
@@ -584,38 +610,125 @@ export const FinancialService = {
         }
       });
 
+      // 2. Mark Order as Financially Released (Processed)
       await tx.order.update({
         where: { id: order.id },
         data: { financialStatus: 'RELEASED' }
       });
 
-      // Ledger Entry: Revenue Released to Pending
+      // 3. Ledger Entry: Revenue (ORDER_CREDIT_PENDING)
       await tx.financialLedger.create({
         data: {
-          type: 'SALE_REVENUE', 
+          type: 'ORDER_CREDIT_PENDING', 
           amount: order.supplierPayout,
           supplierId: order.supplier.id,
           orderId: order.id,
-          description: `Receita de venda #${order.id.slice(0,8)}`,
+          description: `Receita pedido #${order.id.slice(0,8)}`,
           status: 'PENDING',
           releaseDate: releaseDate
         }
       });
 
-      // Ledger Entry: Platform Commission (Completed immediately)
+      // 4. Ledger Entry: Platform Commission
       await tx.financialLedger.create({
         data: {
           type: 'SALE_COMMISSION',
           amount: order.platformCommission,
-          supplierId: order.supplier.id, // Linked for reference
+          supplierId: order.supplier.id, 
           orderId: order.id,
-          description: `Comissão plataforma #${order.id.slice(0,8)}`,
+          description: `Comissão plataforma pedido #${order.id.slice(0,8)}`,
           status: 'COMPLETED'
         }
       });
       
       return order;
     });
+  },
+
+  processOrderRefund: async (orderId: string): Promise<void> => {
+      return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+          const order = await tx.order.findUnique({
+              where: { id: orderId },
+              include: { supplier: true }
+          });
+
+          if (!order) throw new Error('Order not found');
+          if (!order.supplier) return; // No financial impact if no supplier
+
+          // Only reverse if it was previously released/processed
+          if (order.financialStatus !== 'RELEASED') {
+              console.log(`Order ${orderId} was not financially processed, skipping refund logic.`);
+              return;
+          }
+
+          // Find original revenue entry to check status
+          const revenueEntry = await tx.financialLedger.findFirst({
+              where: { 
+                  orderId: orderId,
+                  type: { in: ['ORDER_CREDIT_PENDING', 'SALE_REVENUE'] }
+              }
+          });
+
+          // Determine if funds are Pending or Available
+          // If the entry status is COMPLETED, it means it was released to wallet.
+          // If PENDING, it's still in pendingBalance.
+          const isAvailable = revenueEntry?.status === 'COMPLETED';
+
+          // 1. Revert Balance
+          if (isAvailable) {
+              // Move to Blocked or Negative (Deduct from Wallet)
+              // User said: "Se já estiver disponível -> mover para bloqueado ou negativo"
+              // We decrement walletBalance.
+              await tx.supplier.update({
+                  where: { id: order.supplier.id },
+                  data: {
+                      walletBalance: { decrement: order.supplierPayout }
+                  }
+              });
+          } else {
+              // Deduct from Pending
+              await tx.supplier.update({
+                  where: { id: order.supplier.id },
+                  data: {
+                      pendingBalance: { decrement: order.supplierPayout }
+                  }
+              });
+          }
+
+          // 2. Create Refund Ledger Entry
+          await tx.financialLedger.create({
+              data: {
+                  type: 'ORDER_REFUND',
+                  amount: -order.supplierPayout, // Negative amount
+                  supplierId: order.supplier.id,
+                  orderId: order.id,
+                  description: `Estorno pedido #${order.id.slice(0,8)}`,
+                  status: 'COMPLETED'
+              }
+          });
+
+          // 3. Reverse Commission (Optional but fair)
+          // We don't necessarily give back commission to supplier in all models, 
+          // but usually if sale is cancelled, commission is voided.
+          // However, we just record it for Admin stats. 
+          // Let's create a COMMISSION_REFUND entry.
+          await tx.financialLedger.create({
+              data: {
+                  type: 'COMMISSION_REFUND',
+                  amount: -order.platformCommission,
+                  supplierId: order.supplier.id,
+                  orderId: order.id,
+                  description: `Estorno comissão #${order.id.slice(0,8)}`,
+                  status: 'COMPLETED'
+              }
+          });
+
+          // 4. Update Order Financial Status
+          await tx.order.update({
+              where: { id: order.id },
+              data: { financialStatus: 'CANCELLED' }
+          });
+      });
   },
   
   processSubscriptionPayment: async (supplierId: string, amount: number, method: 'BALANCE' | 'CARD' = 'CARD', paymentToken?: string): Promise<Supplier> => {

@@ -282,6 +282,14 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                 `Pedido #${existingOrder.id.substring(0,8)} cancelado e estoque restaurado`,
                 'ORDER'
             );
+
+            // Trigger Financial Refund Logic
+            try {
+                await FinancialService.processOrderRefund(id);
+                console.log(`Refund processed for order ${id}`);
+            } catch (refundError: any) {
+                console.error(`Failed to process refund for order ${id}:`, refundError.message);
+            }
         }
 
         const order = await prisma.order.update({
@@ -289,13 +297,13 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
             data: { status, trackingCode }
         });
 
-        // Trigger Payout if Delivered
+        // Trigger Payment if Delivered/Completed
         if (status === 'DELIVERED') {
             try {
-                await FinancialService.processOrderPayout(id);
-                console.log(`Payout processed for order ${id}`);
+                await FinancialService.processOrderPayment(id);
+                console.log(`Payment processed for order ${id}`);
             } catch (payoutError: any) {
-                console.error(`Failed to process payout for order ${id}:`, payoutError.message);
+                console.error(`Failed to process payment for order ${id}:`, payoutError.message);
                 // Optionally: We could notify admin or retry later. 
                 // For now, we just log it. The financialStatus will remain PENDING.
             }
