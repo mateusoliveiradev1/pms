@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing } from '../../ui/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors, spacing, shadow } from '../../ui/theme';
 import Logo from './Logo';
 
 type Props = {
@@ -17,30 +18,39 @@ type Props = {
 };
 
 const Header: React.FC<Props> = ({ title, onBack, rightIcon, onRightPress, showLogo, logoSize = 32, animateLogo = false, logoDuration = 900, animateKey }) => {
+  const insets = useSafeAreaInsets();
+  
   return (
-    <View style={styles.container}>
-      <View style={styles.left}>
-        {onBack ? (
-          <TouchableOpacity onPress={onBack} style={styles.btn}>
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.spacer} />
-        )}
-      </View>
-      {showLogo ? (
-        <Logo size={logoSize} variant="light" animate={animateLogo} duration={logoDuration} animateKey={animateKey} />
-      ) : (
-        <Text style={styles.title}>{title}</Text>
-      )}
-      <View style={styles.right}>
-        {rightIcon ? (
-          <TouchableOpacity onPress={onRightPress} style={styles.btn}>
-            <Ionicons name={rightIcon as any} size={24} color={colors.text} />
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.spacer} />
-        )}
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 20) }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.surface} />
+      <View style={styles.content}>
+        <View style={styles.left}>
+          {onBack ? (
+            <TouchableOpacity onPress={onBack} style={styles.btn}>
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.spacer} />
+          )}
+        </View>
+        
+        <View style={styles.center}>
+          {showLogo ? (
+            <Logo size={logoSize} variant="light" animate={animateLogo} duration={logoDuration} animateKey={animateKey} />
+          ) : (
+            <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          )}
+        </View>
+
+        <View style={styles.right}>
+          {rightIcon ? (
+            <TouchableOpacity onPress={onRightPress} style={styles.btn}>
+              <Ionicons name={rightIcon as any} size={24} color={colors.text} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.spacer} />
+          )}
+        </View>
       </View>
     </View>
   );
@@ -48,19 +58,26 @@ const Header: React.FC<Props> = ({ title, onBack, rightIcon, onRightPress, showL
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: spacing.md,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    ...shadow.sm,
+    zIndex: 100,
   },
-  left: { width: 40 },
-  right: { width: 40, alignItems: 'flex-end' },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    height: 56,
+  },
+  left: { width: 48, alignItems: 'flex-start' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  right: { width: 48, alignItems: 'flex-end' },
   spacer: { width: 24 },
-  title: { fontSize: 20, fontWeight: '700', color: colors.text },
-  btn: { padding: 4 },
+  title: { fontSize: 18, fontWeight: '600', color: colors.text, textAlign: 'center' },
+  btn: { padding: 8, marginLeft: -8 },
 });
 
 export default Header;
