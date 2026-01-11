@@ -206,6 +206,12 @@ model Order {
   customerName    String?
   shippingAddress String?
   
+  // Payment Info
+  paymentGateway    String?   // MERCADOPAGO, STRIPE
+  paymentExternalId String?   @unique
+  paymentStatus     String    @default("PENDING") // PENDING, PAID, FAILED, REFUNDED
+  paidAt            DateTime?
+
   // Financial Info
   commissionValue Float    @default(0.0)
   netValue        Float    @default(0.0) // Amount for Supplier

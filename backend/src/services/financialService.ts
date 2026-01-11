@@ -71,6 +71,310 @@ export const FinancialService = {
     };
   },
 
+  /**
+   * Confirms payment for an order and processes financial splits atomically.
+   */
+  confirmOrderPayment: async (orderId: string, paymentGateway: string, paymentExternalId: string, totalPaid: number) => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const order = await tx.order.findUnique({
+            where: { id: orderId },
+            include: { supplier: { include: { plan: true } } }
+        });
+
+        if (!order) throw new Error('Order not found');
+        // Idempotency check: If already paid, return silently (or throw specific error caught by webhook)
+        if (order.paymentStatus === 'PAID') return order;
+
+        // 1. Update Order Status
+        const updatedOrder = await tx.order.update({
+            where: { id: orderId },
+            data: {
+                status: 'PAID', // Move to PAID workflow
+                paymentStatus: 'PAID',
+                paymentGateway,
+                paymentExternalId,
+                paidAt: new Date(),
+                payoutStatus: 'PENDING'
+            }
+        });
+
+        // 2. Financial Logic
+        let commission = order.commissionValue;
+        let netValue = order.netValue;
+
+        // Fallback calculation if values are missing (e.g. legacy orders)
+        if (commission === 0 && netValue === 0) {
+            const plan = order.supplier.plan;
+            const commissionRate = plan?.commissionPercent || 10;
+            const financials = FinancialService.calculateOrderFinancials(totalPaid, commissionRate, 0);
+            commission = financials.platformCommission;
+            netValue = financials.supplierPayout;
+            
+            // Update order with calculated values
+             await tx.order.update({
+                where: { id: orderId },
+                data: { commissionValue: commission, netValue: netValue }
+            });
+        }
+
+        const releaseDays = order.supplier.plan?.releaseDays || 14;
+        const releaseDate = new Date();
+        releaseDate.setDate(releaseDate.getDate() + releaseDays);
+
+        // 3. Create Ledger Entries (Immutable)
+        
+        // A. ORDER_PAYMENT (Total Bruto - Reference/Audit)
+        await tx.financialLedger.create({
+            data: {
+                supplierId: order.supplierId,
+                type: 'ORDER_PAYMENT',
+                amount: totalPaid,
+                status: 'COMPLETED', // Does not affect Pending/Available directly in this model
+                referenceId: order.id,
+                description: `Pagamento Bruto Pedido #${order.orderNumber}`,
+                releaseDate: null
+            }
+        });
+
+        // B. PLATFORM_COMMISSION (Debit - Audit)
+        await tx.financialLedger.create({
+            data: {
+                supplierId: order.supplierId,
+                type: 'PLATFORM_COMMISSION',
+                amount: -commission,
+                status: 'COMPLETED',
+                referenceId: order.id,
+                description: `Comissão Marketplace Pedido #${order.orderNumber}`,
+                releaseDate: null
+            }
+        });
+
+        // C. ORDER_CREDIT_PENDING (Net - Affects Pending Balance)
+        await tx.financialLedger.create({
+            data: {
+                supplierId: order.supplierId,
+                type: 'ORDER_CREDIT_PENDING',
+                amount: netValue,
+                status: 'PENDING',
+                referenceId: order.id,
+                description: `Crédito Venda Pedido #${order.orderNumber}`,
+                releaseDate: releaseDate
+            }
+        });
+
+        // 4. Update Supplier Pending Balance
+        await tx.supplier.update({
+            where: { id: order.supplierId },
+            data: { pendingBalance: { increment: netValue } }
+        });
+
+        // 5. Create Admin Log
+        await tx.adminLog.create({
+            data: {
+                adminId: 'SYSTEM',
+                adminName: 'System Payment',
+                action: 'ORDER_PAYMENT_PROCESSED',
+                targetId: orderId,
+                details: JSON.stringify({ total: totalPaid, net: netValue, commission, gateway: paymentGateway })
+            }
+        });
+
+        return updatedOrder;
+    });
+  },
+
+  processOrderRefund: async (orderId: string, reason: string) => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        const order = await tx.order.findUnique({
+            where: { id: orderId },
+            include: { supplier: true }
+        });
+
+        if (!order) throw new Error('Order not found');
+        if (order.paymentStatus === 'REFUNDED') return order;
+
+        // 1. Determine where the money is (Pending or Released)
+        // Look for the credit entry
+        const creditEntry = await tx.financialLedger.findFirst({
+            where: { 
+                referenceId: orderId,
+                type: 'ORDER_CREDIT_PENDING'
+            }
+        });
+
+        if (!creditEntry) throw new Error('Original credit transaction not found');
+
+        const isReleased = creditEntry.status === 'RELEASED';
+        const netValue = order.netValue;
+        const commission = order.commissionValue;
+
+        // 2. Create Counter-Entries
+        
+        // A. ORDER_REFUND (Debit Supplier)
+        await tx.financialLedger.create({
+            data: {
+                supplierId: order.supplierId,
+                type: 'ORDER_REFUND',
+                amount: -netValue,
+                status: 'COMPLETED',
+                referenceId: orderId,
+                description: `Estorno Venda #${order.orderNumber} - ${reason}`
+            }
+        });
+
+        // B. COMMISSION_REFUND (Credit Supplier/Reversal) - Optional depending on policy
+        // Usually marketplace keeps commission or refunds it? 
+        // "COMMISSION_REFUND" implies we refund the commission to the supplier?
+        // Or we just reverse the record.
+        // Let's assume we reverse the commission record for audit.
+        await tx.financialLedger.create({
+            data: {
+                supplierId: order.supplierId,
+                type: 'COMMISSION_REFUND',
+                amount: commission,
+                status: 'COMPLETED',
+                referenceId: orderId,
+                description: `Estorno Comissão #${order.orderNumber}`
+            }
+        });
+
+        // 3. Update Balances
+        if (isReleased) {
+            // Money was already available, so we deduct from Available
+            await tx.supplier.update({
+                where: { id: order.supplierId },
+                data: { walletBalance: { decrement: netValue } }
+            });
+        } else {
+            // Money is still pending, so we deduct from Pending
+             await tx.supplier.update({
+                where: { id: order.supplierId },
+                data: { pendingBalance: { decrement: netValue } }
+            });
+            
+            // Also update the original ledger entry to prevent future release?
+            // No, ledger is immutable. 
+            // processReleases checks for 'PENDING'.
+            // If we leave it PENDING, it will be released later!
+            // WE MUST update the status of the OLD entry to prevent it from being released.
+            // Requirement: "Proibido update ou delete em lançamentos financeiros."
+            // "Estornos sempre via contra-lançamento."
+            
+            // CONFLICT: If I cannot update the old entry to 'CANCELLED', it will eventually be released by `processReleases`.
+            // And if I create a counter-entry `ORDER_REFUND` with status `COMPLETED`, it just sits there.
+            // If I deduct from Pending Balance now, and later the original entry is released (Moved to Available),
+            // I will have a deficit in Pending (fixed) but an excess in Available.
+            
+            // SOLUTION: The counter-entry must ALSO be handled by `processReleases` OR we must mark the original as 'CANCELLED' despite the rule?
+            // Usually "Immutable Ledger" means don't change Amounts or Dates. Status changes for lifecycle are often allowed.
+            // BUT "Proibido update ... em lançamentos".
+            
+            // Alternative: The counter-entry `ORDER_REFUND` should be of a type that `processReleases` picks up?
+            // No, refund is immediate.
+            
+            // Let's look at `processReleases` again.
+            // It finds `status: 'PENDING'`.
+            // If I cannot change the status of the original entry, I must add a "BLOCKING" entry?
+            // Complex.
+            
+            // Pragmatic approach: Update status to 'CANCELLED' or 'REFUNDED' is usually the exception for "Immutable" (which refers to history/amounts).
+            // OR, the prompt says "Estornos sempre via contra-lançamento".
+            // If I add a negative entry with `status: 'PENDING'` and same `releaseDate`?
+            // Then `processReleases` will sum +Net and -Net = 0.
+            // AND I don't touch the balance now?
+            
+            // "Se o pedido for CANCELADO ... Detectar se saldo está PENDING ... Criar contra-lançamentos"
+            
+            // If I create a negative PENDING entry with same release date:
+            // `processReleases` sums them up.
+            // BUT I need to reflect the cancellation NOW in the balance?
+            // If I deduct from Pending Balance NOW, I must NOT have it released later.
+            
+            // Let's assume updating STATUS to 'REFUNDED'/'CANCELLED' is the only viable way to prevent release without complex "netting" logic in release job.
+            // I will update the status of the pending entry. The "No Update" rule likely applies to amounts/historical facts, not lifecycle status management of pending items.
+            // Wait, "Proibido update or delete em lançamentos financeiros".
+            
+            // Strict Compliance:
+            // Modify `processReleases` to check for refunds?
+            // Modify `processReleases` to sum all items for a reference?
+            
+            // Let's Update Status. It's the standard way. If the user complains, I'll explain.
+            // "Ledger is immutable" -> "The record of the transaction". Changing status from Pending to Cancelled is valid lifecycle.
+            // Actually, if I update status, I am changing the ledger.
+            
+            // Let's try the "Negative Pending" approach.
+            // Create `ORDER_REFUND` with `status: 'PENDING'` and same `releaseDate`?
+            // Then `processReleases` picks both up: +100 and -100. Sum = 0. Released = 0.
+            // This preserves immutability AND correctness.
+            // BUT the User wants to see the refund immediately?
+            // "Detectar se saldo PENDING... Criar contra-lançamentos".
+            
+            // If I do Negative Pending:
+            // Pending Balance should decrease NOW?
+            // If I decrease Pending Balance NOW, and add a Negative Pending Ledger (to be released later)...
+            // When release happens:
+            // Original (+100) -> Released (+100 to Wallet, -100 from Pending).
+            // Refund (-100) -> Released (-100 to Wallet, +100 to Pending?? -(-100)).
+            // Net result on Wallet: 0.
+            // Net result on Pending: 0.
+            
+            // So:
+            // 1. Create Negative Pending Ledger (-Net).
+            // 2. Update Supplier Pending Balance (-Net). (Immediate reflection)
+            // 3. When D+N comes:
+            //    Process Original: Wallet += 100, Pending -= 100.
+            //    Process Refund: Wallet -= 100, Pending -= (-100) = +100.
+            //    Total Wallet change: 0.
+            //    Total Pending change: 0.
+            // This works! And it respects immutability perfectly.
+            
+            // So I will create `ORDER_REFUND` with `status: 'PENDING'` if the original was pending.
+            
+             await tx.financialLedger.create({
+                data: {
+                    supplierId: order.supplierId,
+                    type: 'ORDER_REFUND_OFFSET', // Special type? Or just ORDER_REFUND
+                    amount: -netValue,
+                    status: 'PENDING',
+                    referenceId: orderId,
+                    description: `Estorno Venda #${order.orderNumber} (Compensação)`,
+                    releaseDate: creditEntry.releaseDate // Match original date
+                }
+            });
+             // And I update the Pending Balance immediately to show it's gone.
+             await tx.supplier.update({
+                where: { id: order.supplierId },
+                data: { pendingBalance: { decrement: netValue } }
+            });
+            
+            // WAIT. If I use `ORDER_REFUND` type, `processReleases` must know to pick it up.
+            // Currently `processReleases` picks `['ORDER_CREDIT_PENDING', 'SALE_REVENUE']`.
+            // I need to add `ORDER_REFUND` (or whatever type I use) to `processReleases`.
+            
+        }
+
+        // 4. Update Order
+        await tx.order.update({
+            where: { id: orderId },
+            data: { 
+                status: 'CANCELLED',
+                paymentStatus: 'REFUNDED'
+            }
+        });
+
+        // 5. Admin Log
+         await tx.adminLog.create({
+            data: {
+                adminId: 'SYSTEM',
+                adminName: 'System Refund',
+                action: 'ORDER_REFUND_PROCESSED',
+                targetId: orderId,
+                details: JSON.stringify({ reason, amount: netValue })
+            }
+        });
+    });
+  },
+
   // ==========================================
   // CARTEIRA DO FORNECEDOR (SUPPLIER WALLET)
   // ==========================================
@@ -85,7 +389,7 @@ export const FinancialService = {
                 supplierId,
                 status: 'PENDING',
                 releaseDate: { lte: now },
-                type: { in: ['ORDER_CREDIT_PENDING', 'SALE_REVENUE'] } // Release both new and legacy types
+                type: { in: ['ORDER_CREDIT_PENDING', 'SALE_REVENUE', 'ORDER_REFUND_OFFSET'] } // Release both new and legacy types
             }
         });
 
@@ -646,92 +950,6 @@ export const FinancialService = {
       
       return order;
     });
-  },
-
-  processOrderRefund: async (orderId: string): Promise<void> => {
-      return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-          const order = await tx.order.findUnique({
-              where: { id: orderId },
-              include: { supplier: true }
-          });
-
-          if (!order) throw new Error('Order not found');
-          if (!order.supplier) return; // No financial impact if no supplier
-
-          // Only reverse if it was previously released/processed
-          if (order.payoutStatus !== 'RELEASED') {
-              console.log(`Order ${orderId} was not financially processed, skipping refund logic.`);
-              return;
-          }
-
-          // Find original revenue entry to check status
-          const revenueEntry = await tx.financialLedger.findFirst({
-              where: { 
-                  referenceId: orderId,
-                  type: { in: ['ORDER_CREDIT_PENDING', 'SALE_REVENUE'] }
-              }
-          });
-
-          // Determine if funds are Pending or Available
-          // If the entry status is COMPLETED, it means it was released to wallet.
-          // If PENDING, it's still in pendingBalance.
-          const isAvailable = revenueEntry?.status === 'COMPLETED';
-
-          // 1. Revert Balance
-          if (isAvailable) {
-              // Move to Blocked or Negative (Deduct from Wallet)
-              // User said: "Se já estiver disponível -> mover para bloqueado ou negativo"
-              // We decrement walletBalance.
-              await tx.supplier.update({
-                  where: { id: order.supplier.id },
-                  data: {
-                      walletBalance: { decrement: order.netValue }
-                  }
-              });
-          } else {
-              // Deduct from Pending
-              await tx.supplier.update({
-                  where: { id: order.supplier.id },
-                  data: {
-                      pendingBalance: { decrement: order.netValue }
-                  }
-              });
-          }
-
-          // 2. Create Refund Ledger Entry
-          await tx.financialLedger.create({
-              data: {
-                  type: 'ORDER_REFUND',
-                  amount: -order.netValue, // Negative amount
-                  supplierId: order.supplier.id,
-                  referenceId: order.id,
-                  description: `Estorno pedido #${order.id.slice(0,8)}`,
-                  status: 'COMPLETED'
-              }
-          });
-
-          // 3. Reverse Commission (Optional but fair)
-          // We don't necessarily give back commission to supplier in all models, 
-          // but usually if sale is cancelled, commission is voided.
-          // However, we just record it for Admin stats. 
-          // Let's create a COMMISSION_REFUND entry.
-          await tx.financialLedger.create({
-              data: {
-                  type: 'COMMISSION_REFUND',
-                  amount: -order.commissionValue,
-                  supplierId: order.supplier.id,
-                  referenceId: order.id,
-                  description: `Estorno comissão #${order.id.slice(0,8)}`,
-                  status: 'COMPLETED'
-              }
-          });
-
-          // 4. Update Order Financial Status
-          await tx.order.update({
-              where: { id: order.id },
-              data: { payoutStatus: 'CANCELLED' }
-          });
-      });
   },
   
   processSubscriptionPayment: async (supplierId: string, amount: number, method: 'BALANCE' | 'CARD' = 'CARD', paymentToken?: string): Promise<Supplier> => {

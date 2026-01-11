@@ -298,7 +298,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
             // Trigger Financial Refund Logic
             try {
-                await FinancialService.processOrderRefund(id);
+                await FinancialService.processOrderRefund(id, 'Pedido Cancelado/Reembolsado');
                 console.log(`Refund processed for order ${id}`);
             } catch (refundError: any) {
                 console.error(`Failed to process refund for order ${id}:`, refundError.message);
