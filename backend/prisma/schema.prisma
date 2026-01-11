@@ -274,3 +274,28 @@ model Notification {
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
 }
+
+model InternalWebhook {
+  id              String   @id @default(uuid())
+  url             String
+  secret          String
+  isActive        Boolean  @default(true)
+  subscribedEvents String[] // Array of event names
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  logs            WebhookLog[]
+}
+
+model WebhookLog {
+  id          String   @id @default(uuid())
+  webhookId   String
+  webhook     InternalWebhook @relation(fields: [webhookId], references: [id])
+  event       String
+  payload     Json?
+  statusCode  Int?
+  success     Boolean
+  error       String?
+  attempt     Int      @default(1)
+  createdAt   DateTime @default(now())
+}

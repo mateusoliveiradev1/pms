@@ -48,10 +48,18 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       };
 
       next();
-  } catch (err: any) {
-      console.error('Auth Unexpected Error:', err);
-      res.status(403).json({ message: 'Erro de autenticação', error: err.message });
+  } catch (error) {
+      console.error('Auth Middleware Error:', error);
+      res.status(500).json({ message: 'Erro interno de autenticação' });
   }
+};
+
+export const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  if (req.user?.role !== 'ADMIN') {
+    res.status(403).json({ message: 'Acesso negado. Apenas administradores.' });
+    return;
+  }
+  next();
 };
 
 export const requireRole = (role: string) => {

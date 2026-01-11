@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
-import { sendPushToAdmins } from '../services/notificationService';
+import { sendPushToAdmins } from '../services/pushNotificationService';
 
 export const getNotifications = async (req: Request, res: Response) => {
   try {

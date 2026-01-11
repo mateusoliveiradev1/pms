@@ -9,6 +9,8 @@ import {
   Order 
 } from '@prisma/client';
 import { logFinancialEvent } from '../lib/logger';
+import { notificationService } from './notificationService';
+import { InternalWebhookService } from './internalWebhookService';
 
 interface FinancialCalculation {
   marketplaceFee: number;
@@ -946,6 +948,14 @@ export const FinancialService = {
           details: { reason, adminId, adminName }
       });
 
+      // Broadcast
+      InternalWebhookService.broadcast('WITHDRAWAL_REJECTED', {
+          requestId,
+          supplierId: req.supplierId,
+          amount: req.amount,
+          reason
+      });
+
       return updatedReq;
     });
   },
@@ -1020,8 +1030,17 @@ export const FinancialService = {
           status: 'COMPLETED'
         }
       });
-      
-      return order;
+
+        // Notifications
+        try {
+            notificationService.notify('Receita Pendente', `Pedido #${order.orderNumber} processado. R$ ${order.netValue} pendente.`, {
+                orderId,
+                amount: order.netValue
+            });
+            // InternalWebhookService.broadcast('ORDER_PAID', ...); // Optional
+        } catch (e) { console.error('Notification Error:', e); }
+
+        return order;
     });
   },
   

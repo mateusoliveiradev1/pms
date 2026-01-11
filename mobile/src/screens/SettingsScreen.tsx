@@ -266,7 +266,26 @@ const styles = StyleSheet.create({
       color: '#dc3545',
       fontWeight: 'bold',
       fontSize: 16,
-  }
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  menuIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  menuText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
 });
 
 export default SettingsScreen;

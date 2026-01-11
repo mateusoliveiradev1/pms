@@ -14,6 +14,9 @@ const stripe = new Stripe(stripeKey, {
   apiVersion: '2024-12-18.acacia' as any, // Use latest or matching version - cast to any to avoid strict version mismatch in dev
 });
 
+import { notificationService } from './notificationService';
+import { InternalWebhookService } from './internalWebhookService';
+
 export const PaymentService = {
   /**
    * Create PIX Payment via Mercado Pago
@@ -535,6 +538,22 @@ export const PaymentService = {
             referenceId: subscription.id,
             supplierId: subscription.supplierId,
             details: { gateway, externalId, reason }
+        });
+
+        // Broadcast Event
+        InternalWebhookService.broadcast('PAYMENT_FAILED', {
+            referenceId: subscription.id,
+            supplierId: subscription.supplierId,
+            gateway,
+            externalId,
+            reason,
+            type: 'SUBSCRIPTION'
+        });
+
+        // Notify Admin
+        notificationService.notify('Falha Pagamento', `Pagamento de assinatura falhou. Fornecedor suspenso.`, {
+            subscriptionId: subscription.id,
+            reason
         });
     });
   },

@@ -18,6 +18,7 @@ import ReportsScreen from '../screens/ReportsScreen';
 import FinancialScreen from '../screens/Financial/FinancialScreen';
 import AdminFinancialScreen from '../screens/Financial/AdminFinancialScreen';
 import AdminBIFinancialScreen from '../screens/Financial/AdminBIFinancialScreen';
+import AdminIntegrationsScreen from '../screens/Integrations/AdminIntegrationsScreen';
 
 import SuppliersListScreen from '../screens/Suppliers/SuppliersListScreen';
 import SupplierFormScreen from '../screens/Suppliers/SupplierFormScreen';
@@ -39,6 +40,7 @@ export type RootStackParamList = {
   Financial: undefined;
   AdminFinancial: undefined;
   AdminFinancialBI: undefined;
+  AdminIntegrations: undefined;
   Receipt: { entry: any };
 };
 
@@ -121,6 +123,7 @@ const Routes = () => {
             <Stack.Screen name="Reports" component={ReportsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Financial" component={FinancialScreen} options={{ headerShown: false }} />
             <Stack.Screen name="AdminFinancial" component={AdminFinancialScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="AdminIntegrations" component={AdminIntegrationsScreen} options={{ title: 'Integrações' }} />
           </>
         ) : (
           <>
