@@ -17,6 +17,7 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import ReportsScreen from '../screens/ReportsScreen';
 import FinancialScreen from '../screens/Financial/FinancialScreen';
 import AdminFinancialScreen from '../screens/Financial/AdminFinancialScreen';
+import AdminBIFinancialScreen from '../screens/Financial/AdminBIFinancialScreen';
 
 import SuppliersListScreen from '../screens/Suppliers/SuppliersListScreen';
 import SupplierFormScreen from '../screens/Suppliers/SupplierFormScreen';
@@ -37,6 +38,7 @@ export type RootStackParamList = {
   Reports: undefined;
   Financial: undefined;
   AdminFinancial: undefined;
+  AdminFinancialBI: undefined;
   Receipt: { entry: any };
 };
 
@@ -54,6 +56,8 @@ function SuppliersStack() {
 }
 
 function AppTabs() {
+  const { user } = useAuth();
+  
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -73,6 +77,8 @@ function AppTabs() {
             iconName = focused ? 'bar-chart' : 'bar-chart-outline';
           } else if (route.name === 'Ajustes') {
             iconName = focused ? 'settings' : 'settings-outline';
+          } else if (route.name === 'BI Financeiro') {
+            iconName = focused ? 'pie-chart' : 'pie-chart-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -84,6 +90,9 @@ function AppTabs() {
       <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
       <Tab.Screen name="Pedidos" component={OrdersListScreen} />
       <Tab.Screen name="Fornecedores" component={SuppliersStack} />
+      {user?.role === 'ADMIN' && (
+        <Tab.Screen name="BI Financeiro" component={AdminBIFinancialScreen} />
+      )}
       <Tab.Screen name="Notificações" component={NotificationsScreen} />
       <Tab.Screen name="Relatórios" component={ReportsScreen} />
       <Tab.Screen name="Ajustes" component={SettingsScreen} />
