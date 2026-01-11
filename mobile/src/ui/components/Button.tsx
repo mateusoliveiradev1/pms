@@ -16,14 +16,21 @@ const Button: React.FC<Props> = ({ title, onPress, disabled, variant = 'primary'
   let borderStyle = {};
 
   if (variant === 'outline') {
-      bg = 'transparent';
+      bg = colors.surface;
       textColor = colors.primary;
       borderStyle = { borderWidth: 1, borderColor: colors.primary };
   }
 
   return (
     <TouchableOpacity
-      style={[styles.button, { backgroundColor: bg }, borderStyle, style, disabled ? styles.disabled : null]}
+      style={[
+        styles.button, 
+        { backgroundColor: bg }, 
+        borderStyle, 
+        variant === 'outline' ? { elevation: 0, shadowOpacity: 0 } : null,
+        style, 
+        disabled ? styles.disabled : null
+      ]}
       onPress={onPress}
       disabled={disabled}
     >

@@ -208,27 +208,33 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
                 <Text style={styles.sectionTitle}>Saúde do Sistema</Text>
                 <View style={styles.statsGrid}>
                     <Card style={styles.statCard}>
-                        <Ionicons name="pulse" size={24} color={colors.primary} />
+                        <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
+                            <Ionicons name="pulse" size={24} color={colors.primary} />
+                        </View>
                         <Text style={styles.statValue}>{stats?.processedEventsToday || 0}</Text>
                         <Text style={styles.statLabel}>Eventos Hoje</Text>
                     </Card>
                     <Card style={styles.statCard}>
-                        <Ionicons name="alert-circle" size={24} color={stats?.failedWebhooksToday ? colors.error : colors.success} />
+                        <View style={[styles.iconContainer, { backgroundColor: (stats?.failedWebhooksToday ? colors.error : colors.success) + '15' }]}>
+                            <Ionicons name={stats?.failedWebhooksToday ? "alert" : "checkmark-circle"} size={24} color={stats?.failedWebhooksToday ? colors.error : colors.success} />
+                        </View>
                         <Text style={styles.statValue}>{stats?.failedWebhooksToday || 0}</Text>
-                        <Text style={styles.statLabel}>Falhas Webhook</Text>
+                        <Text style={styles.statLabel}>Falhas</Text>
                     </Card>
                     <Card style={styles.statCard}>
-                        <Ionicons name="bug" size={24} color={stats?.anomalies ? colors.warning : colors.textSecondary} />
+                        <View style={[styles.iconContainer, { backgroundColor: (stats?.anomalies ? colors.warning : colors.textSecondary) + '15' }]}>
+                            <Ionicons name="bug" size={24} color={stats?.anomalies ? colors.warning : colors.textSecondary} />
+                        </View>
                         <Text style={styles.statValue}>{stats?.anomalies || 0}</Text>
                         <Text style={styles.statLabel}>Anomalias</Text>
                     </Card>
                 </View>
 
                 {/* Actions */}
-                <Text style={styles.sectionTitle}>Ações</Text>
+                <Text style={styles.sectionTitle}>Ações Rápidas</Text>
                 <View style={styles.actionRow}>
                     <Button 
-                        title="Exportar CSV (30d)" 
+                        title="Exportar CSV" 
                         onPress={() => handleExport('csv')} 
                         variant="outline"
                         style={{ flex: 1, marginRight: 8 }}
@@ -244,8 +250,9 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
                 {/* Webhooks */}
                 <View style={styles.rowBetween}>
                     <Text style={styles.sectionTitle}>Webhooks Internos</Text>
-                    <TouchableOpacity onPress={() => openModal()}>
-                        <Ionicons name="add-circle" size={28} color={colors.primary} />
+                    <TouchableOpacity onPress={() => openModal()} style={styles.addButton}>
+                        <Ionicons name="add" size={20} color="#FFF" />
+                        <Text style={styles.addButtonText}>Novo</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -254,7 +261,9 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
                         <View style={styles.webhookHeader}>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.webhookUrl} numberOfLines={1}>{webhook.url}</Text>
-                                <Text style={styles.webhookEvents}>{webhook.subscribedEvents.join(', ')}</Text>
+                                <Text style={styles.webhookEvents} numberOfLines={2}>
+                                    {webhook.subscribedEvents.join(', ')}
+                                </Text>
                             </View>
                             <Switch 
                                 value={webhook.isActive} 
@@ -263,18 +272,22 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
                             />
                         </View>
                         <View style={styles.webhookActions}>
-                            <TouchableOpacity onPress={() => openModal(webhook)} style={styles.iconBtn}>
-                                <Ionicons name="pencil" size={20} color={colors.textSecondary} />
+                            <TouchableOpacity onPress={() => openModal(webhook)} style={styles.actionBtn}>
+                                <Text style={styles.actionBtnText}>Editar</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={() => handleDeleteWebhook(webhook.id)} style={styles.iconBtn}>
-                                <Ionicons name="trash" size={20} color={colors.error} />
+                            <TouchableOpacity onPress={() => handleDeleteWebhook(webhook.id)} style={[styles.actionBtn, { marginLeft: 16 }]}>
+                                <Text style={[styles.actionBtnText, { color: colors.error }]}>Excluir</Text>
                             </TouchableOpacity>
                         </View>
                     </Card>
                 ))}
 
                 {webhooks.length === 0 && (
-                    <Text style={styles.emptyText}>Nenhum webhook configurado.</Text>
+                    <View style={styles.emptyContainer}>
+                        <Ionicons name="git-network-outline" size={48} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                        <Text style={styles.emptyText}>Nenhum webhook configurado</Text>
+                        <Text style={styles.emptySubText}>Adicione endpoints para receber notificações de eventos do sistema em tempo real.</Text>
+                    </View>
                 )}
 
             </ScrollView>
@@ -361,7 +374,15 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
         marginHorizontal: 4,
-        padding: 12,
+        padding: 16,
+    },
+    iconContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 8,
     },
     statValue: {
         fontSize: 20,
@@ -416,9 +437,50 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
     emptyText: {
-        textAlign: 'center',
+        fontSize: 16,
+        fontWeight: '600',
+        color: colors.text,
+        marginTop: 16,
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        padding: 40,
+        backgroundColor: colors.surface,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderStyle: 'dashed',
+        marginTop: 8,
+    },
+    emptySubText: {
+        fontSize: 12,
         color: colors.textSecondary,
-        marginTop: 20,
+        textAlign: 'center',
+        marginTop: 8,
+        maxWidth: 240,
+    },
+    addButton: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    addButtonText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontWeight: 'bold',
+        marginLeft: 4,
+    },
+    actionBtn: {
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+    },
+    actionBtnText: {
+        fontSize: 14,
+        color: colors.primary,
+        fontWeight: '500',
     },
     modalOverlay: {
         flex: 1,
