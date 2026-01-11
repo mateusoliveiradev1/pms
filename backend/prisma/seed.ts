@@ -7,34 +7,11 @@ dotenv.config();
 const prisma = new PrismaClient();
 
 async function main() {
-  const hashedPassword = await bcrypt.hash('123456', 10);
-
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@pms.com' },
-    update: {},
-    create: {
-      email: 'admin@pms.com',
-      name: 'Admin User',
-      password: hashedPassword,
-      role: 'ADMIN',
-    },
-  });
-
-  console.log({ admin });
-
-  const supplierUser = await prisma.user.upsert({
-    where: { email: 'fornecedor@pms.com' },
-    update: {},
-    create: {
-      email: 'fornecedor@pms.com',
-      name: 'Fornecedor Teste',
-      password: hashedPassword,
-      role: 'SUPPLIER',
-    },
-  });
-
-  console.log({ supplierUser });
-
+  /* 
+  // USERS ARE MANAGED BY SUPABASE AUTH NOW
+  // Seed via Auth API or manually in Dashboard
+  */
+  
   // Seed Financial Settings
   await prisma.financialSettings.upsert({
     where: { id: 'global' },
@@ -116,6 +93,10 @@ async function main() {
   const endDate = new Date(now);
   endDate.setDate(endDate.getDate() + 30);
 
+  /*
+  // SUPPLIERS NEED A VALID AUTH USER ID (UUID) FROM SUPABASE
+  // Skipping Supplier/Ledger seed for now.
+  
   const supplier = await prisma.supplier.upsert({
     where: { id: 'supplier_test' },
     update: {
@@ -202,6 +183,7 @@ async function main() {
       }
     });
   }
+  */
 }
 
 main()

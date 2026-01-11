@@ -6,16 +6,17 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
+  id        String   @id @db.Uuid // Linked to auth.users.id
+  name      String?
   email     String   @unique
-  password  String
-  role      String   @default("OPERATOR") // ADMIN, OPERATOR
+  role      String   @default("SUPPLIER") // ADMIN, SUPPLIER
+  status    String   @default("ACTIVE")
   expoPushToken String?
   suppliers Supplier[]
   createdAt DateTime @default(now())
@@ -69,8 +70,8 @@ model Supplier {
   integrationType String    // MANUAL, API
   shippingDeadline Int?     // Days
   status          String    @default("ACTIVE") // ACTIVE, PAUSED
-
-  userId          String?
+  
+  userId          String?   @db.Uuid
   user            User?     @relation(fields: [userId], references: [id])
   
   // Financial Fields

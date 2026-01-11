@@ -28,6 +28,10 @@ api.interceptors.response.use(
     }
 
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      // Clear storage to force re-login logic on next app load or via context if possible
+      SecureStore.deleteItemAsync('token').catch(console.log);
+      SecureStore.deleteItemAsync('user').catch(console.log);
+      
       Alert.alert(
         'Sessão Expirada',
         'Sua sessão expirou ou você não tem permissão. Por favor, faça login novamente.'

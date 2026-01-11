@@ -222,8 +222,8 @@ export const exportProductsCsv = async (req: Request, res: Response) => {
     const where = query
       ? {
           OR: [
-            { name: { contains: String(query), mode: 'insensitive' } },
-            { sku: { contains: String(query), mode: 'insensitive' } },
+            { name: { contains: String(query), mode: 'insensitive' as any } },
+            { sku: { contains: String(query), mode: 'insensitive' as any } },
           ],
         }
       : undefined;
@@ -232,14 +232,14 @@ export const exportProductsCsv = async (req: Request, res: Response) => {
       include: { suppliers: true }
     });
     const header = ['id','name','sku','finalPrice','stockAvailable','suppliersCount'].join(',');
-    const rows = products.map(p => {
+    const rows = products.map((p: any) => {
       const cols = [
         p.id,
         p.name,
         p.sku,
         String(p.finalPrice ?? 0),
         String(p.stockAvailable ?? 0),
-        String(p.suppliers.length)
+        String(p.suppliers?.length ?? 0)
       ];
       return cols.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
     });

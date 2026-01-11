@@ -27,16 +27,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     async function loadStorageData() {
-      const storagedUser = await SecureStore.getItemAsync('user');
-      const storagedToken = await SecureStore.getItemAsync('token');
+      try {
+        const storagedUser = await SecureStore.getItemAsync('user');
+        const storagedToken = await SecureStore.getItemAsync('token');
 
-      if (storagedUser && storagedToken) {
-        api.defaults.headers['Authorization'] = `Bearer ${storagedToken}`;
-        setUser(JSON.parse(storagedUser));
-        // Refresh push token on app load if logged in
-        registerForPushNotificationsAsync().catch(console.log);
+        if (storagedUser && storagedToken) {
+          try {
+            const parsedUser = JSON.parse(storagedUser);
+            if (parsedUser && parsedUser.id) {
+                api.defaults.headers['Authorization'] = `Bearer ${storagedToken}`;
+                setUser(parsedUser);
+                // Refresh push token on app load if logged in
+                registerForPushNotificationsAsync().catch(e => console.log('Push reg error (ignored):', e));
+            } else {
+                console.log('Invalid user data in storage, clearing...');
+                await signOut();
+            }
+          } catch (parseError) {
+             console.log('Error parsing stored user:', parseError);
+             await signOut();
+          }
+        }
+      } catch (e) {
+        console.log('Error loading storage data:', e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
 
     loadStorageData();
@@ -50,27 +66,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const { token, user } = response.data;
 
-    await SecureStore.setItemAsync('token', token);
-    await SecureStore.setItemAsync('user', JSON.stringify(user));
+    if (token && user) {
+        await SecureStore.setItemAsync('token', token);
+        await SecureStore.setItemAsync('user', JSON.stringify(user));
 
-    api.defaults.headers['Authorization'] = `Bearer ${token}`;
-    setUser(user);
-    
-    // Register for push notifications
-    registerForPushNotificationsAsync().catch(console.log);
+        api.defaults.headers['Authorization'] = `Bearer ${token}`;
+        setUser(user);
+        
+        // Register for push notifications
+        registerForPushNotificationsAsync().catch(e => console.log('Push reg error:', e));
+    } else {
+        throw new Error('Invalid response from server');
+    }
   }
 
   async function signUp(data: any) {
     const response = await api.post('/auth/register', data);
     const { token, user } = response.data;
 
-    await SecureStore.setItemAsync('token', token);
-    await SecureStore.setItemAsync('user', JSON.stringify(user));
+    if (token && user) {
+        await SecureStore.setItemAsync('token', token);
+        await SecureStore.setItemAsync('user', JSON.stringify(user));
 
-    api.defaults.headers['Authorization'] = `Bearer ${token}`;
-    setUser(user);
+        api.defaults.headers['Authorization'] = `Bearer ${token}`;
+        setUser(user);
 
-    registerForPushNotificationsAsync().catch(console.log);
+        registerForPushNotificationsAsync().catch(e => console.log('Push reg error:', e));
+    } else {
+         // Se criou mas não retornou token (ex: pendente confirmação, embora eu tenha ativado auto-confirm)
+         throw new Error('Cadastro realizado, mas falha no login automático. Tente entrar.');
+    }
   }
 
   async function signOut() {

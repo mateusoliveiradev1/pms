@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../prisma';
 
 export const getSalesStats = async (req: Request, res: Response) => {
-  console.log('Fetching sales stats...');
+  // console.log('Fetching sales stats...'); // Reduced noise
   try {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -25,7 +25,7 @@ export const getSalesStats = async (req: Request, res: Response) => {
       }
     });
 
-    console.log(`Found ${orders.length} orders for stats.`);
+    // console.log(`Found ${orders.length} orders for stats.`); // Reduced noise
 
     // Group by day
     const salesByDate: Record<string, number> = {};

@@ -108,12 +108,18 @@ export const createOrder = async (req: Request, res: Response) => {
                 }
                 // Enforce active subscription and limits
                 const activeSub = await tx.supplierSubscription.findFirst({
-                  where: { supplierId: supplierRel.supplierId, status: 'ATIVA' },
+                  where: { 
+                      supplierId: supplierRel.supplierId, 
+                      status: 'ATIVA',
+                      endDate: { gt: new Date() } // Ensure not expired
+                  },
                   include: { plan: true }
                 });
-                if (!activeSub || activeSub.endDate < new Date()) {
-                  throw new Error(`Supplier ${supplierRel.supplier.name} subscription is overdue. Cannot create order.`);
+
+                if (!activeSub) {
+                  throw new Error(`Supplier ${supplierRel.supplier.name} has no active subscription. Cannot create order.`);
                 }
+                
                 // Limit orders in current cycle
                 const cycleStart = activeSub.startDate;
                 const cycleEnd = activeSub.endDate;

@@ -1,5 +1,5 @@
+import prisma from '../prisma';
 import { 
-  PrismaClient, 
   Prisma, 
   Supplier, 
   SupplierSubscription, 
@@ -8,8 +8,6 @@ import {
   WithdrawalRequest, 
   Order 
 } from '@prisma/client';
-
-const prisma = new PrismaClient();
 
 interface FinancialCalculation {
   marketplaceFee: number;

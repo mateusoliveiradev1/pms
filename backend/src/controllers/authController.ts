@@ -1,62 +1,104 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import prisma from '../prisma';
+import { supabase } from '../lib/supabase';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   const { name, email, password, role, supplierName } = req.body;
 
   try {
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      res.status(400).json({ message: 'User already exists' });
-      return;
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const result = await prisma.$transaction(async (prisma) => {
-      const user = await prisma.user.create({
+    // 1. Create User in Supabase Auth
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
         data: {
           name,
-          email,
-          password: hashedPassword,
-          role: role || (supplierName ? 'SUPPLIER' : 'OPERATOR'),
-        },
-      });
-
-      if (supplierName) {
-        await prisma.supplier.create({
-          data: {
-            name: supplierName,
-            integrationType: 'MANUAL',
-            status: 'ACTIVE',
-            financialStatus: 'ACTIVE',
-            verificationStatus: 'PENDING',
-            userId: user.id,
-          },
-        });
+          role: role || (supplierName ? 'SUPPLIER' : 'SUPPLIER'),
+        }
       }
-
-      return user;
     });
 
-    // Auto-login after registration
-    const token = jwt.sign(
-      { userId: result.id, email: result.email, role: result.role },
-      process.env.JWT_SECRET as string,
-      { expiresIn: '30d' }
-    );
+    if (error) {
+       res.status(400).json({ message: error.message });
+       return;
+    }
+
+    if (!data.user) {
+        res.status(400).json({ message: 'Registration failed. Check email confirmation settings.' });
+        return;
+    }
+
+    // Auto-confirm email in development/production to avoid email verification block
+    // This requires SUPABASE_SERVICE_KEY to be set in backend
+    try {
+        await supabase.auth.admin.updateUserById(
+            data.user.id,
+            { email_confirm: true }
+        );
+    } catch (confirmError) {
+        console.warn('Failed to auto-confirm email (Service Key might be missing or insufficient permissions):', confirmError);
+    }
+
+    // 2. Handle Supplier Creation (if needed)
+    if (supplierName) {
+        // Wait for Trigger to sync User to public table
+        // Simple retry mechanism
+        let retries = 5;
+        let userCreated = false;
+        
+        while (retries > 0) {
+            const userExists = await prisma.user.findUnique({ where: { id: data.user.id } });
+            if (userExists) {
+                userCreated = true;
+                break;
+            }
+            await new Promise(r => setTimeout(r, 500));
+            retries--;
+        }
+        
+        if (userCreated) {
+            const supplier = await prisma.supplier.create({
+                data: {
+                    name: supplierName,
+                    integrationType: 'MANUAL',
+                    status: 'ACTIVE',
+                    financialStatus: 'ACTIVE',
+                    verificationStatus: 'PENDING',
+                    userId: data.user.id,
+                },
+            });
+
+            // Assign Default 'Basic' Plan
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() + 30);
+            
+            await prisma.supplierSubscription.create({
+                data: {
+                    supplierId: supplier.id,
+                    planId: 'basic',
+                    status: 'ATIVA',
+                    startDate: new Date(),
+                    endDate: endDate
+                }
+            });
+        } else {
+            console.warn(`User ${data.user.id} not found in public table after retries. Supplier creation skipped.`);
+        }
+    }
 
     res.status(201).json({ 
       message: 'User created successfully', 
-      token, 
-      user: { id: result.id, name: result.name, email: result.email, role: result.role } 
+      token: data.session?.access_token, 
+      user: { 
+          id: data.user.id, 
+          email: data.user.email, 
+          role: data.user.user_metadata?.role 
+      } 
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Registration error:', error);
-    res.status(500).json({ message: 'Error registering user', error });
+    res.status(500).json({ message: 'Error registering user', error: error.message });
   }
 };
 
@@ -64,29 +106,26 @@ export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+    });
 
-    if (!user) {
-      res.status(401).json({ message: 'Invalid credentials' });
-      return;
+    if (error) {
+        res.status(401).json({ message: error.message });
+        return;
     }
 
-    const isValid = await bcrypt.compare(password, user.password);
-
-    if (!isValid) {
-      res.status(401).json({ message: 'Invalid credentials' });
-      return;
-    }
-
-    const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET as string,
-      { expiresIn: '30d' }
-    );
-
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
-  } catch (error) {
-    res.status(500).json({ message: 'Login failed', error });
+    res.json({ 
+        token: data.session?.access_token, 
+        user: { 
+            id: data.user?.id, 
+            email: data.user?.email, 
+            role: data.user?.user_metadata?.role 
+        } 
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Login failed', error: error.message });
   }
 };
 
@@ -99,18 +138,14 @@ export const updatePushToken = async (req: Request, res: Response) => {
         return;
     }
 
-    if (!token) {
-        res.status(400).json({ message: 'Token is required' });
-        return;
-    }
-
     try {
         await prisma.user.update({
             where: { id: userId },
             data: { expoPushToken: token }
         });
-        res.json({ message: 'Push token updated' });
+        res.json({ success: true });
     } catch (error) {
-        res.status(500).json({ message: 'Error updating push token', error });
+        console.error('Failed to update push token:', error);
+        res.status(500).json({ error: 'Failed to update token' });
     }
 };

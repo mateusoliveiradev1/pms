@@ -20,18 +20,21 @@ export async function registerForPushNotificationsAsync() {
   const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
     
   if (isExpoGo) {
-      console.log('Push Notifications are disabled in Expo Go (SDK 53+ restriction).');
+      console.log('Info: Push Notifications skipped in Expo Go (Development Mode).');
       return null;
   }
 
   if (Platform.OS === 'android') {
     try {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-      });
+      // Avoid calling this in Expo Go if possible, or wrap in try-catch (which it is)
+      if (!isExpoGo) {
+          await Notifications.setNotificationChannelAsync('default', {
+            name: 'default',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#FF231F7C',
+          });
+      }
     } catch (error) {
       // Ignore error in Expo Go
       console.log('Error setting notification channel (likely Expo Go limitation):', error);
