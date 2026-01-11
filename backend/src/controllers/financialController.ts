@@ -4,6 +4,12 @@ import prisma from '../prisma';
 
 export const checkOverdue = async (req: Request, res: Response) => {
   try {
+    const cronSecret = process.env.CRON_SECRET;
+    if (cronSecret && req.headers['x-cron-secret'] !== cronSecret) {
+        res.status(403).json({ message: 'Forbidden: Invalid Cron Secret' });
+        return;
+    }
+    
     const results = await FinancialService.updateOverdueSuppliers();
     res.json({ message: 'Overdue check completed', updatedCount: results.length, details: results });
   } catch (error: any) {

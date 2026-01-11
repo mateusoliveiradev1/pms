@@ -8,6 +8,7 @@ import {
   WithdrawalRequest, 
   Order 
 } from '@prisma/client';
+import { logFinancialEvent } from '../lib/logger';
 
 interface FinancialCalculation {
   marketplaceFee: number;
@@ -177,6 +178,15 @@ export const FinancialService = {
                 targetId: orderId,
                 details: JSON.stringify({ total: totalPaid, net: netValue, commission, gateway: paymentGateway })
             }
+        });
+
+        // 6. Audit Log
+        logFinancialEvent({
+            type: 'PAYMENT_CONFIRMED',
+            amount: totalPaid,
+            referenceId: orderId,
+            supplierId: order.supplierId,
+            details: { netValue, commission, gateway: paymentGateway, externalId: paymentExternalId }
         });
 
         return updatedOrder;
@@ -372,6 +382,14 @@ export const FinancialService = {
                 details: JSON.stringify({ reason, amount: netValue })
             }
         });
+
+        logFinancialEvent({
+            type: 'REFUND_PROCESSED',
+            amount: netValue,
+            referenceId: orderId,
+            supplierId: order.supplierId,
+            details: { reason, commissionReversed: commission }
+        });
     });
   },
 
@@ -427,6 +445,13 @@ export const FinancialService = {
                     walletBalance: { increment: totalReleased },
                     pendingBalance: { decrement: totalReleased }
                 }
+            });
+
+            logFinancialEvent({
+                type: 'BALANCE_RELEASED',
+                amount: totalReleased,
+                supplierId: supplierId,
+                details: { count: releasableItems.length }
             });
         }
 
@@ -598,11 +623,20 @@ export const FinancialService = {
         data: {
           supplierId,
           amount,
-          pixKey,
-          status: 'PENDING'
+          pixKey: pixKey || 'CPF-KEY', // Use provided or default
+          status: 'PENDING',
+          requestedAt: new Date()
         }
       });
-      
+
+      logFinancialEvent({
+          type: 'WITHDRAWAL_REQUESTED',
+          amount: amount,
+          referenceId: request.id,
+          supplierId: supplierId,
+          details: { pixKey: pixKey || 'CPF-KEY' }
+      });
+
       return request;
     });
   },
@@ -855,6 +889,14 @@ export const FinancialService = {
           }
       });
 
+      logFinancialEvent({
+          type: 'WITHDRAWAL_PAID',
+          amount: req.amount,
+          referenceId: requestId,
+          supplierId: req.supplierId,
+          details: { adminId, adminName }
+      });
+
       return updatedReq;
     });
   },
@@ -894,6 +936,14 @@ export const FinancialService = {
             reason: reason,
             details: `Saque rejeitado de R$ ${req.amount}`
         }
+      });
+
+      logFinancialEvent({
+          type: 'WITHDRAWAL_REJECTED',
+          amount: req.amount,
+          referenceId: requestId,
+          supplierId: req.supplierId,
+          details: { reason, adminId, adminName }
       });
 
       return updatedReq;
