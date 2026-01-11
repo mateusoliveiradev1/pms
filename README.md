@@ -1,100 +1,95 @@
 # Dropshipping Management System (PMS)
 
-Sistema completo de gestão para operação de Dropshipping sem estoque físico, atuando como HUB entre Fornecedores e Marketplaces (Mercado Livre).
+**A comprehensive solution for managing dropshipping operations without physical stock, acting as a robust HUB between Suppliers and Marketplaces.**
 
-## 🚀 Tecnologias
+---
 
-- **Backend**: Node.js, Express, TypeScript, Prisma ORM, SQLite (Dev), JWT.
-- **Mobile**: React Native, Expo, Context API, Axios.
+## � Documentation
 
-## ✨ Funcionalidades (MVP)
+-   [**Architecture Overview**](docs/ARCHITECTURE.md): Learn about the tech stack and system design.
+-   [**Setup Guide**](docs/SETUP.md): Step-by-step instructions to run the project locally.
+-   [**API Reference**](docs/API.md): Detailed list of backend endpoints.
+-   [**Database Schema**](docs/DATABASE.md): Explanation of data models and relationships.
 
-### 1. Gestão de Produtos e Estoque
-- **Multi-Fornecedores**: Suporte a múltiplos fornecedores para um mesmo produto.
-- **Estoque Virtual**: Controle de estoque virtual (do fornecedor) e estoque de segurança.
-- **Cálculo de Preço**: Definição automática de preço final baseada em margem fixa ou dinâmica.
-- **Estoque Consolidado**: O sistema calcula automaticamente o estoque disponível para venda (Virtual - Segurança).
+---
 
-### 2. Gestão de Pedidos
-- **Fluxo de Status**: Novo -> Enviado ao Fornecedor -> Em Envio (Rastreio) -> Entregue.
-- **Criação Manual**: Permite criar pedidos manualmente (vendas diretas).
-- **Rastreamento**: Inserção de código de rastreio e atualização de status.
+## 🚀 Key Features
 
-### 3. Dashboard e Notificações
-- **Métricas**: Vendas totais, pedidos pendentes, produtos com estoque baixo.
-- **Alertas**: Sistema de notificações interno para avisar sobre estoque crítico (< 5 unidades) e novos pedidos.
+### 📦 Product & Inventory
+-   **Multi-Supplier Support**: Single product sourced from multiple suppliers.
+-   **Smart Stock Management**:
+    -   **Virtual Stock**: Supplier's reported stock.
+    -   **Safety Stock**: Configurable buffer.
+    -   **Consolidated Stock**: Automatically calculated available quantity.
+-   **Pricing Engine**: Dynamic pricing strategies (Fixed Margin or Percentage).
 
-### 4. Autenticação e Segurança
-- Login seguro com JWT.
-- Armazenamento seguro de tokens no dispositivo móvel.
+### 🛒 Order Management
+-   **Full Lifecycle Tracking**: `Pending` -> `Paid` -> `Shipped` -> `Delivered`.
+-   **Automated Sync**: Seamless integration with Mercado Livre orders.
+-   **Manual Entry**: Support for direct sales channels.
 
-## 🛠️ Instalação e Execução
+### 💰 Financial System
+-   **Double-Entry Ledger**: Immutable record of every cent.
+-   **Supplier Wallet**: Real-time balance tracking (Available vs. Pending).
+-   **Automated Payouts**: Withdrawal request workflow with admin approval.
+-   **Subscription Plans**: SaaS model for suppliers with limits and commission rates.
 
-### Pré-requisitos
-- Node.js (v18+)
-- NPM ou Yarn
-- Expo Go (Mobile)
+### 📊 Business Intelligence
+-   **Real-time Dashboard**: Sales metrics, low stock alerts, and financial health.
+-   **Admin Tools**: Comprehensive control panel for system administrators.
 
-### Backend
+### 🔌 Integrations
+-   **Mercado Livre**: OAuth 2.0, Product Sync, Order Sync.
+-   **Payment Gateways**: Infrastructure ready for Stripe & Mercado Pago.
+-   **Push Notifications**: Mobile alerts for critical events.
 
-1. Entre na pasta `backend`:
-   ```bash
-   cd backend
-   npm install
-   ```
+---
 
-2. Configure o Banco de Dados:
-   ```bash
-   npx prisma migrate dev
-   ```
+## 🛠️ Technology Stack
 
-3. Crie o usuário Admin inicial:
-   ```bash
-   npx ts-node prisma/seed.ts
-   ```
-   *Login:* `admin@pms.com` | *Senha:* `123456`
+| Component | Technology | Description |
+| :--- | :--- | :--- |
+| **Backend** | **Node.js & Express** | High-performance REST API. |
+| | **TypeScript** | Type safety and better developer experience. |
+| | **Prisma ORM** | Type-safe database access (PostgreSQL/SQLite). |
+| **Mobile** | **React Native** | Cross-platform mobile app (iOS & Android). |
+| | **Expo** | Rapid development and deployment ecosystem. |
+| **Auth** | **JWT** | Secure stateless authentication. |
 
-4. Configure as variáveis de ambiente no arquivo `.env` (crie se não existir):
-   ```env
-   DATABASE_URL="file:./dev.db"
-   JWT_SECRET="seu_segredo_jwt"
-   ML_CLIENT_ID="seu_app_id_ml"
-   ML_CLIENT_SECRET="seu_secret_ml"
-   ML_REDIRECT_URI="http://localhost:3000/api/mercadolivre/callback"
-   ```
+---
 
-5. Inicie o servidor:
-   ```bash
-   npm run dev
-   ```
+## ⚡ Quick Start
 
-### Mobile
+1.  **Clone the repository**.
+2.  **Setup Backend**:
+    ```bash
+    cd backend
+    npm install
+    npx prisma migrate dev
+    npm run dev
+    ```
+3.  **Setup Mobile**:
+    ```bash
+    cd mobile
+    npm install
+    npx expo start
+    ```
 
-1. Entre na pasta `mobile`:
-   ```bash
-   cd mobile
-   npm install
-   ```
+*For detailed instructions, please refer to the [Setup Guide](docs/SETUP.md).*
 
-2. Configure o IP da API:
-   - Abra `src/services/api.ts`.
-   - Altere `baseURL` para o IP da sua máquina local (ex: `http://192.168.1.15:3000`).
+---
 
-3. Rode o projeto:
-   ```bash
-   npx expo start --clear
-   ```
+## 🤝 Contribution
 
-## 📦 Estrutura do Banco de Dados (Prisma)
+Contributions are welcome! Please follow these steps:
+1.  Fork the project.
+2.  Create your feature branch (`git checkout -b feature/AmazingFeature`).
+3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
+4.  Push to the branch (`git push origin feature/AmazingFeature`).
+5.  Open a Pull Request.
 
-- **Product**: Mantém dados globais e estoque consolidado.
-- **Supplier**: Dados dos fornecedores.
-- **ProductSupplier**: Tabela pivô (N:N) que gerencia preço e estoque específico de cada fornecedor para cada produto.
-- **Order**: Pedidos de venda.
-- **Notification**: Alertas do sistema.
+---
 
-## 🔜 Próximos Passos (Roadmap)
+## 📝 License
 
-1. **Integração Mercado Livre**: OAuth e Sincronização de Anúncios.
-2. **Push Notifications**: Integração com Expo Notifications para alertas no celular.
-3. **Relatórios Avançados**: Gráficos de vendas por período.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
