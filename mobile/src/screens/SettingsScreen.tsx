@@ -122,6 +122,24 @@ const SettingsScreen = () => {
           </View>
         </View>
 
+        {user?.role === 'ADMIN' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Administração</Text>
+            <View style={styles.card}>
+              <TouchableOpacity 
+                style={styles.menuItem}
+                onPress={() => navigation.navigate('AdminIntegrations' as never)}
+              >
+                <View style={[styles.menuIcon, { backgroundColor: '#E3F2FD' }]}>
+                  <Ionicons name="git-network-outline" size={24} color={colors.primary} />
+                </View>
+                <Text style={styles.menuText}>Integrações & Webhooks</Text>
+                <Ionicons name="chevron-forward" size={20} color="#ccc" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Integrações</Text>
           <View style={styles.card}>
