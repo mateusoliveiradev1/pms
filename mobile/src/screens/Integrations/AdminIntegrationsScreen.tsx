@@ -8,18 +8,16 @@ import {
     Alert, 
     TouchableOpacity, 
     Modal, 
-    Switch,
-    ActivityIndicator
+    Switch
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import api from '../../services/api';
 import Header from '../../ui/components/Header';
-import Card from '../../ui/components/Card';
 import Button from '../../ui/components/Button';
 import Input from '../../ui/components/Input';
-import { colors } from '../../ui/theme';
+import { colors, spacing, radius, shadow } from '../../ui/theme';
 
 interface HealthStats {
     processedEventsToday: number;
@@ -37,6 +35,83 @@ interface Webhook {
     subscribedEvents: string[];
 }
 
+// --- Visual Components ---
+
+const StatusCard = ({ icon, value, label, status, color, backgroundColor }: { icon: keyof typeof Ionicons.glyphMap, value: number, label: string, status: string, color: string, backgroundColor?: string }) => (
+    <View style={[styles.statusCard, { backgroundColor: colors.surface }]}>
+        <View style={[styles.statusHeader]}>
+            <View style={[styles.iconContainer, { backgroundColor: backgroundColor || color + '15' }]}>
+                <Ionicons name={icon} size={22} color={color} />
+            </View>
+            <Text style={[styles.statusValue, { color: colors.text }]}>{value}</Text>
+        </View>
+        <View>
+            <Text style={styles.statusLabel}>{label}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: backgroundColor || color + '10' }]}>
+                 <Text style={[styles.statusText, { color: color }]} numberOfLines={1}>{status}</Text>
+            </View>
+        </View>
+    </View>
+);
+
+const ActionButton = ({ icon, title, subtitle, onPress, variant = 'primary' }: { icon: keyof typeof Ionicons.glyphMap, title: string, subtitle: string, onPress: () => void, variant?: 'primary' | 'secondary' }) => (
+    <TouchableOpacity 
+        style={[
+            styles.actionButton, 
+            variant === 'secondary' && styles.actionButtonSecondary,
+            variant === 'primary' && styles.actionButtonPrimary
+        ]} 
+        onPress={onPress}
+        activeOpacity={0.8}
+    >
+        <View style={[
+            styles.actionIcon, 
+            { backgroundColor: variant === 'primary' ? 'rgba(255,255,255,0.2)' : colors.background }
+        ]}>
+            <Ionicons 
+                name={icon} 
+                size={24} 
+                color={variant === 'primary' ? '#FFF' : colors.textSecondary} 
+            />
+        </View>
+        <View style={styles.actionContent}>
+            <Text style={[
+                styles.actionTitle,
+                variant === 'primary' && { color: '#FFF' }
+            ]}>{title}</Text>
+            <Text style={[
+                styles.actionSubtitle,
+                variant === 'primary' && { color: 'rgba(255,255,255,0.8)' }
+            ]}>{subtitle}</Text>
+        </View>
+        <Ionicons 
+            name="chevron-forward" 
+            size={20} 
+            color={variant === 'primary' ? '#FFF' : colors.textSecondary} 
+            style={{ opacity: 0.7 }} 
+        />
+    </TouchableOpacity>
+);
+
+const WebhookEmptyState = ({ onPress }: { onPress: () => void }) => (
+    <View style={styles.emptyStateContainer}>
+        <View style={styles.emptyIllustration}>
+            <View style={styles.emptyCircleLarge} />
+            <View style={styles.emptyCircleSmall} />
+            <Ionicons name="git-network-outline" size={48} color={colors.primary} style={{ zIndex: 1 }} />
+        </View>
+        <Text style={styles.emptyStateTitle}>Integração Externa</Text>
+        <Text style={styles.emptyStateText}>
+            Webhooks permitem notificar sistemas externos sobre eventos financeiros em tempo real.
+        </Text>
+        <TouchableOpacity style={styles.createWebhookBtn} onPress={onPress}>
+            <Text style={styles.createWebhookBtnText}>+ Criar primeiro webhook</Text>
+        </TouchableOpacity>
+    </View>
+);
+
+// --- Main Screen ---
+
 export default function AdminIntegrationsScreen({ navigation }: any) {
     const [loading, setLoading] = useState(false);
     const [stats, setStats] = useState<HealthStats | null>(null);
@@ -47,7 +122,7 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
     const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
     const [url, setUrl] = useState('');
     const [secret, setSecret] = useState('');
-    const [events, setEvents] = useState(''); // Comma separated
+    const [events, setEvents] = useState('');
 
     const fetchData = async () => {
         setLoading(true);
@@ -125,7 +200,7 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
             await api.patch(`/admin/integrations/webhooks/${id}/toggle`, {
                 isActive: !currentStatus
             });
-            fetchData(); // Refresh list
+            fetchData();
         } catch (error) {
             Alert.alert('Erro', 'Falha ao alterar status');
         }
@@ -142,7 +217,7 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
             
             const response = await api.get('/admin/integrations/export', {
                 params: { startDate, endDate, format },
-                responseType: 'text' // For CSV. For XLSX we need blob but React Native handles differently
+                responseType: 'text'
             });
 
             const fileName = `accounting_${startDate}_${endDate}.${format}`;
@@ -153,9 +228,6 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
                 // @ts-ignore
                 await FileSystem.writeAsStringAsync(fileUri, response.data, { encoding: FileSystem.EncodingType.UTF8 });
             } else {
-                // XLSX handling in RN requires buffer/base64 logic usually, simplistic here for CSV mainly
-                // If backend sends binary, we need base64.
-                // Assuming CSV for mobile ease for now.
                 Alert.alert('Aviso', 'Exportação Excel via mobile requer configuração avançada. Use CSV por enquanto.');
                 return; 
             }
@@ -203,90 +275,103 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
             <ScrollView 
                 contentContainerStyle={styles.content}
                 refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchData} />}
+                showsVerticalScrollIndicator={false}
             >
-                {/* Health Check */}
-                <Text style={styles.sectionTitle}>Saúde do Sistema</Text>
-                <View style={styles.statsGrid}>
-                    <Card style={styles.statCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
-                            <Ionicons name="pulse" size={24} color={colors.primary} />
-                        </View>
-                        <Text style={styles.statValue}>{stats?.processedEventsToday || 0}</Text>
-                        <Text style={styles.statLabel}>Eventos Hoje</Text>
-                    </Card>
-                    <Card style={styles.statCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: (stats?.failedWebhooksToday ? colors.error : colors.success) + '15' }]}>
-                            <Ionicons name={stats?.failedWebhooksToday ? "alert" : "checkmark-circle"} size={24} color={stats?.failedWebhooksToday ? colors.error : colors.success} />
-                        </View>
-                        <Text style={styles.statValue}>{stats?.failedWebhooksToday || 0}</Text>
-                        <Text style={styles.statLabel}>Falhas</Text>
-                    </Card>
-                    <Card style={styles.statCard}>
-                        <View style={[styles.iconContainer, { backgroundColor: (stats?.anomalies ? colors.warning : colors.textSecondary) + '15' }]}>
-                            <Ionicons name="bug" size={24} color={stats?.anomalies ? colors.warning : colors.textSecondary} />
-                        </View>
-                        <Text style={styles.statValue}>{stats?.anomalies || 0}</Text>
-                        <Text style={styles.statLabel}>Anomalias</Text>
-                    </Card>
+                {/* 1. Health Stats */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Saúde do Sistema</Text>
+                    <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} />
                 </View>
 
-                {/* Actions */}
-                <Text style={styles.sectionTitle}>Ações Rápidas</Text>
-                <View style={styles.actionRow}>
-                    <Button 
-                        title="Exportar CSV" 
-                        onPress={() => handleExport('csv')} 
-                        variant="outline"
-                        style={{ flex: 1, marginRight: 8 }}
+                <View style={styles.grid}>
+                    <StatusCard 
+                        icon="pulse" 
+                        value={stats?.processedEventsToday || 0} 
+                        label="Eventos Hoje" 
+                        status="Operando normalmente"
+                        color={colors.primary}
+                        backgroundColor="#E3F2FD"
                     />
-                    <Button 
+                    <StatusCard 
+                        icon="alert-circle" 
+                        value={stats?.failedWebhooksToday || 0} 
+                        label="Falhas Webhook" 
+                        status={stats?.failedWebhooksToday ? "Atenção requerida" : "Nenhuma falha"}
+                        color={stats?.failedWebhooksToday ? colors.error : colors.success}
+                        backgroundColor={stats?.failedWebhooksToday ? "#FFEBEE" : "#E8F5E9"}
+                    />
+                </View>
+                <View style={[styles.grid, { marginTop: 12 }]}>
+                    <StatusCard 
+                        icon="shield-checkmark" 
+                        value={stats?.anomalies || 0} 
+                        label="Anomalias" 
+                        status={stats?.anomalies ? "Detectadas" : "Sistema íntegro"}
+                        color={stats?.anomalies ? colors.warning : colors.success}
+                        backgroundColor={stats?.anomalies ? "#FFF3E0" : "#E8F5E9"}
+                    />
+                </View>
+
+                {/* 2. Actions */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Ações Rápidas</Text>
+                </View>
+                
+                <View style={styles.actionsContainer}>
+                    <ActionButton 
+                        icon="notifications-circle" 
                         title="Testar Alertas" 
-                        onPress={handleTestNotification} 
-                        variant="outline"
-                        style={{ flex: 1, marginLeft: 8 }}
+                        subtitle="Simula incidentes do sistema"
+                        onPress={handleTestNotification}
+                        variant="primary"
+                    />
+                    <View style={{ height: 16 }} />
+                    <ActionButton 
+                        icon="document-text" 
+                        title="Exportar CSV (30d)" 
+                        subtitle="Relatório contábil completo"
+                        onPress={() => handleExport('csv')}
+                        variant="secondary"
                     />
                 </View>
 
-                {/* Webhooks */}
-                <View style={styles.rowBetween}>
+                {/* 3. Webhooks */}
+                <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Webhooks Internos</Text>
-                    <TouchableOpacity onPress={() => openModal()} style={styles.addButton}>
-                        <Ionicons name="add" size={20} color="#FFF" />
-                        <Text style={styles.addButtonText}>Novo</Text>
-                    </TouchableOpacity>
+                    {webhooks.length > 0 && (
+                        <TouchableOpacity onPress={() => openModal()} style={styles.addButton}>
+                            <Ionicons name="add" size={16} color="#FFF" />
+                            <Text style={styles.addButtonText}>Novo</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
-                {webhooks.map(webhook => (
-                    <Card key={webhook.id} style={styles.webhookCard}>
-                        <View style={styles.webhookHeader}>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.webhookUrl} numberOfLines={1}>{webhook.url}</Text>
-                                <Text style={styles.webhookEvents} numberOfLines={2}>
-                                    {webhook.subscribedEvents.join(', ')}
-                                </Text>
+                {webhooks.length === 0 ? (
+                    <WebhookEmptyState onPress={() => openModal()} />
+                ) : (
+                    <View>
+                        {webhooks.map(webhook => (
+                            <View key={webhook.id} style={styles.webhookItem}>
+                                <View style={styles.webhookIcon}>
+                                    <Ionicons name="globe-outline" size={24} color={colors.primary} />
+                                </View>
+                                <View style={styles.webhookContent}>
+                                    <Text style={styles.webhookUrl} numberOfLines={1}>{webhook.url}</Text>
+                                    <Text style={styles.webhookEvents} numberOfLines={1}>
+                                        {webhook.subscribedEvents.join(', ')}
+                                    </Text>
+                                </View>
+                                <Switch 
+                                    value={webhook.isActive} 
+                                    onValueChange={() => handleToggleWebhook(webhook.id, webhook.isActive)}
+                                    trackColor={{ false: '#E0E0E0', true: colors.primary }}
+                                    thumbColor="#FFF"
+                                />
+                                <TouchableOpacity onPress={() => openModal(webhook)} style={styles.moreBtn}>
+                                    <Ionicons name="ellipsis-vertical" size={20} color={colors.textSecondary} />
+                                </TouchableOpacity>
                             </View>
-                            <Switch 
-                                value={webhook.isActive} 
-                                onValueChange={() => handleToggleWebhook(webhook.id, webhook.isActive)}
-                                trackColor={{ false: '#767577', true: colors.primary }}
-                            />
-                        </View>
-                        <View style={styles.webhookActions}>
-                            <TouchableOpacity onPress={() => openModal(webhook)} style={styles.actionBtn}>
-                                <Text style={styles.actionBtnText}>Editar</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity onPress={() => handleDeleteWebhook(webhook.id)} style={[styles.actionBtn, { marginLeft: 16 }]}>
-                                <Text style={[styles.actionBtnText, { color: colors.error }]}>Excluir</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </Card>
-                ))}
-
-                {webhooks.length === 0 && (
-                    <View style={styles.emptyContainer}>
-                        <Ionicons name="git-network-outline" size={48} color={colors.textSecondary} style={{ opacity: 0.5 }} />
-                        <Text style={styles.emptyText}>Nenhum webhook configurado</Text>
-                        <Text style={styles.emptySubText}>Adicione endpoints para receber notificações de eventos do sistema em tempo real.</Text>
+                        ))}
                     </View>
                 )}
 
@@ -295,51 +380,59 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
             {/* Modal */}
             <Modal
                 visible={modalVisible}
-                animationType="slide"
+                animationType="fade"
                 transparent={true}
                 onRequestClose={() => setModalVisible(false)}
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>
-                            {editingWebhook ? 'Editar Webhook' : 'Novo Webhook'}
-                        </Text>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>
+                                {editingWebhook ? 'Editar Webhook' : 'Novo Webhook'}
+                            </Text>
+                            <TouchableOpacity onPress={() => setModalVisible(false)}>
+                                <Ionicons name="close" size={24} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
                         
+                        <Text style={styles.inputLabel}>URL de Destino</Text>
                         <Input 
-                            label="URL de Destino" 
-                            placeholder="https://api.sistema.com/webhook"
+                            placeholder="https://api.seu-sistema.com/webhook"
                             value={url}
                             onChangeText={setUrl}
                             autoCapitalize="none"
                         />
                         
+                        <Text style={styles.inputLabel}>Secret (HMAC)</Text>
                         <Input 
-                            label="Secret (HMAC)" 
                             placeholder="Chave secreta para assinatura"
                             value={secret}
                             onChangeText={setSecret}
                             secureTextEntry
                         />
                         
+                        <Text style={styles.inputLabel}>Eventos (separados por vírgula)</Text>
                         <Input 
-                            label="Eventos (separados por vírgula)" 
                             placeholder="ORDER_PAID, WITHDRAWAL_REQUESTED"
                             value={events}
                             onChangeText={setEvents}
                             autoCapitalize="none"
                         />
 
-                        <View style={styles.modalButtons}>
+                        <View style={styles.modalFooter}>
+                            {editingWebhook && (
+                                <TouchableOpacity 
+                                    style={styles.deleteButton}
+                                    onPress={() => handleDeleteWebhook(editingWebhook.id)}
+                                >
+                                    <Text style={styles.deleteButtonText}>Excluir</Text>
+                                </TouchableOpacity>
+                            )}
+                            <View style={{ flex: 1 }} />
                             <Button 
-                                title="Cancelar" 
-                                onPress={() => setModalVisible(false)} 
-                                variant="outline"
-                                style={{ flex: 1, marginRight: 8 }}
-                            />
-                            <Button 
-                                title="Salvar" 
+                                title="Salvar Configuração" 
                                 onPress={handleSaveWebhook} 
-                                style={{ flex: 1, marginLeft: 8 }}
+                                style={{ flex: editingWebhook ? 0 : 1, minWidth: 120 }}
                             />
                         </View>
                     </View>
@@ -352,157 +445,270 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.background,
+        backgroundColor: '#F8F9FA', // Lighter background for professional look
     },
     content: {
-        padding: 16,
+        padding: spacing.md,
         paddingBottom: 40,
     },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: colors.text,
-        marginBottom: 12,
-        marginTop: 8,
-    },
-    statsGrid: {
+    sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 20,
-    },
-    statCard: {
-        flex: 1,
         alignItems: 'center',
-        marginHorizontal: 4,
-        padding: 16,
+        marginBottom: spacing.md,
+        marginTop: spacing.sm,
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: colors.text,
+        letterSpacing: 0.5,
+    },
+    grid: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    // Status Card Styles
+    statusCard: {
+        flex: 1,
+        padding: spacing.md,
+        borderRadius: radius.lg,
+        ...shadow.sm,
+        minHeight: 120,
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.03)',
+    },
+    statusHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 12,
     },
     iconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 8,
     },
-    statValue: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: colors.text,
-        marginVertical: 4,
+    statusValue: {
+        fontSize: 26,
+        fontWeight: '800',
+        letterSpacing: -0.5,
     },
-    statLabel: {
-        fontSize: 12,
+    statusLabel: {
+        fontSize: 13,
         color: colors.textSecondary,
-        textAlign: 'center',
-    },
-    actionRow: {
-        flexDirection: 'row',
-        marginBottom: 24,
-    },
-    rowBetween: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    webhookCard: {
-        marginBottom: 12,
-        padding: 12,
-    },
-    webhookHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    webhookUrl: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: colors.text,
-        marginBottom: 4,
-    },
-    webhookEvents: {
-        fontSize: 12,
-        color: colors.textSecondary,
-    },
-    webhookActions: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
-        paddingTop: 8,
-    },
-    iconBtn: {
-        padding: 8,
-        marginLeft: 8,
-    },
-    emptyText: {
-        fontSize: 16,
         fontWeight: '600',
-        color: colors.text,
-        marginTop: 16,
+        marginBottom: 6,
     },
-    emptyContainer: {
-        alignItems: 'center',
-        padding: 40,
-        backgroundColor: colors.surface,
+    statusBadge: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
         borderRadius: 12,
+    },
+    statusText: {
+        fontSize: 11,
+        fontWeight: '700',
+    },
+    // Action Button Styles
+    actionsContainer: {
+        marginBottom: spacing.lg,
+    },
+    actionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.surface,
+        padding: spacing.lg,
+        borderRadius: radius.lg,
+        ...shadow.sm,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.03)',
+    },
+    actionButtonPrimary: {
+        backgroundColor: colors.primary,
+        borderWidth: 0,
+        ...shadow.medium,
+    },
+    actionButtonSecondary: {
+        backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.border,
-        borderStyle: 'dashed',
-        marginTop: 8,
     },
-    emptySubText: {
-        fontSize: 12,
+    actionIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: spacing.md,
+    },
+    actionContent: {
+        flex: 1,
+    },
+    actionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: colors.text,
+        marginBottom: 2,
+    },
+    actionSubtitle: {
+        fontSize: 13,
         color: colors.textSecondary,
-        textAlign: 'center',
-        marginTop: 8,
-        maxWidth: 240,
     },
+    // Webhook Styles
     addButton: {
         backgroundColor: colors.primary,
         paddingHorizontal: 12,
         paddingVertical: 6,
-        borderRadius: 20,
+        borderRadius: 16,
         flexDirection: 'row',
         alignItems: 'center',
     },
     addButtonText: {
         color: '#FFF',
         fontSize: 12,
-        fontWeight: 'bold',
+        fontWeight: '700',
         marginLeft: 4,
     },
-    actionBtn: {
-        paddingVertical: 4,
-        paddingHorizontal: 8,
+    webhookItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.surface,
+        padding: spacing.md,
+        borderRadius: radius.md,
+        marginBottom: spacing.sm,
+        ...shadow.sm,
     },
-    actionBtnText: {
+    webhookIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F0F7FF',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: spacing.sm,
+    },
+    webhookContent: {
+        flex: 1,
+        marginRight: spacing.sm,
+    },
+    webhookUrl: {
         fontSize: 14,
-        color: colors.primary,
-        fontWeight: '500',
+        fontWeight: '600',
+        color: colors.text,
+        marginBottom: 2,
     },
+    webhookEvents: {
+        fontSize: 11,
+        color: colors.textSecondary,
+    },
+    moreBtn: {
+        padding: 4,
+        marginLeft: 8,
+    },
+    // Empty State
+    emptyStateContainer: {
+        backgroundColor: colors.surface,
+        borderRadius: radius.xl,
+        padding: spacing.xl,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#EDEEF2',
+        borderStyle: 'dashed',
+        marginTop: spacing.sm,
+    },
+    emptyIllustration: {
+        width: 120,
+        height: 120,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: spacing.md,
+    },
+    emptyCircleLarge: {
+        position: 'absolute',
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: colors.primary + '05',
+    },
+    emptyCircleSmall: {
+        position: 'absolute',
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: colors.primary + '10',
+    },
+    emptyStateTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: colors.text,
+        marginBottom: 8,
+    },
+    emptyStateText: {
+        fontSize: 14,
+        color: colors.textSecondary,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: spacing.lg,
+        maxWidth: '90%',
+    },
+    createWebhookBtn: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: spacing.xl,
+        paddingVertical: spacing.md,
+        borderRadius: radius.full,
+        ...shadow.sm,
+    },
+    createWebhookBtnText: {
+        color: '#FFF',
+        fontSize: 14,
+        fontWeight: '700',
+    },
+    // Modal
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        padding: 20,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        justifyContent: 'flex-end',
     },
     modalContent: {
         backgroundColor: colors.surface,
-        borderRadius: 12,
-        padding: 20,
-        elevation: 5,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: spacing.xl,
+        minHeight: '60%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: spacing.lg,
     },
     modalTitle: {
         fontSize: 20,
-        fontWeight: 'bold',
-        marginBottom: 16,
+        fontWeight: '700',
         color: colors.text,
-        textAlign: 'center',
     },
-    modalButtons: {
+    inputLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.textSecondary,
+        marginBottom: 6,
+        marginTop: 12,
+    },
+    modalFooter: {
         flexDirection: 'row',
-        marginTop: 16,
-    }
+        alignItems: 'center',
+        marginTop: spacing.xl,
+    },
+    deleteButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+    },
+    deleteButtonText: {
+        color: colors.error,
+        fontWeight: '600',
+    },
 });

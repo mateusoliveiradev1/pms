@@ -72,11 +72,20 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     height: 56,
   },
-  left: { width: 48, alignItems: 'flex-start' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  right: { width: 48, alignItems: 'flex-end' },
-  spacer: { width: 24 },
-  title: { fontSize: 18, fontWeight: '600', color: colors.text, textAlign: 'center' },
+  left: { zIndex: 1, width: 48, alignItems: 'flex-start' },
+  center: { 
+    position: 'absolute', 
+    left: 0, 
+    right: 0, 
+    top: 0, 
+    bottom: 0, 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    zIndex: 0
+  },
+  right: { zIndex: 1, width: 48, alignItems: 'flex-end' },
+  spacer: { width: 48 },
+  title: { fontSize: 17, fontWeight: '700', color: colors.text, textAlign: 'center' },
   btn: { padding: 8, marginLeft: -8 },
 });
 
