@@ -1,7 +1,15 @@
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import api from '../../../services/api';
-import { AdminDashboardStats, SupplierFinancial, WithdrawalRequest, AdminLog, FinancialSettings } from '../types';
+import { 
+    AdminDashboardStats, 
+    SupplierFinancial, 
+    WithdrawalRequest, 
+    AdminLog, 
+    FinancialSettings,
+    ReconciliationData,
+    OperationalAlerts
+} from '../types';
 
 export const useAdminDashboard = () => {
     const [stats, setStats] = useState<AdminDashboardStats | null>(null);
@@ -9,28 +17,63 @@ export const useAdminDashboard = () => {
     const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
     const [auditLogs, setAuditLogs] = useState<AdminLog[]>([]);
     const [settings, setSettings] = useState<FinancialSettings | null>(null);
+    
+    const [reconciliation, setReconciliation] = useState<ReconciliationData | null>(null);
+    const [alerts, setAlerts] = useState<OperationalAlerts | null>(null);
+
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
-    const fetchDashboard = async () => {
+    const fetchDashboard = async (startDate?: Date, endDate?: Date) => {
         try {
-            const res = await api.get('/financial/admin/dashboard');
+            const params: any = {};
+            if (startDate) params.startDate = startDate.toISOString();
+            if (endDate) params.endDate = endDate.toISOString();
+
+            // Using NEW endpoint for overview with date filters
+            const res = await api.get('/financial-admin/overview', { params });
             setStats(res.data);
+            
+            // Also fetch alerts
+            fetchAlerts();
         } catch (e) { console.error(e); }
     };
 
-    const fetchWithdrawals = async (status: string) => {
+    const fetchAlerts = async () => {
         try {
-            const res = await api.get('/financial/admin/withdrawals', {
-                params: { status }
-            });
+            const res = await api.get('/financial-admin/alerts');
+            setAlerts(res.data);
+        } catch (e) { console.error('Error fetching alerts:', e); }
+    };
+
+    const fetchReconciliation = async (filters?: { startDate?: Date, endDate?: Date, supplierId?: string }) => {
+        try {
+            const params: any = {};
+            if (filters?.startDate) params.startDate = filters.startDate.toISOString();
+            if (filters?.endDate) params.endDate = filters.endDate.toISOString();
+            if (filters?.supplierId) params.supplierId = filters.supplierId;
+
+            const res = await api.get('/financial-admin/reconciliation', { params });
+            setReconciliation(res.data);
+        } catch (e) { console.error('Error fetching reconciliation:', e); }
+    };
+
+    const fetchWithdrawals = async (status: string, filters?: { startDate?: Date, endDate?: Date, supplierId?: string }) => {
+        try {
+            const params: any = { status };
+            if (filters?.startDate) params.startDate = filters.startDate.toISOString();
+            if (filters?.endDate) params.endDate = filters.endDate.toISOString();
+            if (filters?.supplierId) params.supplierId = filters.supplierId;
+
+            const res = await api.get('/financial/admin/withdrawals', { params });
             setWithdrawals(res.data);
         } catch (e) { console.error(e); }
     };
 
     const fetchSuppliers = async (search: string, status: string) => {
         try {
-            const res = await api.get('/financial/admin/suppliers', {
+            // Using NEW endpoint for consolidated view
+            const res = await api.get('/financial-admin/suppliers', {
                 params: { search, status }
             });
             setSuppliers(res.data);
@@ -49,9 +92,14 @@ export const useAdminDashboard = () => {
         } catch (e) { console.error(e); }
     };
 
-    const fetchAudit = async () => {
+    const fetchAudit = async (filters?: { action?: string, startDate?: Date, endDate?: Date }) => {
         try {
-            const res = await api.get('/financial/admin/audit');
+            const params: any = {};
+            if (filters?.action && filters.action !== 'ALL') params.action = filters.action;
+            if (filters?.startDate) params.startDate = filters.startDate.toISOString();
+            if (filters?.endDate) params.endDate = filters.endDate.toISOString();
+
+            const res = await api.get('/financial/admin/audit', { params });
             setAuditLogs(res.data);
         } catch (e) { console.error(e); }
     };
@@ -96,6 +144,8 @@ export const useAdminDashboard = () => {
         withdrawals,
         auditLogs,
         settings,
+        reconciliation,
+        alerts,
         loading,
         refreshing,
         setRefreshing,
@@ -105,6 +155,8 @@ export const useAdminDashboard = () => {
         fetchSuppliers,
         fetchSettings,
         fetchAudit,
+        fetchReconciliation,
+        fetchAlerts,
         approveWithdrawal,
         rejectWithdrawal,
         updateSettings

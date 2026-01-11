@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert, Modal, TextInput, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert, Modal, TextInput, Text, TouchableOpacity, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, radius, shadow } from '../../ui/theme';
 import { useAuth } from '../../context/AuthContext';
@@ -14,21 +14,43 @@ import RevenueCharts from './components/RevenueCharts';
 import WithdrawalsList from './components/WithdrawalsList';
 import SuppliersTable from './components/SuppliersTable';
 import AuditLogsList from './components/AuditLogsList';
+import ReconciliationList from './components/ReconciliationList';
+import OperationalAlerts from './components/OperationalAlerts';
 
 const AdminFinancialScreen = () => {
   const { user } = useAuth();
   const navigation = useNavigation<any>();
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'SUPPLIERS' | 'WITHDRAWALS' | 'SETTINGS' | 'AUDIT'>('DASHBOARD');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'SUPPLIERS' | 'WITHDRAWALS' | 'SETTINGS' | 'AUDIT' | 'RECONCILIATION'>('DASHBOARD');
   
   // Filters
   const [supplierSearch, setSupplierSearch] = useState('');
   const [supplierFilter, setSupplierFilter] = useState('ALL');
   const [withdrawalFilter, setWithdrawalFilter] = useState('PENDING');
+  const [withdrawalStartDate, setWithdrawalStartDate] = useState('');
+  const [withdrawalEndDate, setWithdrawalEndDate] = useState('');
+  const [withdrawalSupplierId, setWithdrawalSupplierId] = useState('');
+  const [period, setPeriod] = useState<'7d' | '30d' | '90d' | 'custom'>('30d');
+  
+  // Custom Date Filter
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [showCustomModal, setShowCustomModal] = useState(false);
+
+  // Reconciliation Filters
+  const [recStartDate, setRecStartDate] = useState('');
+  const [recEndDate, setRecEndDate] = useState('');
+  const [recSupplierId, setRecSupplierId] = useState('');
+
+  // Audit Filters
+  const [auditAction, setAuditAction] = useState('ALL');
+  const [auditStartDate, setAuditStartDate] = useState('');
+  const [auditEndDate, setAuditEndDate] = useState('');
 
   const {
       stats, suppliers, withdrawals, auditLogs, settings,
+      reconciliation, alerts,
       loading, refreshing, setRefreshing,
-      fetchDashboard, fetchWithdrawals, fetchSuppliers, fetchSettings, fetchAudit,
+      fetchDashboard, fetchWithdrawals, fetchSuppliers, fetchSettings, fetchAudit, fetchReconciliation,
       approveWithdrawal, rejectWithdrawal, updateSettings
   } = useAdminDashboard();
 
@@ -51,12 +73,44 @@ const AdminFinancialScreen = () => {
   }, [settings]);
 
   const loadData = useCallback(async () => {
-    if (activeTab === 'DASHBOARD') fetchDashboard();
-    if (activeTab === 'WITHDRAWALS') fetchWithdrawals(withdrawalFilter);
+    if (activeTab === 'DASHBOARD') {
+        let start = new Date();
+        let end = new Date();
+        
+        if (period === 'custom' && customStart && customEnd) {
+             start = new Date(customStart);
+             end = new Date(customEnd);
+        } else {
+            if (period === '7d') start.setDate(end.getDate() - 7);
+            if (period === '30d') start.setDate(end.getDate() - 30);
+            if (period === '90d') start.setDate(end.getDate() - 90);
+        }
+        fetchDashboard(start, end);
+    }
+    if (activeTab === 'WITHDRAWALS') {
+        fetchWithdrawals(withdrawalFilter, {
+            startDate: withdrawalStartDate ? new Date(withdrawalStartDate) : undefined,
+            endDate: withdrawalEndDate ? new Date(withdrawalEndDate) : undefined,
+            supplierId: withdrawalSupplierId || undefined
+        });
+    }
     if (activeTab === 'SUPPLIERS') fetchSuppliers(supplierSearch, supplierFilter);
     if (activeTab === 'SETTINGS') fetchSettings();
-    if (activeTab === 'AUDIT') fetchAudit();
-  }, [activeTab, withdrawalFilter, supplierSearch, supplierFilter]);
+    if (activeTab === 'AUDIT') {
+        fetchAudit({
+            action: auditAction,
+            startDate: auditStartDate ? new Date(auditStartDate) : undefined,
+            endDate: auditEndDate ? new Date(auditEndDate) : undefined
+        });
+    }
+    if (activeTab === 'RECONCILIATION') {
+        fetchReconciliation({
+            startDate: recStartDate ? new Date(recStartDate) : undefined,
+            endDate: recEndDate ? new Date(recEndDate) : undefined,
+            supplierId: recSupplierId || undefined
+         });
+     }
+   }, [activeTab, withdrawalFilter, supplierSearch, supplierFilter, period, customStart, customEnd, auditAction, auditStartDate, auditEndDate, recStartDate, recEndDate, recSupplierId, withdrawalStartDate, withdrawalEndDate, withdrawalSupplierId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -112,13 +166,37 @@ const AdminFinancialScreen = () => {
       await updateSettings(localSettings);
   };
 
+  const handleExportWithdrawalsCSV = async () => {
+      if (!withdrawals.length) return Alert.alert('Aviso', 'Sem dados para exportar');
+      const header = 'ID,Fornecedor,Valor,Status,Data Solicitação,Data Processamento\n';
+      const rows = withdrawals.map(w => 
+          `${w.id},${w.supplier.name},${w.amount},${w.status},${w.createdAt},${w.processedAt || ''}`
+      ).join('\n');
+      
+      try {
+          await Share.share({ message: header + rows, title: 'Saques.csv' });
+      } catch (e) { Alert.alert('Erro', 'Falha ao exportar'); }
+  };
+
+  const handleExportAuditCSV = async () => {
+      if (!auditLogs.length) return Alert.alert('Aviso', 'Sem dados para exportar');
+      try {
+          const header = 'Data,Ação,Admin,Detalhes,IP\n';
+          const rows = auditLogs.map(l => 
+          `${l.createdAt},${l.action},${l.adminEmail},"${(l.details || '').replace(/"/g, '""')}",${l.ipAddress}`
+          ).join('\n');
+          
+          await Share.share({ message: header + rows, title: 'Auditoria.csv' });
+      } catch (e) { Alert.alert('Erro', 'Falha ao exportar'); }
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
   const renderTabs = () => (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsContainer}>
-          {['DASHBOARD', 'SUPPLIERS', 'WITHDRAWALS', 'SETTINGS', 'AUDIT'].map((tab) => (
+          {['DASHBOARD', 'SUPPLIERS', 'WITHDRAWALS', 'SETTINGS', 'AUDIT', 'RECONCILIATION'].map((tab) => (
               <TouchableOpacity
                   key={tab}
                   style={[styles.tabButton, activeTab === tab && styles.activeTabButton]}
@@ -128,11 +206,73 @@ const AdminFinancialScreen = () => {
                       {tab === 'DASHBOARD' ? 'Visão Geral' : 
                        tab === 'SUPPLIERS' ? 'Fornecedores' :
                        tab === 'WITHDRAWALS' ? 'Saques' :
-                       tab === 'SETTINGS' ? 'Config' : 'Auditoria'}
+                       tab === 'SETTINGS' ? 'Config' : 
+                       tab === 'AUDIT' ? 'Auditoria' : 'Reconciliação'}
                   </Text>
               </TouchableOpacity>
           ))}
       </ScrollView>
+  );
+
+  const renderPeriodFilter = () => (
+      <View style={{ flexDirection: 'row', paddingHorizontal: 16, marginTop: 16, gap: 8 }}>
+          {['7d', '30d', '90d', 'custom'].map((p) => (
+              <TouchableOpacity 
+                  key={p} 
+                  style={[
+                      { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+                      period === p && { backgroundColor: colors.primary, borderColor: colors.primary }
+                  ]}
+                  onPress={() => {
+                      if (p === 'custom') setShowCustomModal(true);
+                      setPeriod(p as any);
+                  }}
+              >
+                  <Text style={[
+                      { fontSize: 13, color: colors.textSecondary },
+                      period === p && { color: '#fff', fontWeight: 'bold' }
+                  ]}>
+                      {p === '7d' ? '7 dias' : p === '30d' ? '30 dias' : p === '90d' ? '90 dias' : 'Personalizado'}
+                  </Text>
+              </TouchableOpacity>
+          ))}
+      </View>
+  );
+
+  const renderCustomPeriodModal = () => (
+      <Modal visible={showCustomModal} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Período Personalizado</Text>
+                  <Text style={styles.inputLabel}>Data Início (YYYY-MM-DD)</Text>
+                  <TextInput 
+                      style={styles.input} 
+                      value={customStart} 
+                      onChangeText={setCustomStart} 
+                      placeholder="2024-01-01"
+                  />
+                  <Text style={styles.inputLabel}>Data Fim (YYYY-MM-DD)</Text>
+                  <TextInput 
+                      style={styles.input} 
+                      value={customEnd} 
+                      onChangeText={setCustomEnd}
+                      placeholder="2024-01-31" 
+                  />
+                  <TouchableOpacity 
+                      style={[styles.saveSettingsButton, { marginTop: 16 }]} 
+                      onPress={() => {
+                          setShowCustomModal(false);
+                          loadData();
+                      }}
+                  >
+                      <Text style={styles.saveButtonText}>Aplicar Filtro</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowCustomModal(false)} style={styles.modalCancel}>
+                      <Text style={styles.modalCancelText}>Cancelar</Text>
+                  </TouchableOpacity>
+              </View>
+          </View>
+      </Modal>
   );
 
   return (
@@ -146,20 +286,50 @@ const AdminFinancialScreen = () => {
           >
               {activeTab === 'DASHBOARD' && (
                   <>
+                      {renderPeriodFilter()}
+                      <OperationalAlerts alerts={alerts} />
                       <AdminStatsCards stats={stats} formatCurrency={formatCurrency} />
                       <RevenueCharts stats={stats} />
                   </>
               )}
 
               {activeTab === 'WITHDRAWALS' && (
-                  <WithdrawalsList 
-                      withdrawals={withdrawals}
-                      filter={withdrawalFilter}
-                      setFilter={setWithdrawalFilter}
-                      onApprove={handleApprove}
-                      onReject={(req) => { setSelectedRequest(req); setRejectModalVisible(true); }}
-                      formatCurrency={formatCurrency}
-                  />
+                  <>
+                       <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
+                           <View style={{ flexDirection: 'row', marginBottom: 16, gap: 8 }}>
+                               <TextInput 
+                                   style={[styles.input, { flex: 1 }]} 
+                                   placeholder="ID Fornecedor" 
+                                   value={withdrawalSupplierId}
+                                   onChangeText={setWithdrawalSupplierId}
+                               />
+                               <TouchableOpacity onPress={loadData} style={styles.filterButton}>
+                                   <Text style={styles.filterButtonText}>Buscar</Text>
+                               </TouchableOpacity>
+                           </View>
+                           <View style={{ flexDirection: 'row', gap: 12, marginBottom: 16 }}>
+                              <View style={[styles.statCard, { flex: 1, backgroundColor: '#FFF3E0', borderColor: '#FFE0B2', borderWidth: 1 }]}>
+                                  <Text style={styles.statLabel}>Pendente</Text>
+                                  <Text style={[styles.statValue, { color: '#F57C00' }]}>{formatCurrency(stats?.payouts.pendingAmount || 0)}</Text>
+                              </View>
+                              <View style={[styles.statCard, { flex: 1, backgroundColor: '#E8F5E9', borderColor: '#C8E6C9', borderWidth: 1 }]}>
+                                  <Text style={styles.statLabel}>Pago (Período)</Text>
+                                  <Text style={[styles.statValue, { color: '#2E7D32' }]}>{formatCurrency(stats?.payouts.totalPaid || 0)}</Text>
+                              </View>
+                          </View>
+                          <TouchableOpacity onPress={handleExportWithdrawalsCSV} style={styles.exportButton}>
+                              <Text style={styles.exportButtonText}>Exportar Histórico (CSV)</Text>
+                          </TouchableOpacity>
+                      </View>
+                      <WithdrawalsList 
+                          withdrawals={withdrawals}
+                          filter={withdrawalFilter}
+                          setFilter={setWithdrawalFilter}
+                          onApprove={handleApprove}
+                          onReject={(req) => { setSelectedRequest(req); setRejectModalVisible(true); }}
+                          formatCurrency={formatCurrency}
+                      />
+                  </>
               )}
 
               {activeTab === 'SUPPLIERS' && (
@@ -173,7 +343,42 @@ const AdminFinancialScreen = () => {
                   />
               )}
 
-              {activeTab === 'AUDIT' && <AuditLogsList logs={auditLogs} />}
+              {activeTab === 'AUDIT' && (
+                  <>
+                      <View style={styles.filterContainer}>
+                          <TextInput 
+                              style={[styles.input, { flex: 1, marginRight: 8 }]} 
+                              placeholder="Ação (Ex: UPDATE_SETTINGS)" 
+                              value={auditAction}
+                              onChangeText={setAuditAction}
+                          />
+                          <TouchableOpacity onPress={loadData} style={styles.filterButton}>
+                              <Text style={styles.filterButtonText}>Filtrar</Text>
+                          </TouchableOpacity>
+                      </View>
+                      <TouchableOpacity onPress={handleExportAuditCSV} style={[styles.exportButton, { marginHorizontal: 16, marginBottom: 16 }]}>
+                          <Text style={styles.exportButtonText}>Exportar Auditoria (CSV)</Text>
+                      </TouchableOpacity>
+                      <AuditLogsList logs={auditLogs} />
+                  </>
+              )}
+
+              {activeTab === 'RECONCILIATION' && (
+                  <>
+                      <View style={styles.filterContainer}>
+                          <TextInput 
+                              style={[styles.input, { flex: 1, marginRight: 8 }]} 
+                              placeholder="ID Fornecedor (Opcional)" 
+                              value={recSupplierId}
+                              onChangeText={setRecSupplierId}
+                          />
+                          <TouchableOpacity onPress={loadData} style={styles.filterButton}>
+                              <Text style={styles.filterButtonText}>Filtrar</Text>
+                          </TouchableOpacity>
+                      </View>
+                      <ReconciliationList data={reconciliation} />
+                  </>
+              )}
 
               {activeTab === 'SETTINGS' && localSettings && (
                   <View style={styles.tabContent}>
@@ -362,6 +567,57 @@ const styles = StyleSheet.create({
       marginRight: 10,
       backgroundColor: colors.background,
       borderRadius: 8,
+  },
+  filterContainer: {
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      marginTop: 16,
+      marginBottom: 8,
+      alignItems: 'center'
+  },
+  filterButton: {
+      backgroundColor: colors.primary,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 8,
+      justifyContent: 'center',
+  },
+  filterButtonText: {
+      color: '#fff',
+      fontWeight: 'bold',
+  },
+  exportButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#fff',
+      borderWidth: 1,
+      borderColor: colors.primary,
+      padding: 12,
+      borderRadius: 8,
+      marginTop: 10,
+      marginBottom: 10,
+  },
+  exportButtonText: {
+      color: colors.primary,
+      fontWeight: '600',
+  },
+  statCard: {
+      padding: 12,
+      borderRadius: 8,
+      alignItems: 'center',
+  },
+  statLabel: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginBottom: 4,
+      fontWeight: '600',
+      textTransform: 'uppercase'
+  },
+  statValue: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: colors.text,
   },
   modalConfirm: {
       flex: 1,

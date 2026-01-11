@@ -227,9 +227,14 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
 };
 
 export const listWithdrawalRequests = async (req: Request, res: Response) => {
-    const { status } = req.query;
+    const { status, startDate, endDate, supplierId } = req.query;
     try {
-        const requests = await FinancialService.getWithdrawalRequests(status ? String(status) : 'PENDING');
+        const requests = await FinancialService.getWithdrawalRequests(
+            status ? String(status) : 'PENDING',
+            startDate ? new Date(String(startDate)) : undefined,
+            endDate ? new Date(String(endDate)) : undefined,
+            supplierId ? String(supplierId) : undefined
+        );
         res.json(requests);
     } catch (error: any) {
         res.status(500).json({ message: 'Error fetching withdrawal requests', error: error.message });
@@ -332,8 +337,15 @@ export const getAdminSupplierFinancials = async (req: Request, res: Response) =>
 
 export const getAdminAuditLogs = async (req: Request, res: Response) => {
     try {
-        const { action } = req.query;
-        const logs = await FinancialService.getAdminAuditLogs(action ? String(action) : undefined);
+        const { action, startDate, endDate } = req.query;
+        const start = startDate ? new Date(String(startDate)) : undefined;
+        const end = endDate ? new Date(String(endDate)) : undefined;
+
+        const logs = await FinancialService.getAdminAuditLogs(
+            action ? String(action) : undefined,
+            start,
+            end
+        );
         res.json(logs);
     } catch (error: any) {
         res.status(500).json({ message: 'Error fetching audit logs', error: error.message });

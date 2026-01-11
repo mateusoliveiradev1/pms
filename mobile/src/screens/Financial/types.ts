@@ -59,6 +59,7 @@ export interface AdminDashboardStats {
   payouts: {
       totalPaid: number;
       pendingCount: number;
+      pendingAmount: number;
   };
   balance: {
       totalHeld: number;
@@ -79,6 +80,7 @@ export interface SupplierFinancial {
     pendingBalance: number;
     blockedBalance: number;
     totalCommission: number;
+    totalWithdrawn?: number;
     plan: { name: string } | null;
     _count: { orders: number };
     totalBalance: number;
@@ -88,6 +90,8 @@ export interface WithdrawalRequest {
   id: string;
   amount: number;
   requestedAt: string;
+  createdAt: string;
+  processedAt?: string;
   pixKey: string;
   status: string;
   supplier: {
@@ -99,13 +103,28 @@ export interface WithdrawalRequest {
 export interface AdminLog {
     id: string;
     adminName: string;
+    adminEmail?: string;
     action: string;
     details: string | null;
     createdAt: string;
+    ipAddress?: string;
 }
 
 export interface FinancialSettings {
     defaultReleaseDays: number;
     defaultMinWithdrawal: number;
     defaultWithdrawalLimit: number;
+}
+
+export interface ReconciliationData {
+    paidWithoutLedger: { id: string; orderNumber: string; totalAmount: number; supplierId: string }[];
+    refundedWithoutLedger: { id: string; orderNumber: string; totalAmount: number; supplierId: string }[];
+    orphanedLedgers: { id: string; amount: number; type: string; referenceId: string }[];
+}
+
+export interface OperationalAlerts {
+    paidNoLedger: number;
+    delayedWithdrawals: number;
+    suspendedWithBalance: number;
+    processedWebhooksToday: number;
 }

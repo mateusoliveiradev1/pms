@@ -57,11 +57,22 @@ const SuppliersTable: React.FC<SuppliersTableProps> = ({
                     
                     <View style={styles.rowBetween}>
                         <View>
-                            <Text style={styles.label}>Saldo Total</Text>
-                            <Text style={styles.value}>{formatCurrency(sup.totalBalance)}</Text>
+                            <Text style={styles.label}>Disponível</Text>
+                            <Text style={[styles.value, { color: colors.success }]}>{formatCurrency(sup.walletBalance)}</Text>
                         </View>
                         <View>
-                            <Text style={styles.label}>Comissões Geradas</Text>
+                            <Text style={styles.label}>Pendente (D+N)</Text>
+                            <Text style={[styles.value, { color: colors.warning }]}>{formatCurrency(sup.pendingBalance)}</Text>
+                        </View>
+                    </View>
+                    
+                    <View style={[styles.rowBetween, { marginTop: 8 }]}>
+                        <View>
+                            <Text style={styles.label}>Total Sacado</Text>
+                            <Text style={styles.value}>{formatCurrency(sup.totalWithdrawn || 0)}</Text>
+                        </View>
+                        <View>
+                            <Text style={styles.label}>Comissões</Text>
                             <Text style={styles.value}>{formatCurrency(sup.totalCommission)}</Text>
                         </View>
                     </View>

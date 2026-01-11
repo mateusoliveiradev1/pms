@@ -16,6 +16,7 @@ import plansRoutes from './routes/plansRoutes';
 import financialRoutes from './routes/financialRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import orderPaymentRoutes from './routes/orderPaymentRoutes';
+import financialAdminRoutes from './routes/financialAdminRoutes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -48,6 +49,7 @@ app.use('/api/plans', plansRoutes);
 app.use('/api/financial', financialRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/orders/payment', orderPaymentRoutes);
+app.use('/api/financial-admin', financialAdminRoutes);
 
 app.get('/', (req, res) => {
   res.send('Dropshipping PMS API Running');

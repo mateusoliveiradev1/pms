@@ -741,16 +741,26 @@ export const FinancialService = {
       }));
   },
 
-  getAdminAuditLogs: async (actionFilter?: string): Promise<any[]> => {
+  getAdminAuditLogs: async (actionFilter?: string, startDate?: Date, endDate?: Date): Promise<any[]> => {
       const where: any = {};
       if (actionFilter && actionFilter !== 'ALL') {
           where.action = actionFilter;
       }
 
+      if (startDate || endDate) {
+          where.createdAt = {};
+          if (startDate) where.createdAt.gte = startDate;
+          if (endDate) {
+              const endOfDay = new Date(endDate);
+              endOfDay.setHours(23, 59, 59, 999);
+              where.createdAt.lte = endOfDay;
+          }
+      }
+
       return await prisma.adminLog.findMany({
           where,
           orderBy: { createdAt: 'desc' },
-          take: 50
+          take: 100
       });
   },
 
@@ -767,7 +777,7 @@ export const FinancialService = {
       });
   },
 
-  getWithdrawalRequests: async (status: string = 'PENDING'): Promise<(WithdrawalRequest & { supplier: { name: string; billingDoc: string | null } })[]> => {
+  getWithdrawalRequests: async (status: string = 'PENDING', startDate?: Date, endDate?: Date, supplierId?: string): Promise<(WithdrawalRequest & { supplier: { name: string; billingDoc: string | null } })[]> => {
     let whereStatus: any = status;
     
     if (status === 'HISTORY') {
@@ -776,8 +786,21 @@ export const FinancialService = {
         whereStatus = undefined; // No filter
     }
 
+    const where: any = {};
+    if (status !== 'ALL') where.status = whereStatus;
+    if (supplierId) where.supplierId = supplierId;
+    if (startDate || endDate) {
+        where.createdAt = {};
+        if (startDate) where.createdAt.gte = startDate;
+        if (endDate) {
+             const endOfDay = new Date(endDate);
+             endOfDay.setHours(23, 59, 59, 999);
+             where.createdAt.lte = endOfDay;
+        }
+    }
+
     return await prisma.withdrawalRequest.findMany({
-      where: status !== 'ALL' ? { status: whereStatus } : undefined,
+      where,
       include: { supplier: { select: { name: true, billingDoc: true } } },
       orderBy: { requestedAt: 'desc' } // Changed to desc for history to make sense
     });
