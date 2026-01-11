@@ -8,14 +8,42 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 import Header from '../ui/components/Header';
-import { colors, shadow } from '../ui/theme';
+import Input from '../ui/components/Input';
+import Button from '../ui/components/Button';
+import { colors, shadow, spacing, radius } from '../ui/theme';
 
 const SettingsScreen = () => {
-  const { signOut, user } = useAuth();
+  const { signOut, user, updateUser } = useAuth();
   const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
   const [mlConnected, setMlConnected] = useState(false);
   const [mlSellerId, setMlSellerId] = useState<string | null>(null);
+
+  // Profile State
+  const [name, setName] = useState(user?.name || '');
+  const [updatingProfile, setUpdatingProfile] = useState(false);
+
+  useEffect(() => {
+      if (user?.name) setName(user.name);
+  }, [user]);
+
+  const handleUpdateProfile = async () => {
+      if (!name.trim()) {
+          Alert.alert('Erro', 'O nome não pode estar vazio.');
+          return;
+      }
+      setUpdatingProfile(true);
+      try {
+          await api.put('/auth/profile', { name });
+          await updateUser({ name });
+          Alert.alert('Sucesso', 'Perfil atualizado com sucesso.');
+      } catch (error) {
+          Alert.alert('Erro', 'Falha ao atualizar perfil.');
+          console.error(error);
+      } finally {
+          setUpdatingProfile(false);
+      }
+  };
 
   const checkConnection = async () => {
     try {
@@ -70,6 +98,30 @@ const SettingsScreen = () => {
       <Header title="Ajustes" />
 
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Perfil</Text>
+          <View style={styles.card}>
+            <Input 
+                label="Nome"
+                value={name}
+                onChangeText={setName}
+                placeholder="Seu nome completo"
+            />
+            <Input 
+                label="Email"
+                value={user?.email}
+                editable={false}
+                style={{ backgroundColor: '#f9f9f9', color: '#666' }}
+            />
+            <Button 
+                title={updatingProfile ? "Salvando..." : "Salvar Alterações"}
+                onPress={handleUpdateProfile}
+                disabled={updatingProfile}
+                style={{ marginTop: 8 }}
+            />
+          </View>
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Integrações</Text>
           <View style={styles.card}>

@@ -159,20 +159,17 @@ const DashboardScreen = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView 
-        contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={styles.content}
       >
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>{getGreeting()},</Text>
-            <Text style={styles.userName}>{user?.name || 'Usuário'}</Text>
+            <Text style={styles.greeting}>Olá, {user?.name || 'Usuário'}</Text>
+            <Text style={styles.subtitle}>Visão geral do seu negócio</Text>
           </View>
-          <View style={styles.dateBadge}>
-            <Ionicons name="calendar-outline" size={14} color={colors.primary} />
-            <Text style={styles.dateText}>
-              {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
-            </Text>
-          </View>
+          <TouchableOpacity onPress={loadData}>
+            <Ionicons name="reload-circle" size={32} color={colors.primary} />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.statsGrid}>
@@ -339,13 +336,14 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   greeting: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  userName: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.text,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   dateBadge: {
     flexDirection: 'row',

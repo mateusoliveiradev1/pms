@@ -17,6 +17,7 @@ interface AuthContextData {
   signIn: (email: string, pass: string) => Promise<void>;
   signUp: (data: any) => Promise<void>;
   signOut: () => void;
+  updateUser: (data: Partial<User>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
@@ -57,6 +58,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     loadStorageData();
   }, []);
+
+  const updateUser = async (data: Partial<User>) => {
+    if (!user) return;
+    const updatedUser = { ...user, ...data };
+    setUser(updatedUser);
+    await SecureStore.setItemAsync('user', JSON.stringify(updatedUser));
+  };
 
   async function signIn(email: string, pass: string) {
     const response = await api.post('/auth/login', {
@@ -105,7 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   return (
-    <AuthContext.Provider value={{ signed: !!user, user, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ signed: !!user, user, loading, signIn, signUp, signOut, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

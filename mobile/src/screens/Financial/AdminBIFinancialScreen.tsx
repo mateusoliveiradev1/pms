@@ -40,7 +40,7 @@ const AdminBIFinancialScreen = ({ navigation }: any) => {
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
-            <Header title="BI Financeiro" showBack onBack={() => navigation.goBack()} />
+            <Header title="BI Financeiro" onBack={() => navigation.goBack()} />
             
             <ScrollView 
                 contentContainerStyle={styles.scrollContent}
@@ -87,15 +87,15 @@ const AdminBIFinancialScreen = ({ navigation }: any) => {
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>⚠️ Anomalias Financeiras</Text>
                         {anomalies.map((anomaly, index) => (
-                            <View key={index} style={styles.anomalyCard}>
-                                <View style={styles.anomalyHeader}>
-                                    <Badge label={anomaly.type} color="error" />
-                                    <Text style={styles.anomalyDate}>{new Date(anomaly.detectedAt).toLocaleDateString()}</Text>
-                                </View>
-                                <Text style={styles.anomalyDesc}>{anomaly.description}</Text>
-                                <Text style={styles.anomalyValue}>Impacto: {formatCurrency(anomaly.severity_value)}</Text>
-                            </View>
-                        ))}
+                    <View key={index} style={styles.anomalyCard}>
+                    <View style={styles.anomalyHeader}>
+                        <Badge text={anomaly.type} color="#FFF" backgroundColor={colors.error} />
+                        <Text style={styles.anomalyDate}>{new Date(anomaly.detectedAt).toLocaleDateString()}</Text>
+                    </View>
+                    <Text style={styles.anomalyDesc}>{anomaly.description}</Text>
+                    <Text style={styles.anomalyValue}>Impacto: {formatCurrency(anomaly.severity_value)}</Text>
+                    </View>
+                ))}
                     </View>
                 )}
 

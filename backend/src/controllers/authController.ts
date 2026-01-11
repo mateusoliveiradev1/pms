@@ -116,17 +116,56 @@ export const login = async (req: Request, res: Response) => {
         return;
     }
 
+    // Fetch full user details from Prisma (Source of Truth for app data like name)
+    const dbUser = await prisma.user.findUnique({
+        where: { id: data.user?.id },
+        select: { id: true, name: true, email: true, role: true }
+    });
+
     res.json({ 
         token: data.session?.access_token, 
         user: { 
             id: data.user?.id, 
             email: data.user?.email, 
-            role: data.user?.user_metadata?.role 
+            role: dbUser?.role || data.user?.user_metadata?.role,
+            name: dbUser?.name || data.user?.user_metadata?.name || 'Usuário'
         } 
     });
   } catch (error: any) {
     res.status(500).json({ message: 'Login failed', error: error.message });
   }
+};
+
+export const updateProfile = async (req: Request, res: Response) => {
+    const { name } = req.body;
+    const userId = (req as any).user?.userId;
+    const userEmail = (req as any).user?.email;
+
+    if (!userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
+
+    try {
+        // Upsert ensures that if the user is missing in DB (sync issue), we create it now.
+        const updatedUser = await prisma.user.upsert({
+            where: { id: userId },
+            update: { name },
+            create: {
+                id: userId,
+                email: userEmail || '', // Should come from token
+                name: name,
+                role: 'SUPPLIER', // Default fallback
+                status: 'ACTIVE'
+            },
+            select: { id: true, name: true, email: true, role: true }
+        });
+
+        res.json(updatedUser);
+    } catch (error: any) {
+        console.error('Update profile error:', error);
+        res.status(500).json({ message: 'Failed to update profile', error: error.message });
+    }
 };
 
 export const updatePushToken = async (req: Request, res: Response) => {

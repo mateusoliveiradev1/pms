@@ -33,10 +33,11 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       });
 
       if (!dbUser) {
-          console.error('Auth Error: User not found in database', supabaseUser.id);
-          // Optional: Sync user if missing? For now, 403.
-          // Or fallback to SUPPLIER?
-          // Existing code fell back to SUPPLIER. Let's keep that but log it.
+          // If user exists in Supabase but not in our DB, it might be a sync issue.
+          // However, spamming logs for this is noisy if we are handling it by falling back.
+          // Only log if strictly necessary or change level to warn/info if it's expected during dev.
+          // For now, let's silence it or make it a warning unless we want to auto-create.
+          console.warn(`[Auth Warning] User ${supabaseUser.id} authenticated via Supabase but not found in local DB. Falling back to SUPPLIER role.`);
       }
 
       // Map Supabase User to App User Structure
