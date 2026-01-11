@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../lib/supabase';
+import prisma from '../prisma';
 
 export interface AuthRequest extends Request {
   user?: any;
@@ -16,7 +17,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 
   try {
-      // Validate token using Supabase Auth (supports ES256, RS256, HS256 automatically)
+      // Validate token using Supabase Auth
       const { data: { user: supabaseUser }, error } = await supabase.auth.getUser(token);
 
       if (error || !supabaseUser) {
@@ -25,11 +26,17 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
           return;
       }
 
+      // Fetch Role from Database (Source of Truth)
+      const dbUser = await prisma.user.findUnique({
+          where: { id: supabaseUser.id },
+          select: { role: true, email: true }
+      });
+
       // Map Supabase User to App User Structure
       req.user = {
           userId: supabaseUser.id,
           email: supabaseUser.email,
-          role: supabaseUser.user_metadata?.role || 'SUPPLIER'
+          role: dbUser?.role || 'SUPPLIER' // Fallback to SUPPLIER if DB user not found (shouldn't happen)
       };
 
       next();
