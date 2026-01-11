@@ -77,10 +77,10 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         // For Supplier: Profit is the Payout sum? Or Payout - (Virtual Cost)?
         // Let's assume Profit = Payouts for now (Revenue for Supplier).
         const payoutAggregate = await prisma.order.aggregate({
-            _sum: { supplierPayout: true },
+            _sum: { netValue: true },
             where: { ...orderWhere, status: { not: 'CANCELLED' } }
         });
-        totalProfit = payoutAggregate._sum.supplierPayout || 0;
+        totalProfit = payoutAggregate._sum.netValue || 0;
     } else {
         // For Admin: Existing logic (Revenue - Cost)
         const ordersForProfit = await prisma.order.findMany({
@@ -92,8 +92,8 @@ export const getDashboardStats = async (req: Request, res: Response) => {
             for (const item of order.items) {
                 const product = item.product as any;
                 const primarySupplier = (product.suppliers || [])[0];
-                const cost = primarySupplier ? Number(primarySupplier.supplierPrice) : 0;
-                const revenue = Number(item.price);
+                const cost = primarySupplier ? Number(primarySupplier.price) : 0;
+                const revenue = Number(item.unitPrice);
                 totalProfit += (revenue - cost) * Number(item.quantity);
             }
         }

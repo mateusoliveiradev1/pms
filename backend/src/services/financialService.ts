@@ -43,7 +43,11 @@ export const FinancialService = {
   getActiveSubscription: async (supplierId: string): Promise<(SupplierSubscription & { plan: Plan }) | null> => {
     const now = new Date();
     return prisma.supplierSubscription.findFirst({
-      where: { supplierId, status: 'ATIVA', endDate: { gt: now } },
+      where: { 
+        supplierId, 
+        status: { in: ['ATIVA', 'ACTIVE'] }, // Support legacy and new status
+        endDate: { gt: now } 
+      },
       include: { plan: true }
     });
   },
@@ -104,8 +108,8 @@ export const FinancialService = {
                     type: 'BALANCE_RELEASE',
                     amount: item.amount,
                     supplierId: item.supplierId,
-                    orderId: item.orderId,
-                    description: `Liberação de saldo pedido #${item.orderId?.slice(0,8)}`,
+                    referenceId: item.referenceId,
+                    description: `Liberação de saldo pedido #${item.referenceId?.slice(0,8)}`,
                     status: 'COMPLETED',
                     createdAt: now
                 }
@@ -497,7 +501,7 @@ export const FinancialService = {
         data: {
           status: 'PAID', 
           processedAt: new Date(),
-          processedBy: adminId
+          // processedBy removed as it is not in schema
         }
       });
 
@@ -508,7 +512,8 @@ export const FinancialService = {
           amount: req.amount,
           supplierId: req.supplierId,
           description: `Saque aprovado #${req.id}`,
-          status: 'COMPLETED'
+          status: 'COMPLETED',
+          referenceId: req.id
         }
       });
 
@@ -546,9 +551,9 @@ export const FinancialService = {
         where: { id: requestId },
         data: {
           status: 'REJECTED',
-          notes: reason,
+          adminNote: reason,
           processedAt: new Date(),
-          processedBy: adminId
+          // processedBy removed
         }
       });
 
@@ -587,7 +592,7 @@ export const FinancialService = {
       }
       
       // Idempotency Check
-      if (order.financialStatus === 'RELEASED') {
+      if (order.payoutStatus === 'RELEASED') {
           console.log(`Order ${orderId} already released financially.`);
           return order;
       }
@@ -604,23 +609,23 @@ export const FinancialService = {
       await tx.supplier.update({
         where: { id: order.supplier.id },
         data: {
-          pendingBalance: { increment: order.supplierPayout }
+          pendingBalance: { increment: order.netValue }
         }
       });
 
       // 2. Mark Order as Financially Released (Processed)
       await tx.order.update({
         where: { id: order.id },
-        data: { financialStatus: 'RELEASED' }
+        data: { payoutStatus: 'RELEASED' }
       });
 
       // 3. Ledger Entry: Revenue (ORDER_CREDIT_PENDING)
       await tx.financialLedger.create({
         data: {
           type: 'ORDER_CREDIT_PENDING', 
-          amount: order.supplierPayout,
+          amount: order.netValue,
           supplierId: order.supplier.id,
-          orderId: order.id,
+          referenceId: order.id,
           description: `Receita pedido #${order.id.slice(0,8)}`,
           status: 'PENDING',
           releaseDate: releaseDate
@@ -631,9 +636,9 @@ export const FinancialService = {
       await tx.financialLedger.create({
         data: {
           type: 'SALE_COMMISSION',
-          amount: order.platformCommission,
+          amount: order.commissionValue,
           supplierId: order.supplier.id, 
-          orderId: order.id,
+          referenceId: order.id,
           description: `Comissão plataforma pedido #${order.id.slice(0,8)}`,
           status: 'COMPLETED'
         }
@@ -654,7 +659,7 @@ export const FinancialService = {
           if (!order.supplier) return; // No financial impact if no supplier
 
           // Only reverse if it was previously released/processed
-          if (order.financialStatus !== 'RELEASED') {
+          if (order.payoutStatus !== 'RELEASED') {
               console.log(`Order ${orderId} was not financially processed, skipping refund logic.`);
               return;
           }
@@ -662,7 +667,7 @@ export const FinancialService = {
           // Find original revenue entry to check status
           const revenueEntry = await tx.financialLedger.findFirst({
               where: { 
-                  orderId: orderId,
+                  referenceId: orderId,
                   type: { in: ['ORDER_CREDIT_PENDING', 'SALE_REVENUE'] }
               }
           });
@@ -680,7 +685,7 @@ export const FinancialService = {
               await tx.supplier.update({
                   where: { id: order.supplier.id },
                   data: {
-                      walletBalance: { decrement: order.supplierPayout }
+                      walletBalance: { decrement: order.netValue }
                   }
               });
           } else {
@@ -688,7 +693,7 @@ export const FinancialService = {
               await tx.supplier.update({
                   where: { id: order.supplier.id },
                   data: {
-                      pendingBalance: { decrement: order.supplierPayout }
+                      pendingBalance: { decrement: order.netValue }
                   }
               });
           }
@@ -697,9 +702,9 @@ export const FinancialService = {
           await tx.financialLedger.create({
               data: {
                   type: 'ORDER_REFUND',
-                  amount: -order.supplierPayout, // Negative amount
+                  amount: -order.netValue, // Negative amount
                   supplierId: order.supplier.id,
-                  orderId: order.id,
+                  referenceId: order.id,
                   description: `Estorno pedido #${order.id.slice(0,8)}`,
                   status: 'COMPLETED'
               }
@@ -713,9 +718,9 @@ export const FinancialService = {
           await tx.financialLedger.create({
               data: {
                   type: 'COMMISSION_REFUND',
-                  amount: -order.platformCommission,
+                  amount: -order.commissionValue,
                   supplierId: order.supplier.id,
-                  orderId: order.id,
+                  referenceId: order.id,
                   description: `Estorno comissão #${order.id.slice(0,8)}`,
                   status: 'COMPLETED'
               }
@@ -724,7 +729,7 @@ export const FinancialService = {
           // 4. Update Order Financial Status
           await tx.order.update({
               where: { id: order.id },
-              data: { financialStatus: 'CANCELLED' }
+              data: { payoutStatus: 'CANCELLED' }
           });
       });
   },

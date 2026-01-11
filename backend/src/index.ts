@@ -14,6 +14,7 @@ import mercadoLivreRoutes from './routes/mercadoLivreRoutes';
 import reportsRoutes from './routes/reportsRoutes';
 import plansRoutes from './routes/plansRoutes';
 import financialRoutes from './routes/financialRoutes';
+import paymentRoutes from './routes/paymentRoutes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -28,6 +29,10 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 app.use(cors());
+
+// Stripe Webhook requires raw body
+app.use('/api/payments/webhook/stripe', express.raw({ type: 'application/json' }));
+
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);
@@ -40,6 +45,7 @@ app.use('/api/mercadolivre', mercadoLivreRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/plans', plansRoutes);
 app.use('/api/financial', financialRoutes);
+app.use('/api/payments', paymentRoutes);
 
 app.get('/', (req, res) => {
   res.send('Dropshipping PMS API Running');

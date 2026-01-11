@@ -88,7 +88,10 @@ export const getTopProducts = async (req: Request, res: Response) => {
       take: 5
     });
 
-    const productIds = topItems.map(item => item.productId);
+    const productIds = topItems
+        .map(item => item.productId)
+        .filter((id): id is string => id !== null);
+
     const products = await prisma.product.findMany({
       where: { id: { in: productIds } },
       select: { id: true, name: true, sku: true }

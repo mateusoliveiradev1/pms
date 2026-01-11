@@ -89,18 +89,20 @@ export const createProduct = async (req: Request, res: Response) => {
         stockAvailable: available, // Initial total stock
         marginType, 
         marginValue: mValue, 
-        finalPrice,
+        price: finalPrice,
         suppliers: {
             create: [
                 {
                     supplierId,
-                    supplierPrice: sPrice,
+                    price: sPrice,
                     virtualStock: vStock,
-                    safetyStock: sStock
+                    stock: vStock,
+                    safetyStock: sStock,
+                    externalId: 'MANUAL-' + Date.now() // Required field
                 }
             ]
         },
-        InventoryLog: {
+        inventoryLogs: {
             create: {
                 quantity: available,
                 type: 'RESTOCK',
@@ -143,7 +145,7 @@ export const updateProduct = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Product not found' });
         }
 
-        let finalPrice = existingProduct.finalPrice;
+        let finalPrice = existingProduct.price;
         let totalStock = existingProduct.stockAvailable;
 
         // If updating supplier params, we need to know WHICH supplier. 
@@ -151,7 +153,7 @@ export const updateProduct = async (req: Request, res: Response) => {
         if (existingProduct.suppliers.length > 0 && (supplierPrice !== undefined || virtualStock !== undefined)) {
             const supplierRel = existingProduct.suppliers[0];
             
-            const newSPrice = supplierPrice !== undefined ? Number(supplierPrice) : supplierRel.supplierPrice;
+            const newSPrice = supplierPrice !== undefined ? Number(supplierPrice) : supplierRel.price;
             const newVStock = virtualStock !== undefined ? Number(virtualStock) : supplierRel.virtualStock;
             const newSStock = safetyStock !== undefined ? Number(safetyStock) : supplierRel.safetyStock;
             const newAvailable = Math.max(0, newVStock - newSStock);
@@ -160,7 +162,7 @@ export const updateProduct = async (req: Request, res: Response) => {
             await prisma.productSupplier.update({
                 where: { id: supplierRel.id },
                 data: {
-                    supplierPrice: newSPrice,
+                    price: newSPrice,
                     virtualStock: newVStock,
                     safetyStock: newSStock
                 }
@@ -191,7 +193,7 @@ export const updateProduct = async (req: Request, res: Response) => {
                 stockAvailable: totalStock,
                 marginType,
                 marginValue: Number(marginValue),
-                finalPrice
+                price: finalPrice
             },
             include: { suppliers: true }
         });
@@ -231,13 +233,13 @@ export const exportProductsCsv = async (req: Request, res: Response) => {
       where,
       include: { suppliers: true }
     });
-    const header = ['id','name','sku','finalPrice','stockAvailable','suppliersCount'].join(',');
+    const header = ['id','name','sku','price','stockAvailable','suppliersCount'].join(',');
     const rows = products.map((p: any) => {
       const cols = [
         p.id,
         p.name,
         p.sku,
-        String(p.finalPrice ?? 0),
+        String(p.price ?? 0),
         String(p.stockAvailable ?? 0),
         String(p.suppliers?.length ?? 0)
       ];

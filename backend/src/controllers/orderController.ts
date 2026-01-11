@@ -159,9 +159,9 @@ export const createOrder = async (req: Request, res: Response) => {
         // Calculate Financials
         let financialData = {
             marketplaceFee: 0,
-            platformCommission: 0,
-            supplierPayout: 0,
-            financialStatus: 'PENDING'
+            commissionValue: 0,
+            netValue: 0,
+            payoutStatus: 'PENDING'
         };
 
         if (orderSupplierId) {
@@ -172,26 +172,31 @@ export const createOrder = async (req: Request, res: Response) => {
             );
             financialData = {
                 marketplaceFee: financials.marketplaceFee,
-                platformCommission: financials.platformCommission,
-                supplierPayout: financials.supplierPayout,
-                financialStatus: 'PENDING'
+                commissionValue: financials.platformCommission,
+                netValue: financials.supplierPayout,
+                payoutStatus: 'PENDING'
             };
+        } else {
+            throw new Error('Could not determine supplier for this order. All products must belong to a valid supplier.');
         }
 
         // 2. Create Order
         return await tx.order.create({
             data: {
+                orderNumber: 'ORD-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
                 customerName,
-                customerAddress,
+                shippingAddress: customerAddress,
                 totalAmount,
-                mercadoLivreId,
+                status: 'PENDING',
                 supplierId: orderSupplierId,
                 ...financialData,
                 items: {
                     create: items.map((item: any) => ({
                         productId: item.productId,
                         quantity: item.quantity,
-                        price: item.price
+                        sku: item.sku || 'UNKNOWN', // Fallback or require SKU
+                        unitPrice: item.price,
+                        total: item.price * item.quantity
                     }))
                 }
             },
@@ -228,13 +233,15 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
         if (status === 'CANCELLED' && existingOrder.status !== 'CANCELLED') {
             for (const item of existingOrder.items) {
+                if (!item.productId) continue;
+
                 const product = await prisma.product.findUnique({
                     where: { id: item.productId },
                     include: { suppliers: true }
                 });
                 if (!product) continue;
 
-                if (product.suppliers.length > 0) {
+                if (product.suppliers && product.suppliers.length > 0) {
                     const supplierRel = product.suppliers[0];
                     const newVirtualStock = supplierRel.virtualStock + item.quantity;
                     await prisma.productSupplier.update({
@@ -300,7 +307,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 
         const order = await prisma.order.update({
             where: { id },
-            data: { status, trackingCode }
+            data: { status }
         });
 
         // Trigger Payment if Delivered/Completed

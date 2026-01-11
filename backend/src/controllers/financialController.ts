@@ -75,7 +75,7 @@ export const getLedger = async (req: Request, res: Response) => {
     
     const ledger = await prisma.financialLedger.findMany({
       where,
-      include: { supplier: true, order: true },
+      include: { supplier: true },
       orderBy: { createdAt: 'desc' }
     });
     
