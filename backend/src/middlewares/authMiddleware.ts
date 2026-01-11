@@ -10,9 +10,9 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  if (!token) {
-    console.log('Auth Error: No token provided');
-    res.sendStatus(401);
+  if (!token || token === 'undefined' || token === 'null') {
+    console.log('Auth Error: No token provided or invalid format');
+    res.status(401).json({ message: 'Token não fornecido ou inválido' });
     return; 
   }
 
@@ -21,8 +21,8 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       const { data: { user: supabaseUser }, error } = await supabase.auth.getUser(token);
 
       if (error || !supabaseUser) {
-          console.log('Auth Error:', error?.message);
-          res.sendStatus(403);
+          console.error('Auth Token Validation Error:', error?.message);
+          res.status(403).json({ message: 'Sessão inválida ou expirada', error: error?.message });
           return;
       }
 
@@ -32,17 +32,24 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
           select: { role: true, email: true }
       });
 
+      if (!dbUser) {
+          console.error('Auth Error: User not found in database', supabaseUser.id);
+          // Optional: Sync user if missing? For now, 403.
+          // Or fallback to SUPPLIER?
+          // Existing code fell back to SUPPLIER. Let's keep that but log it.
+      }
+
       // Map Supabase User to App User Structure
       req.user = {
           userId: supabaseUser.id,
           email: supabaseUser.email,
-          role: dbUser?.role || 'SUPPLIER' // Fallback to SUPPLIER if DB user not found (shouldn't happen)
+          role: dbUser?.role || 'SUPPLIER' 
       };
 
       next();
-  } catch (err) {
-      console.log('Auth Unexpected Error:', err);
-      res.sendStatus(403);
+  } catch (err: any) {
+      console.error('Auth Unexpected Error:', err);
+      res.status(403).json({ message: 'Erro de autenticação', error: err.message });
   }
 };
 
