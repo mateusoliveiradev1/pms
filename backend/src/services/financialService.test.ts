@@ -39,7 +39,7 @@ jest.mock('../prisma', () => ({
     financialSettings: {
       findUnique: jest.fn(),
     },
-    supplierSubscription: {
+    subscription: {
       findFirst: jest.fn(),
     }
   },
@@ -143,7 +143,8 @@ describe('FinancialService', () => {
       (prisma.supplier.findUnique as jest.Mock).mockResolvedValue(mockSupplier);
       (prisma.supplier.update as jest.Mock).mockResolvedValue(mockSupplier);
       (prisma.withdrawalRequest.create as jest.Mock).mockResolvedValue({ id: 'req-1', amount, status: 'PENDING' });
-      (prisma.supplierSubscription.findFirst as jest.Mock).mockResolvedValue({ id: 'sub-1', status: 'ATIVA' });
+      // Mock active subscription to pass check
+      (prisma.subscription.findFirst as jest.Mock).mockResolvedValue({ id: 'sub-1', status: 'ACTIVE' });
       (prisma.withdrawalRequest.count as jest.Mock).mockResolvedValue(0);
 
       await FinancialService.requestWithdrawal(supplierId, amount, 'PIX-KEY');

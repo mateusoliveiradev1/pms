@@ -30,7 +30,7 @@ export const PaymentService = {
     if (!supplier) throw new Error('Fornecedor não encontrado');
 
     // 2. Create Pending Subscription Record
-    const subscription = await prisma.supplierSubscription.create({
+    const subscription = await prisma.subscription.create({
       data: {
         supplierId,
         planId,
@@ -67,7 +67,7 @@ export const PaymentService = {
       const payment = await paymentClient.create({ body: paymentData });
       
       // 4. Update Subscription with External ID
-      await prisma.supplierSubscription.update({
+      await prisma.subscription.update({
         where: { id: subscription.id },
         data: { externalId: payment.id?.toString() }
       });
@@ -89,7 +89,7 @@ export const PaymentService = {
       };
     } catch (error: any) {
       // Rollback subscription if payment creation fails
-      await prisma.supplierSubscription.delete({ where: { id: subscription.id } });
+      await prisma.subscription.delete({ where: { id: subscription.id } });
       console.error('Mercado Pago Error:', error);
       throw new Error('Erro ao criar pagamento PIX: ' + (error.message || 'Erro desconhecido'));
     }
@@ -179,7 +179,7 @@ export const PaymentService = {
     if (!supplier) throw new Error('Fornecedor não encontrado');
 
     // Create Pending Subscription
-    const subscription = await prisma.supplierSubscription.create({
+    const subscription = await prisma.subscription.create({
       data: {
         supplierId,
         planId,
@@ -208,7 +208,7 @@ export const PaymentService = {
       });
 
       // Update Subscription with PaymentIntent ID (External ID)
-      await prisma.supplierSubscription.update({
+      await prisma.subscription.update({
         where: { id: subscription.id },
         data: { externalId: paymentIntent.id }
       });
@@ -219,7 +219,7 @@ export const PaymentService = {
       };
     } catch (error: any) {
       // Rollback
-      await prisma.supplierSubscription.delete({ where: { id: subscription.id } });
+      await prisma.subscription.delete({ where: { id: subscription.id } });
       throw new Error('Erro ao criar pagamento Stripe: ' + error.message);
     }
   },
@@ -263,7 +263,7 @@ export const PaymentService = {
     console.log(`Processing success for subscription ${subscriptionId}`);
     
     // 1. Find Subscription (Validation)
-    const subscription = await prisma.supplierSubscription.findUnique({
+    const subscription = await prisma.subscription.findUnique({
         where: { id: subscriptionId },
         include: { plan: true, supplier: true }
     });
@@ -287,7 +287,7 @@ export const PaymentService = {
           });
 
           // B. Update Subscription
-          await tx.supplierSubscription.update({
+          await tx.subscription.update({
               where: { id: subscriptionId },
               data: {
                   status: 'ACTIVE',
@@ -297,7 +297,7 @@ export const PaymentService = {
           });
 
           // C. Activate Supplier if needed
-          if (subscription.supplier.status !== 'ACTIVE') {
+          if (subscription.supplier && subscription.supplier.status !== 'ACTIVE' && subscription.supplierId) {
               await tx.supplier.update({
                   where: { id: subscription.supplierId },
                   data: { status: 'ACTIVE' } 
@@ -305,15 +305,17 @@ export const PaymentService = {
           }
 
           // D. Ledger Entry (Immutable)
-          await tx.financialLedger.create({
-              data: {
-                  type: 'SUBSCRIPTION_PAYMENT',
-                  amount: amountPaid, 
-                  supplierId: subscription.supplierId,
-                  description: `Mensalidade Plano ${subscription.plan.name} (${gateway})`,
-                  status: 'COMPLETED'
-              }
-          });
+          if (subscription.supplierId) {
+            await tx.financialLedger.create({
+                data: {
+                    type: 'SUBSCRIPTION_PAYMENT',
+                    amount: amountPaid, 
+                    supplierId: subscription.supplierId,
+                    description: `Mensalidade Plano ${subscription.plan.name} (${gateway})`,
+                    status: 'COMPLETED'
+                }
+            });
+          }
 
           // E. Admin Log
           await tx.adminLog.create({
@@ -330,7 +332,7 @@ export const PaymentService = {
               type: 'PAYMENT_CONFIRMED',
               amount: amountPaid,
               referenceId: subscriptionId,
-              supplierId: subscription.supplierId,
+              supplierId: subscription.supplierId || undefined,
               details: { gateway, externalId, purpose: 'SUBSCRIPTION' }
           });
       });
@@ -508,7 +510,7 @@ export const PaymentService = {
     console.log(`Processing failure for payment ${externalId} (${gateway})`);
     
     // Find Subscription by External ID
-    const subscription = await prisma.supplierSubscription.findFirst({
+    const subscription = await prisma.subscription.findFirst({
         where: { externalId }
     });
 
@@ -519,17 +521,19 @@ export const PaymentService = {
 
     await prisma.$transaction(async (tx) => {
         // Update Subscription to PAST_DUE
-        await tx.supplierSubscription.update({
+        await tx.subscription.update({
             where: { id: subscription.id },
             data: { status: 'PAST_DUE' }
         });
 
         // Block Supplier Financial Status (Optional: Block entire access or just financial?)
         // User said "Bloquear ações financeiras do fornecedor" -> financialStatus = SUSPENDED
-        await tx.supplier.update({
-            where: { id: subscription.supplierId },
-            data: { financialStatus: 'SUSPENDED' } 
-        });
+        if (subscription.supplierId) {
+            await tx.supplier.update({
+                where: { id: subscription.supplierId },
+                data: { financialStatus: 'SUSPENDED' } 
+            });
+        }
 
         // Admin Log
         await tx.adminLog.create({
@@ -550,14 +554,14 @@ export const PaymentService = {
             type: 'PAYMENT_FAILED',
             amount: 0, // Unknown amount or fetch from sub
             referenceId: subscription.id,
-            supplierId: subscription.supplierId,
+            supplierId: subscription.supplierId || undefined,
             details: { gateway, externalId, reason }
         });
 
         // Broadcast Event
         InternalWebhookService.broadcast('PAYMENT_FAILED', {
             referenceId: subscription.id,
-            supplierId: subscription.supplierId,
+            supplierId: subscription.supplierId || undefined,
             gateway,
             externalId,
             reason,

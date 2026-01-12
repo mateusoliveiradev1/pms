@@ -107,10 +107,10 @@ export const createOrder = async (req: Request, res: Response) => {
                     throw new Error(`Supplier ${supplierRel.supplier.name} is not active. Cannot process order.`);
                 }
                 // Enforce active subscription and limits
-                const activeSub = await tx.supplierSubscription.findFirst({
+                const activeSub = await tx.subscription.findFirst({
                   where: { 
                       supplierId: supplierRel.supplierId, 
-                      status: 'ATIVA',
+                      status: 'ACTIVE',
                       endDate: { gt: new Date() } // Ensure not expired
                   },
                   include: { plan: true }

@@ -47,6 +47,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Intercept 401/403 errors (expired token)
+    const interceptorId = api.interceptors.response.use(
+      response => response,
+      async (error) => {
+        if (error.response?.status === 401 || error.response?.status === 403) {
+           const msg = error.response?.data?.error || error.response?.data?.message || '';
+           // Check for specific token errors to avoid logging out on permission errors
+           if (msg && (
+             typeof msg === 'string' && (
+               msg.includes('expired') || 
+               msg.includes('invalid') || 
+               msg.includes('expirada') ||
+               msg.includes('token')
+             )
+           )) {
+               console.log('Session expired, signing out...');
+               await signOut();
+           }
+        }
+        return Promise.reject(error);
+      }
+    );
+
     async function loadStorageData() {
       try {
         const storagedUser = await SecureStore.getItemAsync('user');
@@ -83,6 +106,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     loadStorageData();
+
+    return () => {
+      api.interceptors.response.eject(interceptorId);
+    };
   }, []);
 
   const updateUser = async (data: Partial<User>) => {

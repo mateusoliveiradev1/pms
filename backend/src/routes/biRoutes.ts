@@ -6,7 +6,7 @@ const router = Router();
 
 // Middleware de proteção (Admin Only)
 router.use(authenticateToken);
-router.use(requireRole('ADMIN'));
+router.use(requireRole(['SYSTEM_ADMIN', 'ADMIN']));
 
 router.get('/overview', BiFinancialController.getOverview);
 router.get('/daily-revenue', BiFinancialController.getDailyRevenue);

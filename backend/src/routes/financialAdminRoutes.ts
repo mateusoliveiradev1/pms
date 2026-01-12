@@ -11,7 +11,7 @@ const router = express.Router();
 
 // All routes require ADMIN role
 router.use(authenticateToken);
-router.use(requireRole('ADMIN'));
+router.use(requireRole(['SYSTEM_ADMIN', 'ADMIN']));
 
 router.get('/overview', getFinancialOverview);
 router.get('/reconciliation', getReconciliation);

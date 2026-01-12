@@ -1097,14 +1097,14 @@ export const FinancialService = {
         }
       });
 
-      const activeSub = await tx.supplierSubscription.findFirst({
-        where: { supplierId: supplier.id, status: 'ATIVA' }
+      const activeSub = await tx.subscription.findFirst({
+        where: { supplierId: supplier.id, status: 'ACTIVE' }
       });
       
       if (activeSub) {
-          await tx.supplierSubscription.update({
+          await tx.subscription.update({
               where: { id: activeSub.id },
-              data: { status: 'SUSPENSA' }
+              data: { status: 'CANCELLED' }
           });
       }
       
@@ -1112,13 +1112,13 @@ export const FinancialService = {
           throw new Error('Supplier has no plan assigned to renew subscription');
       }
 
-      await tx.supplierSubscription.create({
+      await tx.subscription.create({
           data: {
               supplierId: supplier.id,
               planId: supplier.planId,
               startDate: now,
               endDate: nextDate,
-              status: 'ATIVA'
+              status: 'ACTIVE'
           }
       });
 
@@ -1144,25 +1144,28 @@ export const FinancialService = {
 
   updateOverdueSuppliers: async (): Promise<string[]> => {
     const now = new Date();
-    const overdueSubs = await prisma.supplierSubscription.findMany({
+    const overdueSubs = await prisma.subscription.findMany({
       where: {
-        status: 'ATIVA',
-        endDate: { lt: now }
+        status: 'ACTIVE',
+        endDate: { lt: now },
+        supplierId: { not: null }
       },
       include: { supplier: true }
     });
 
     const results: string[] = [];
     for (const sub of overdueSubs) {
-      await prisma.supplierSubscription.update({
+      await prisma.subscription.update({
         where: { id: sub.id },
-        data: { status: 'VENCIDA' }
+        data: { status: 'PAST_DUE' }
       });
-      await prisma.supplier.update({
-        where: { id: sub.supplierId },
-        data: { financialStatus: 'OVERDUE' }
-      });
-      results.push(sub.supplierId);
+      if (sub.supplierId) {
+        await prisma.supplier.update({
+            where: { id: sub.supplierId },
+            data: { financialStatus: 'OVERDUE' }
+        });
+        results.push(sub.supplierId);
+      }
     }
     return results;
   }

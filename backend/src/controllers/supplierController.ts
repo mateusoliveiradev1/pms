@@ -107,7 +107,7 @@ export const createSupplier = async (req: Request, res: Response) => {
       // Audit Log
       await tx.adminLog.create({
         data: {
-           adminId: authUser.userId,
+           adminId: user.id,
            adminName: user.email || 'Unknown',
            action: 'CREATE_SUPPLIER',
            targetId: supplier.id,

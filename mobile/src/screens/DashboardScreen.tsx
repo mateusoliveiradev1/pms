@@ -203,11 +203,11 @@ const DashboardScreen = () => {
           />
           <StatCard 
             title="Financeiro" 
-            value={user?.role === 'ADMIN' ? 'Plataforma' : 'Carteira'}
+            value={user?.role === 'ADMIN' || user?.role === 'SYSTEM_ADMIN' ? 'Plataforma' : 'Carteira'}
             icon="wallet-outline" 
             color={colors.info} 
             onPress={() => {
-              if (user?.role === 'ADMIN') {
+              if (user?.role === 'ADMIN' || user?.role === 'SYSTEM_ADMIN') {
                 navigation.navigate('AdminFinancial' as never);
               } else {
                 navigation.navigate('Financial' as never);

@@ -7,6 +7,6 @@ const router = Router();
 router.get('/', authenticateToken, getSuppliers);
 router.post('/', authenticateToken, createSupplier);
 router.put('/:id', authenticateToken, updateSupplier);
-router.delete('/:id', authenticateToken, requireRole('ADMIN'), deleteSupplier);
+router.delete('/:id', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), deleteSupplier);
 
 export default router;

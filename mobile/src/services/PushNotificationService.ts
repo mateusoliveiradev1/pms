@@ -5,7 +5,9 @@ import Constants from 'expo-constants';
 import api from './api';
 
 // Only set handler if not in Expo Go to avoid warnings/errors
-const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+// SDK 53+ compatibility: Check executionEnvironment strictly
+const isExpoGo = Constants.executionEnvironment === 'storeClient';
+
 if (!isExpoGo) {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -41,6 +43,11 @@ export async function registerForPushNotificationsAsync() {
       // Ignore error in Expo Go
       console.log('Error setting notification channel (likely Expo Go limitation):', error);
     }
+  }
+
+  if (isExpoGo) {
+    console.log('Info: Push Notifications skipped in Expo Go (Development Mode).');
+    return null;
   }
 
   if (!Device.isDevice) {

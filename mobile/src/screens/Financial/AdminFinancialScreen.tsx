@@ -63,7 +63,7 @@ const AdminFinancialScreen = () => {
   const [localSettings, setLocalSettings] = useState<any>(null);
 
   useEffect(() => {
-    if (user && user.role !== 'ADMIN') {
+    if (user && user.role !== 'ADMIN' && user.role !== 'SYSTEM_ADMIN') {
         navigation.goBack();
     }
   }, [user, navigation]);

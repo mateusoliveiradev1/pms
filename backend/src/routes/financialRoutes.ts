@@ -21,14 +21,14 @@ import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
 const router = Router();
 
 // Admin Routes
-router.get('/admin/dashboard', authenticateToken, requireRole('ADMIN'), getAdminDashboard);
-router.get('/admin/suppliers', authenticateToken, requireRole('ADMIN'), getAdminSupplierFinancials);
-router.get('/admin/audit', authenticateToken, requireRole('ADMIN'), getAdminAuditLogs);
-router.get('/admin/withdrawals', authenticateToken, requireRole('ADMIN'), listWithdrawalRequests);
-router.post('/admin/withdrawals/:id/approve', authenticateToken, requireRole('ADMIN'), approveWithdraw);
-router.post('/admin/withdrawals/:id/reject', authenticateToken, requireRole('ADMIN'), rejectWithdraw);
-router.get('/admin/settings', authenticateToken, requireRole('ADMIN'), getFinancialSettings);
-router.put('/admin/settings', authenticateToken, requireRole('ADMIN'), updateFinancialSettings);
+router.get('/admin/dashboard', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), getAdminDashboard);
+router.get('/admin/suppliers', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), getAdminSupplierFinancials);
+router.get('/admin/audit', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), getAdminAuditLogs);
+router.get('/admin/withdrawals', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), listWithdrawalRequests);
+router.post('/admin/withdrawals/:id/approve', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), approveWithdraw);
+router.post('/admin/withdrawals/:id/reject', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), rejectWithdraw);
+router.get('/admin/settings', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), getFinancialSettings);
+router.put('/admin/settings', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), updateFinancialSettings);
 
 // Public / Supplier Routes
 router.post('/cron/check-overdue', checkOverdue);

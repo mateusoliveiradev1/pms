@@ -124,7 +124,7 @@ const FinancialScreen = () => {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user?.role === 'ADMIN') {
+    if (user?.role === 'ADMIN' || user?.role === 'SYSTEM_ADMIN') {
       // Redirect Admin to AdminFinancial if they somehow reach here
       navigation.replace('AdminFinancial' as never);
     }
