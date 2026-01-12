@@ -117,6 +117,17 @@ const Routes = () => {
     return <AppSplashScreen />;
   }
 
+  if (signed && user?.role === 'SYSTEM_ADMIN') {
+    return (
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="SystemDashboard" component={DashboardScreen} />
+          {/* Add other System Admin screens here */}
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  }
+
   const requiresFirstSupplier =
     !!signed &&
     user?.role !== 'ADMIN' &&

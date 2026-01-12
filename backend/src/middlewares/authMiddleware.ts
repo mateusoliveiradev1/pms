@@ -55,23 +55,28 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
 };
 
 export const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-  if (req.user?.role !== 'ADMIN') {
+  if (req.user?.role !== 'SYSTEM_ADMIN' && req.user?.role !== 'ADMIN') { // Keep ADMIN for backward compatibility until full migration
     res.status(403).json({ message: 'Acesso negado. Apenas administradores.' });
     return;
   }
   next();
 };
 
-export const requireRole = (role: string) => {
+export const requireRole = (allowedRoles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.sendStatus(401);
       return;
     }
-    if (req.user.role !== role) {
+    if (!allowedRoles.includes(req.user.role)) {
       res.sendStatus(403);
       return;
     }
     next();
   };
 };
+
+export const requireSystemAdmin = requireRole(['SYSTEM_ADMIN']);
+export const requireAccountAdmin = requireRole(['SYSTEM_ADMIN', 'ACCOUNT_ADMIN']);
+export const requireSupplierAccess = requireRole(['SYSTEM_ADMIN', 'ACCOUNT_ADMIN', 'SUPPLIER_ADMIN', 'SUPPLIER_USER']);
+
