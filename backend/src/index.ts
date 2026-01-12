@@ -1,8 +1,8 @@
+import { env } from './env';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 import authRoutes from './routes/authRoutes';
 import supplierRoutes from './routes/supplierRoutes';
@@ -24,7 +24,7 @@ import { globalErrorHandler } from './middlewares/errorMiddleware';
 import logger from './lib/logger';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = env.PORT;
 
 // Debug: Catch unhandled errors
 process.on('uncaughtException', (err) => {
@@ -45,14 +45,51 @@ process.on('unhandledRejection', (reason: any, promise) => {
   });
 });
 
-app.use(cors());
+// Security Headers
+app.use(helmet());
 
-// Stripe Webhook requires raw body
+// CORS Configuration
+const corsOptions = {
+    origin: env.APP_ENV === 'production' 
+        ? (env.CORS_ORIGIN ? env.CORS_ORIGIN.split(',') : false) 
+        : '*',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+app.use(cors(corsOptions));
+
+// Rate Limiters
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20, // Limit each IP to 20 requests per windowMs
+    message: 'Too many login attempts, please try again later',
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const adminLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 500, // Admin needs more bandwidth
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const webhookLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000, // 1 minute
+    max: 100, // Allow bursts
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Webhook handling (Apply limiter and raw body parser)
+app.use('/api/payments/webhook', webhookLimiter);
 app.use('/api/payments/webhook/stripe', express.raw({ type: 'application/json' }));
 
 app.use(express.json());
 
-app.use('/api/auth', authRoutes);
+// Routes
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/suppliers', supplierRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
@@ -64,19 +101,21 @@ app.use('/api/plans', plansRoutes);
 app.use('/api/financial', financialRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/orders/payment', orderPaymentRoutes);
-app.use('/api/financial-admin', financialAdminRoutes);
-app.use('/api/admin/bi', biRoutes);
-app.use('/api/admin/integrations', integrationRoutes);
-app.use('/api/admin/system', systemRoutes);
+
+// Admin Routes (Apply limiter)
+app.use('/api/financial-admin', adminLimiter, financialAdminRoutes);
+app.use('/api/admin/bi', adminLimiter, biRoutes);
+app.use('/api/admin/integrations', adminLimiter, integrationRoutes);
+app.use('/api/admin/system', adminLimiter, systemRoutes);
 
 app.get('/', (req, res) => {
-  res.send('Dropshipping PMS API Running');
+  res.send(`Dropshipping PMS API Running (${env.APP_ENV})`);
 });
 
 app.use(globalErrorHandler);
 
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT} in ${env.APP_ENV} mode`);
 });
 
 // Keep-alive to prevent premature exit in dev environment

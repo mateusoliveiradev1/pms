@@ -1,10 +1,9 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Alert } from 'react-native';
+import { ENV } from '../config/env';
 
-// Use seu IP local se estiver testando em dispositivo físico ou emulador Android (10.0.2.2)
-// Exemplo: 'http://192.168.1.10:3000/api'
-const API_URL = 'http://192.168.3.118:3000/api'; 
+const API_URL = ENV.API_URL;
 
 const api = axios.create({
   baseURL: API_URL,

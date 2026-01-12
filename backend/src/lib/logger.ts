@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import prisma from '../prisma';
+import { env } from '../env';
 
 export type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'CRITICAL';
 
@@ -54,6 +55,13 @@ class Logger {
         this.service = service;
     }
 
+    private shouldLogToFileAndConsole(level: LogLevel): boolean {
+        if (env.APP_ENV === 'development') return true;
+        if (env.APP_ENV === 'staging') return ['INFO', 'WARN', 'ERROR', 'CRITICAL'].includes(level);
+        if (env.APP_ENV === 'production') return ['WARN', 'ERROR', 'CRITICAL'].includes(level);
+        return true;
+    }
+
     private async persistLog(level: LogLevel, data: LogData) {
         // Sanitize metadata before any processing
         const sanitizedMetadata = data.metadata ? sanitize(data.metadata) : undefined;
@@ -66,33 +74,31 @@ class Logger {
             metadata: sanitizedMetadata
         };
 
-        // Console output (pretty for dev)
-        const color = level === 'CRITICAL' || level === 'ERROR' ? '\x1b[31m' : level === 'WARN' ? '\x1b[33m' : '\x1b[32m';
-        const reset = '\x1b[0m';
-        
-        // Don't console log everything if not needed, but for now we keep it
-        // User said: "Não substituir console.log em tudo agora... Apenas: Financeiro, Pagamentos, Webhooks, Admin actions"
-        // Since we are calling this logger explicitly, we should log to console.
-        console.log(`${color}[${level}]${reset} [${entry.service}] ${entry.action}: ${entry.message}`, sanitizedMetadata ? JSON.stringify(sanitizedMetadata) : '');
+        // File and Console Logging (Filtered by Env)
+        if (this.shouldLogToFileAndConsole(level)) {
+            // Console output
+            const color = level === 'CRITICAL' || level === 'ERROR' ? '\x1b[31m' : level === 'WARN' ? '\x1b[33m' : '\x1b[32m';
+            const reset = '\x1b[0m';
+            
+            console.log(`${color}[${level}]${reset} [${entry.service}] ${entry.action}: ${entry.message}`, sanitizedMetadata ? JSON.stringify(sanitizedMetadata) : '');
 
-        // File output
-        const logLine = JSON.stringify(entry) + '\n';
-        fs.appendFile(LOG_FILE_PATH, logLine, (err) => {
-            if (err) console.error('Failed to write to log file', err);
-        });
+            // File output
+            const logLine = JSON.stringify(entry) + '\n';
+            fs.appendFile(LOG_FILE_PATH, logLine, (err) => {
+                if (err) console.error('Failed to write to log file', err);
+            });
+        }
 
-        // Database Persistence for Critical/Error or specific sources
-        // We also want to persist FINANCIAL events (from legacy logFinancialEvent) if they are important, 
-        // but user only specified "Logs críticos sempre persistidos" and "SystemEventLog".
-        // The prompt says "Captura de exceções... Logar erro estruturado... Persistir em SystemEventLog".
-        // It also says "Alertas Administrativos... Registrar em SystemEventLog".
-        
+        // Database Persistence
+        // Rules:
+        // 1. Always persist CRITICAL and ERROR
+        // 2. Persist FINANCIAL_AUDIT (Critical business events) regardless of level
         if (level === 'CRITICAL' || level === 'ERROR' || data.service === 'FINANCIAL_AUDIT') {
              try {
                 // Determine source from entityType or default to SYSTEM
                 let source = 'SYSTEM';
                 if (data.entityType) {
-                    if (['ORDER', 'WITHDRAWAL', 'FINANCIAL', 'PAYMENT'].includes(data.entityType)) source = 'FINANCIAL'; // Or PAYMENT
+                    if (['ORDER', 'WITHDRAWAL', 'FINANCIAL', 'PAYMENT'].includes(data.entityType)) source = 'FINANCIAL';
                     else if (data.entityType === 'WEBHOOK') source = 'WEBHOOK';
                     else if (data.entityType === 'AUTH') source = 'AUTH';
                 }
@@ -156,21 +162,12 @@ interface FinancialLogData {
 }
 
 export const logFinancialEvent = (data: FinancialLogData) => {
-    // Map legacy financial events to new logger
-    // We treat them as INFO level, but force persistence via 'FINANCIAL_AUDIT' service name hack in persistLog logic above
-    // OR we just use INFO and rely on the fact that critical ones should be CRITICAL?
-    // Financial events are "Auditar falhas críticas" and "Monitorar saúde".
-    // The user said "Auditar falhas críticas".
-    // "Tabela de Eventos do Sistema... Inserção apenas via backend".
-    // Let's treat these as important events. 
-    
-    // We map to entityType FINANCIAL or PAYMENT based on type
     let entityType: EntityType = 'FINANCIAL';
     if (data.type.includes('PAYMENT')) entityType = 'PAYMENT';
     if (data.type.includes('WITHDRAWAL')) entityType = 'WITHDRAWAL';
 
     logger.info({
-        service: 'FINANCIAL_AUDIT', // This triggers DB persistence in my logic above
+        service: 'FINANCIAL_AUDIT',
         action: data.type,
         entityType,
         entityId: data.referenceId || data.supplierId,
