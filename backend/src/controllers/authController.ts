@@ -28,35 +28,34 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         return;
     }
 
-    // Auto-confirm email in development/production to avoid email verification block
-    // This requires SUPABASE_SERVICE_KEY to be set in backend
+    // 2. Create/Sync User in Public Schema Immediately
+    // We use upsert to avoid race conditions with Supabase triggers
     try {
-        await supabase.auth.admin.updateUserById(
-            data.user.id,
-            { email_confirm: true }
-        );
-    } catch (confirmError) {
-        console.warn('Failed to auto-confirm email (Service Key might be missing or insufficient permissions):', confirmError);
+        await prisma.user.upsert({
+            where: { id: data.user.id },
+            update: { 
+                name,
+                email,
+                role: 'SUPPLIER'
+            },
+            create: {
+                id: data.user.id,
+                email,
+                name,
+                role: 'SUPPLIER',
+                status: 'ACTIVE'
+            }
+        });
+    } catch (dbError: any) {
+        console.error('Failed to sync user to public DB:', dbError);
+        // Continue? If user isn't in DB, supplier creation will fail.
+        res.status(500).json({ message: 'Database sync failed', error: dbError.message });
+        return;
     }
 
-    // 2. Handle Supplier Creation (if needed)
+    // 3. Handle Supplier Creation
     if (supplierName) {
-        // Wait for Trigger to sync User to public table
-        // Simple retry mechanism
-        let retries = 5;
-        let userCreated = false;
-        
-        while (retries > 0) {
-            const userExists = await prisma.user.findUnique({ where: { id: data.user.id } });
-            if (userExists) {
-                userCreated = true;
-                break;
-            }
-            await new Promise(r => setTimeout(r, 500));
-            retries--;
-        }
-        
-        if (userCreated) {
+        try {
             const supplier = await prisma.supplier.create({
                 data: {
                     name: supplierName,
@@ -81,8 +80,9 @@ export const register = async (req: Request, res: Response): Promise<void> => {
                     endDate: endDate
                 }
             });
-        } else {
-            console.warn(`User ${data.user.id} not found in public table after retries. Supplier creation skipped.`);
+        } catch (supplierError: any) {
+            console.error('Failed to create supplier:', supplierError);
+            // We don't block registration success, but user will need to retry supplier creation
         }
     }
 

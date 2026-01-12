@@ -2,13 +2,17 @@ import React, { useEffect, useRef } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import Logo from '../ui/components/Logo';
+import * as SplashScreen from 'expo-splash-screen';
 
-const SplashScreen = () => {
+const SplashScreenComponent = () => {
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.92)).current;
   const translateY = useRef(new Animated.Value(12)).current;
 
   useEffect(() => {
+    // Esconder a splash nativa assim que nossa splash animada montar
+    SplashScreen.hideAsync();
+    
     Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.timing(scale, { toValue: 1, duration: 700, useNativeDriver: true }),
@@ -47,4 +51,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default SplashScreen;
+export default SplashScreenComponent;

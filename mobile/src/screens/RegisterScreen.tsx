@@ -7,6 +7,7 @@ import Button from '../ui/components/Button';
 import { colors } from '../ui/theme';
 import Logo from '../ui/components/Logo';
 import { useNavigation } from '@react-navigation/native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 const RegisterScreen = () => {
   const [name, setName] = useState('');
@@ -15,6 +16,7 @@ const RegisterScreen = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [supplierName, setSupplierName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
   const { signUp } = useAuth();
   const navigation = useNavigation();
 
@@ -38,6 +40,7 @@ const RegisterScreen = () => {
         supplierName,
         role: 'SUPPLIER'
       });
+      setSuccess(true);
     } catch (error: any) {
       console.log(error);
       const msg = error.response?.data?.message || 'Falha no cadastro. Tente novamente.';
@@ -46,6 +49,25 @@ const RegisterScreen = () => {
       setLoading(false);
     }
   };
+
+  if (success) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={[styles.content, { alignItems: 'center', justifyContent: 'center', padding: 24 }]}>
+           <View style={styles.iconContainer}>
+              <MaterialIcons name="mark-email-read" size={80} color={colors.primary} />
+           </View>
+           <Text style={[styles.title, { marginTop: 24, textAlign: 'center' }]}>Verifique seu Email</Text>
+           <Text style={[styles.subtitle, { marginTop: 8, marginBottom: 32, maxWidth: 300 }]}>
+              Enviamos um link de confirmação para <Text style={{fontWeight: 'bold', color: '#1A1D1E'}}>{email}</Text>.
+              {"\n\n"}
+              Por favor, verifique sua caixa de entrada e spam para ativar sua conta.
+           </Text>
+           <Button title="Voltar para Login" onPress={() => navigation.navigate('Login')} style={{ width: '100%' }} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -164,6 +186,15 @@ const styles = StyleSheet.create({
   footerLink: {
     color: colors.primary,
     fontWeight: 'bold',
+  },
+  iconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#E0E7FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
 });
 

@@ -5,7 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
-import SplashScreen from '../screens/SplashScreen';
+import AppSplashScreen from '../screens/SplashScreen';
 
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
@@ -113,7 +113,7 @@ const Routes = () => {
   const { signed, loading } = useAuth();
 
   if (loading) {
-    return <SplashScreen />;
+    return <AppSplashScreen />;
   }
 
   return (
