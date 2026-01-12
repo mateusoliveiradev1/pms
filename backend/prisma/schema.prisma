@@ -287,6 +287,20 @@ model InternalWebhook {
   logs            WebhookLog[]
 }
 
+model SystemEventLog {
+  id        String   @id @default(uuid())
+  level     String   // INFO, WARN, ERROR, CRITICAL
+  source    String   // FINANCIAL, PAYMENT, WEBHOOK, AUTH, CRON
+  action    String
+  entityId  String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@index([level])
+  @@index([source])
+  @@index([createdAt])
+}
+
 model WebhookLog {
   id          String   @id @default(uuid())
   webhookId   String

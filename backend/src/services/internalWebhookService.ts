@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import axios from 'axios';
 import prisma from '../prisma';
+import logger from '../lib/logger';
 
 export class InternalWebhookService {
   
@@ -50,6 +51,16 @@ export class InternalWebhookService {
         setTimeout(() => {
           this.sendWithRetry(webhook, event, payload, attempt + 1);
         }, backoff);
+      } else {
+        // Soft Alert: Webhook falhou 3x
+        logger.warn({
+             service: 'webhook-service',
+             action: 'WEBHOOK_FAILED_MAX_RETRIES',
+             entityType: 'WEBHOOK',
+             entityId: webhook.id,
+             message: `Webhook ${webhook.url} failed after ${maxRetries} attempts`,
+             metadata: { event, error: errorMsg, statusCode: status }
+         });
       }
     }
   }

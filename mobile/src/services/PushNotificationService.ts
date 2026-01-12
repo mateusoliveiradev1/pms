@@ -4,21 +4,23 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import api from './api';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Only set handler if not in Expo Go to avoid warnings/errors
+const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
+if (!isExpoGo) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 export async function registerForPushNotificationsAsync() {
   // Check if running in Expo Go to avoid "functionality removed" error
   // SDK 53+ removes remote notifications from Expo Go entirely
-  const isExpoGo = Constants.appOwnership === 'expo' || Constants.executionEnvironment === 'storeClient';
-    
   if (isExpoGo) {
       console.log('Info: Push Notifications skipped in Expo Go (Development Mode).');
       return null;

@@ -67,3 +67,12 @@ export const shadow = {
     elevation: 3,
   },
 };
+
+export const theme = {
+  colors,
+  spacing,
+  radius,
+  shadow,
+};
+
+export const useTheme = () => theme;

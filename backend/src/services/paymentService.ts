@@ -1,7 +1,7 @@
 import prisma from '../prisma';
 import MercadoPagoConfig, { Payment } from 'mercadopago';
 import Stripe from 'stripe';
-import { logFinancialEvent } from '../lib/logger';
+import { logFinancialEvent, logger } from '../lib/logger';
 
 // Initialize Gateways
 const mpAccessToken = process.env.MERCADOPAGO_ACCESS_TOKEN || 'TEST-ACCESS-TOKEN';
@@ -338,7 +338,14 @@ export const PaymentService = {
     } catch (error: any) {
         // P2002 = Unique constraint failed (Idempotency)
         if (error.code === 'P2002') {
-            console.log(`Event ${eventId} already processed (Idempotency).`);
+            logger.warn({
+                service: 'payment-service',
+                action: 'PAYMENT_DUPLICATE_PREVENTED',
+                message: `Event ${eventId} already processed (Idempotency).`,
+                entityType: 'PAYMENT',
+                entityId: externalId,
+                metadata: { eventId, gateway }
+            });
             return;
         }
         console.error('Error processing payment success:', error);
@@ -479,7 +486,14 @@ export const PaymentService = {
         console.log(`Order ${orderId} processed successfully.`);
     } catch (error: any) {
         if (error.code === 'P2002') {
-            console.log(`Event ${eventId} already processed (Idempotency).`);
+            logger.warn({
+                service: 'payment-service',
+                action: 'PAYMENT_DUPLICATE_PREVENTED',
+                message: `Event ${eventId} already processed (Idempotency).`,
+                entityType: 'PAYMENT',
+                entityId: externalId,
+                metadata: { eventId, gateway }
+            });
             return;
         }
         console.error('Error processing order payment:', error);
