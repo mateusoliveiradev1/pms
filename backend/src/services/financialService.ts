@@ -2,7 +2,7 @@ import prisma from '../prisma';
 import { 
   Prisma, 
   Supplier, 
-  SupplierSubscription, 
+  Subscription, 
   Plan, 
   FinancialLedger, 
   WithdrawalRequest, 
@@ -43,9 +43,9 @@ interface AdminDashboardStats {
 
 export const FinancialService = {
   // Returns active subscription for a supplier
-  getActiveSubscription: async (supplierId: string): Promise<(SupplierSubscription & { plan: Plan }) | null> => {
+  getActiveSubscription: async (supplierId: string): Promise<(Subscription & { plan: Plan }) | null> => {
     const now = new Date();
-    return prisma.supplierSubscription.findFirst({
+    return prisma.subscription.findFirst({
       where: { 
         supplierId, 
         status: { in: ['ATIVA', 'ACTIVE'] }, // Support legacy and new status
@@ -524,7 +524,7 @@ export const FinancialService = {
       take: 50
     });
 
-    const subscription = await prisma.supplierSubscription.findFirst({
+    const subscription = await prisma.subscription.findFirst({
       where: { supplierId, status: 'ATIVA' },
       include: { plan: true }
     });
@@ -597,7 +597,7 @@ export const FinancialService = {
         throw new Error('Conta suspensa ou com pendências financeiras.');
       }
       // Check active subscription
-      const activeSub = await tx.supplierSubscription.findFirst({
+      const activeSub = await tx.subscription.findFirst({
         where: { supplierId, status: 'ATIVA', endDate: { gt: new Date() } }
       });
       if (!activeSub) {

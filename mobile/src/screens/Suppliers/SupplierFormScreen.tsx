@@ -8,17 +8,20 @@ import Header from '../../ui/components/Header';
 import { colors, shadow, radius, spacing } from '../../ui/theme';
 
 type SupplierParams = {
+  supplier?: {
     id: string;
     name: string;
     integrationType: string;
     shippingDeadline: number;
     status: string;
+  };
+  onboardingMode?: boolean;
 };
 
 const SupplierFormScreen = () => {
   const route = useRoute();
   const navigation = useNavigation();
-  const { supplier } = (route.params as any) || {};
+  const { supplier, onboardingMode } = (route.params as SupplierParams) || {};
   const isEditing = !!supplier;
 
   const [name, setName] = useState('');
@@ -53,14 +56,22 @@ const SupplierFormScreen = () => {
       };
 
       if (isEditing) {
-          await api.put(`/suppliers/${supplier.id}`, payload);
-          Alert.alert('Sucesso', 'Fornecedor atualizado com sucesso!');
+        await api.put(`/suppliers/${supplier.id}`, payload);
+        Alert.alert('Sucesso', 'Fornecedor atualizado com sucesso!');
+        navigation.goBack();
       } else {
-          await api.post('/suppliers', payload);
+        const response = await api.post('/suppliers', payload);
+        const { account } = response.data;
+        if (onboardingMode && account?.onboardingStatus === 'COMPLETO') {
+          (navigation as any).reset({
+            index: 0,
+            routes: [{ name: 'AppTabs' }],
+          });
+        } else {
           Alert.alert('Sucesso', 'Fornecedor cadastrado com sucesso!');
+          navigation.goBack();
+        }
       }
-      
-      navigation.goBack();
     } catch (error) {
       console.log(error);
       Alert.alert('Erro', 'Falha ao salvar fornecedor.');

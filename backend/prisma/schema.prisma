@@ -15,10 +15,31 @@ model User {
   id        String   @id @db.Uuid // Linked to auth.users.id
   name      String?
   email     String   @unique
-  role      String   @default("SUPPLIER") // ADMIN, SUPPLIER
+  role      String   @default("SUPPLIER")
   status    String   @default("ACTIVE")
   expoPushToken String?
+  
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id])
+
   suppliers Supplier[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  type      String   @default("INDIVIDUAL")
+  planId    String   @default("basic")
+  onboardingStatus String @default("COMPLETO")
+  
+  users     User[]
+  suppliers Supplier[]
+  subscriptions Subscription[]
+  plan       Plan     @relation(fields: [planId], references: [id])
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -28,6 +49,8 @@ model Plan {
   name         String
   monthlyPrice Float
   cycleDays    Int        @default(30)
+  maxSuppliers Int        @default(1)
+  maxUsers     Int        @default(3)
   // Business rules
   limitProducts   Int      @default(100)
   limitOrders     Int      @default(1000)
@@ -42,7 +65,8 @@ model Plan {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   suppliers    Supplier[]
-  subscriptions SupplierSubscription[]
+  subscriptions Subscription[]
+  accounts     Account[]
 }
 
 model FinancialSettings {
@@ -76,13 +100,19 @@ model ProcessedWebhookEvent {
 model Supplier {
   id              String    @id @default(uuid())
   name            String
+  type            String    @default("INDIVIDUAL")
   integrationType String    // MANUAL, API
   shippingDeadline Int?     // Days
   status          String    @default("ACTIVE") // ACTIVE, PAUSED
+  active          Boolean   @default(true)
   
   userId          String?   @db.Uuid
   user            User?     @relation(fields: [userId], references: [id])
   
+  accountId       String
+  account         Account  @relation(fields: [accountId], references: [id])
+  isDefault       Boolean   @default(false)
+
   // Financial Fields
   planId          String?
   plan            Plan?     @relation(fields: [planId], references: [id])
@@ -107,7 +137,7 @@ model Supplier {
 
   products        ProductSupplier[]
   orders          Order[]
-  subscriptions   SupplierSubscription[]
+  subscriptions   Subscription[]
   financialLedger FinancialLedger[]
   withdrawals     WithdrawalRequest[]
 
@@ -115,10 +145,15 @@ model Supplier {
   updatedAt DateTime @updatedAt
 }
 
-model SupplierSubscription {
+model Subscription {
   id          String   @id @default(uuid())
-  supplierId  String
-  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  
+  accountId   String?
+  account     Account? @relation(fields: [accountId], references: [id])
+  
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+  
   planId      String
   plan        Plan     @relation(fields: [planId], references: [id])
   

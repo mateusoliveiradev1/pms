@@ -27,12 +27,29 @@ export const paySubscription = async (req: Request, res: Response) => {
     }
 
     if (authUser.role !== 'ADMIN') {
-      const supplier = await prisma.supplier.findUnique({ where: { id: String(supplierId) }, select: { userId: true } });
+      const user = await prisma.user.findUnique({
+        where: { id: authUser.userId },
+        select: { accountId: true, role: true },
+      });
+      if (!user?.accountId) {
+        res.status(400).json({ message: 'Usuário sem conta vinculada' });
+        return;
+      }
+
+      const supplier = await prisma.supplier.findUnique({
+        where: { id: String(supplierId) },
+        select: { userId: true, accountId: true },
+      });
       if (!supplier) {
         res.status(404).json({ message: 'Supplier not found' });
         return;
       }
-      if (supplier.userId !== authUser.userId) {
+
+      if (supplier.accountId !== user.accountId) {
+        res.status(403).json({ message: 'Forbidden' });
+        return;
+      }
+      if (user.role === 'SUPPLIER' && supplier.userId !== authUser.userId) {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
@@ -60,12 +77,28 @@ export const getLedger = async (req: Request, res: Response) => {
 
     const { supplierId } = req.query;
     if (supplierId && authUser.role !== 'ADMIN') {
-      const supplier = await prisma.supplier.findUnique({ where: { id: String(supplierId) }, select: { userId: true } });
+      const user = await prisma.user.findUnique({
+        where: { id: authUser.userId },
+        select: { accountId: true, role: true },
+      });
+      if (!user?.accountId) {
+        res.status(400).json({ message: 'Usuário sem conta vinculada' });
+        return;
+      }
+
+      const supplier = await prisma.supplier.findUnique({
+        where: { id: String(supplierId) },
+        select: { userId: true, accountId: true },
+      });
       if (!supplier) {
         res.status(404).json({ message: 'Supplier not found' });
         return;
       }
-      if (supplier.userId !== authUser.userId) {
+      if (supplier.accountId !== user.accountId) {
+        res.status(403).json({ message: 'Forbidden' });
+        return;
+      }
+      if (user.role === 'SUPPLIER' && supplier.userId !== authUser.userId) {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
@@ -75,8 +108,21 @@ export const getLedger = async (req: Request, res: Response) => {
     if (supplierId) {
       where = { supplierId: String(supplierId) };
     } else if (authUser.role !== 'ADMIN') {
-      const suppliers = await prisma.supplier.findMany({ where: { userId: authUser.userId }, select: { id: true } });
-      where = { supplierId: { in: suppliers.map(s => s.id) } };
+      const user = await prisma.user.findUnique({
+        where: { id: authUser.userId },
+        select: { accountId: true, role: true },
+      });
+      if (!user?.accountId) {
+        res.json([]);
+        return;
+      }
+
+      const suppliers =
+        user.role === 'SUPPLIER'
+          ? await prisma.supplier.findMany({ where: { userId: authUser.userId }, select: { id: true } })
+          : await prisma.supplier.findMany({ where: { accountId: user.accountId }, select: { id: true } });
+
+      where = { supplierId: { in: suppliers.map((s) => s.id) } };
     }
     
     const ledger = await prisma.financialLedger.findMany({
@@ -102,12 +148,28 @@ export const getSupplierFinancials = async (req: Request, res: Response) => {
 
         // Permission check
         if (authUser.role !== 'ADMIN') {
-             const supplierCheck = await prisma.supplier.findUnique({ where: { id }, select: { userId: true } });
+             const user = await prisma.user.findUnique({
+               where: { id: authUser.userId },
+               select: { accountId: true, role: true },
+             });
+             if (!user?.accountId) {
+               res.status(400).json({ message: 'Usuário sem conta vinculada' });
+               return;
+             }
+
+             const supplierCheck = await prisma.supplier.findUnique({
+               where: { id },
+               select: { userId: true, accountId: true },
+             });
              if (!supplierCheck) {
                  res.status(404).json({ message: 'Supplier not found' });
                  return;
              }
-             if (supplierCheck.userId !== authUser.userId) {
+             if (supplierCheck.accountId !== user.accountId) {
+                 res.status(403).json({ message: 'Forbidden' });
+                 return;
+             }
+             if (user.role === 'SUPPLIER' && supplierCheck.userId !== authUser.userId) {
                  res.status(403).json({ message: 'Forbidden' });
                  return;
              }
@@ -130,12 +192,28 @@ export const withdrawFunds = async (req: Request, res: Response) => {
     }
 
     if (authUser.role !== 'ADMIN') {
-      const supplier = await prisma.supplier.findUnique({ where: { id: String(supplierId) }, select: { userId: true } });
+      const user = await prisma.user.findUnique({
+        where: { id: authUser.userId },
+        select: { accountId: true, role: true },
+      });
+      if (!user?.accountId) {
+        res.status(400).json({ message: 'Usuário sem conta vinculada' });
+        return;
+      }
+
+      const supplier = await prisma.supplier.findUnique({
+        where: { id: String(supplierId) },
+        select: { userId: true, accountId: true },
+      });
       if (!supplier) {
         res.status(404).json({ message: 'Supplier not found' });
         return;
       }
-      if (supplier.userId !== authUser.userId) {
+      if (supplier.accountId !== user.accountId) {
+        res.status(403).json({ message: 'Forbidden' });
+        return;
+      }
+      if (user.role === 'SUPPLIER' && supplier.userId !== authUser.userId) {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
@@ -162,12 +240,28 @@ export const changePlan = async (req: Request, res: Response) => {
     }
 
     if (authUser.role !== 'ADMIN') {
-      const supplier = await prisma.supplier.findUnique({ where: { id: String(supplierId) }, select: { userId: true } });
+      const user = await prisma.user.findUnique({
+        where: { id: authUser.userId },
+        select: { accountId: true, role: true },
+      });
+      if (!user?.accountId) {
+        res.status(400).json({ message: 'Usuário sem conta vinculada' });
+        return;
+      }
+
+      const supplier = await prisma.supplier.findUnique({
+        where: { id: String(supplierId) },
+        select: { userId: true, accountId: true },
+      });
       if (!supplier) {
         res.status(404).json({ message: 'Supplier not found' });
         return;
       }
-      if (supplier.userId !== authUser.userId) {
+      if (supplier.accountId !== user.accountId) {
+        res.status(403).json({ message: 'Forbidden' });
+        return;
+      }
+      if (user.role === 'SUPPLIER' && supplier.userId !== authUser.userId) {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
@@ -191,12 +285,28 @@ export const updateBillingInfo = async (req: Request, res: Response) => {
     }
 
     if (authUser.role !== 'ADMIN') {
-      const supplier = await prisma.supplier.findUnique({ where: { id: String(supplierId) }, select: { userId: true } });
+      const user = await prisma.user.findUnique({
+        where: { id: authUser.userId },
+        select: { accountId: true, role: true },
+      });
+      if (!user?.accountId) {
+        res.status(400).json({ message: 'Usuário sem conta vinculada' });
+        return;
+      }
+
+      const supplier = await prisma.supplier.findUnique({
+        where: { id: String(supplierId) },
+        select: { userId: true, accountId: true },
+      });
       if (!supplier) {
         res.status(404).json({ message: 'Supplier not found' });
         return;
       }
-      if (supplier.userId !== authUser.userId) {
+      if (supplier.accountId !== user.accountId) {
+        res.status(403).json({ message: 'Forbidden' });
+        return;
+      }
+      if (user.role === 'SUPPLIER' && supplier.userId !== authUser.userId) {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }

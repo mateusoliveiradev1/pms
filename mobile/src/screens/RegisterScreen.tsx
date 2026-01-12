@@ -10,18 +10,19 @@ import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 const RegisterScreen = () => {
+  const [accountType, setAccountType] = useState<'INDIVIDUAL' | 'COMPANY'>('INDIVIDUAL');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [supplierName, setSupplierName] = useState('');
+  const [accountName, setAccountName] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const { signUp } = useAuth();
   const navigation = useNavigation();
 
   const handleRegister = async () => {
-    if (!name || !email || !password || !confirmPassword || !supplierName) {
+    if (!name || !email || !password || !confirmPassword || !accountName) {
         Alert.alert('Erro', 'Preencha todos os campos');
         return;
     }
@@ -37,8 +38,8 @@ const RegisterScreen = () => {
         name,
         email,
         password,
-        supplierName,
-        role: 'SUPPLIER'
+        accountName,
+        accountType,
       });
       setSuccess(true);
     } catch (error: any) {
@@ -57,13 +58,11 @@ const RegisterScreen = () => {
            <View style={styles.iconContainer}>
               <MaterialIcons name="mark-email-read" size={80} color={colors.primary} />
            </View>
-           <Text style={[styles.title, { marginTop: 24, textAlign: 'center' }]}>Verifique seu Email</Text>
+           <Text style={[styles.title, { marginTop: 24, textAlign: 'center' }]}>Conta Criada!</Text>
            <Text style={[styles.subtitle, { marginTop: 8, marginBottom: 32, maxWidth: 300 }]}>
-              Enviamos um link de confirmação para <Text style={{fontWeight: 'bold', color: '#1A1D1E'}}>{email}</Text>.
-              {"\n\n"}
-              Por favor, verifique sua caixa de entrada e spam para ativar sua conta.
+              Bem-vindo(a) à plataforma. Verifique seu email para confirmar o cadastro.
            </Text>
-           <Button title="Voltar para Login" onPress={() => navigation.navigate('Login')} style={{ width: '100%' }} />
+           <Button title="Ir para Login" onPress={() => navigation.navigate('Login')} style={{ width: '100%' }} />
         </View>
       </SafeAreaView>
     );
@@ -83,18 +82,35 @@ const RegisterScreen = () => {
             </View>
             
             <View style={styles.form}>
+            
+            {/* Account Type Selector */}
+            <View style={styles.typeSelector}>
+              <TouchableOpacity 
+                style={[styles.typeOption, accountType === 'INDIVIDUAL' && styles.typeOptionActive]}
+                onPress={() => setAccountType('INDIVIDUAL')}
+              >
+                <Text style={[styles.typeText, accountType === 'INDIVIDUAL' && styles.typeTextActive]}>Vendedor Individual</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.typeOption, accountType === 'COMPANY' && styles.typeOptionActive]}
+                onPress={() => setAccountType('COMPANY')}
+              >
+                <Text style={[styles.typeText, accountType === 'COMPANY' && styles.typeTextActive]}>Empresa / Operação</Text>
+              </TouchableOpacity>
+            </View>
+
             <Input
-                label="Nome Completo"
+                label="Nome Completo (Admin)"
                 placeholder="Seu nome"
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"
             />
             <Input
-                label="Nome da Loja/Fornecedor"
-                placeholder="Ex: Minha Loja Inc"
-                value={supplierName}
-                onChangeText={setSupplierName}
+                label={accountType === 'INDIVIDUAL' ? "Nome do Negócio / Marca" : "Nome da Empresa"}
+                placeholder={accountType === 'INDIVIDUAL' ? "Ex: Minha Loja" : "Ex: Empresa Ltda"}
+                value={accountName}
+                onChangeText={setAccountName}
                 autoCapitalize="words"
             />
             <Input
@@ -173,6 +189,36 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
     gap: 0, 
+  },
+  typeSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 4,
+    marginBottom: 20,
+  },
+  typeOption: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  typeOptionActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  typeText: {
+    fontSize: 14,
+    color: '#6E7687',
+    fontWeight: '500',
+  },
+  typeTextActive: {
+    color: colors.primary,
+    fontWeight: '700',
   },
   footerButton: {
     marginTop: 24,

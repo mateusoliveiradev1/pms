@@ -4,21 +4,7 @@ import prisma from '../prisma';
 export const getProducts = async (req: Request, res: Response) => {
   try {
     const { query } = req.query as { query?: string };
-    const authUser = (req as any).user;
-    
-    let supplierFilter = undefined;
-    
-    // Filter by supplier if not Admin
-    if (authUser && authUser.role !== 'ADMIN') {
-        const supplier = await prisma.supplier.findFirst({ where: { userId: authUser.userId } });
-        if (supplier) {
-            supplierFilter = { some: { supplierId: supplier.id } };
-        } else {
-             // User is not admin and has no supplier profile? Return empty or error?
-             // For now, return empty
-             return res.json([]);
-        }
-    }
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
 
     const where: any = {};
     
@@ -28,9 +14,51 @@ export const getProducts = async (req: Request, res: Response) => {
             { sku: { contains: String(query), mode: 'insensitive' } },
         ];
     }
-    
-    if (supplierFilter) {
-        where.suppliers = supplierFilter;
+
+    if (authUser?.role !== 'ADMIN') {
+      if (!authUser?.userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: authUser.userId },
+        select: { accountId: true, role: true },
+      });
+
+      if (!user?.accountId) {
+        res.json([]);
+        return;
+      }
+
+      let suppliers: Array<{ id: string }> = [];
+
+      if (user.role === 'SUPPLIER') {
+        suppliers = await prisma.supplier.findMany({
+          where: { userId: authUser.userId },
+          select: { id: true },
+        });
+
+        if (suppliers.length === 0) {
+          const defaultSupplier = await prisma.supplier.findFirst({
+            where: { accountId: user.accountId, isDefault: true },
+            select: { id: true },
+          });
+          suppliers = defaultSupplier ? [defaultSupplier] : [];
+        }
+      } else {
+        suppliers = await prisma.supplier.findMany({
+          where: { accountId: user.accountId },
+          select: { id: true },
+        });
+      }
+
+      if (suppliers.length === 0) {
+        res.json([]);
+        return;
+      }
+
+      where.suppliers = { some: { supplierId: { in: suppliers.map((s) => s.id) } } };
     }
 
     const products = await prisma.product.findMany({

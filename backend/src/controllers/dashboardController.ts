@@ -3,29 +3,69 @@ import prisma from '../prisma';
 
 export const getDashboardStats = async (req: Request, res: Response) => {
   try {
-    const authUser = (req as any).user;
-    let supplierId: string | undefined = undefined;
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    let supplierIds: string[] | undefined = undefined;
 
-    if (authUser && authUser.role !== 'ADMIN') {
-        const supplier = await prisma.supplier.findFirst({ where: { userId: authUser.userId } });
-        if (supplier) {
-            supplierId = supplier.id;
-        } else {
-            // No supplier profile found for non-admin user
-            return res.json({
-                totalProducts: 0,
-                totalOrders: 0,
-                lowStockProducts: 0,
-                pendingOrders: 0,
-                totalSales: 0,
-                totalProfit: 0
-            });
+    if (authUser?.role !== 'ADMIN') {
+      if (!authUser?.userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: authUser.userId },
+        select: { accountId: true, role: true },
+      });
+
+      if (!user?.accountId) {
+        res.json({
+          totalProducts: 0,
+          totalOrders: 0,
+          lowStockProducts: 0,
+          pendingOrders: 0,
+          totalSales: 0,
+          totalProfit: 0,
+        });
+        return;
+      }
+
+      if (user.role === 'SUPPLIER') {
+        const suppliers = await prisma.supplier.findMany({
+          where: { userId: authUser.userId },
+          select: { id: true },
+        });
+        supplierIds = suppliers.map((s) => s.id);
+
+        if (supplierIds.length === 0) {
+          const defaultSupplier = await prisma.supplier.findFirst({
+            where: { accountId: user.accountId, isDefault: true },
+            select: { id: true },
+          });
+          supplierIds = defaultSupplier ? [defaultSupplier.id] : [];
         }
+      } else {
+        const suppliers = await prisma.supplier.findMany({
+          where: { accountId: user.accountId },
+          select: { id: true },
+        });
+        supplierIds = suppliers.map((s) => s.id);
+      }
+
+      if (supplierIds.length === 0) {
+        res.json({
+          totalProducts: 0,
+          totalOrders: 0,
+          lowStockProducts: 0,
+          pendingOrders: 0,
+          totalSales: 0,
+          totalProfit: 0,
+        });
+        return;
+      }
     }
 
-    // Filters
-    const productWhere = supplierId ? { suppliers: { some: { supplierId } } } : {};
-    const orderWhere = supplierId ? { supplierId } : {}; // Assuming Order has supplierId linked
+    const productWhere = supplierIds ? { suppliers: { some: { supplierId: { in: supplierIds } } } } : {};
+    const orderWhere = supplierIds ? { supplierId: { in: supplierIds } } : {};
 
     const totalProducts = await prisma.product.count({ where: productWhere });
     const totalOrders = await prisma.order.count({ where: orderWhere });
@@ -73,9 +113,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
     
     let totalProfit = 0;
 
-    if (supplierId) {
-        // For Supplier: Profit is the Payout sum? Or Payout - (Virtual Cost)?
-        // Let's assume Profit = Payouts for now (Revenue for Supplier).
+    if (supplierIds) {
         const payoutAggregate = await prisma.order.aggregate({
             _sum: { netValue: true },
             where: { ...orderWhere, status: { not: 'CANCELLED' } }

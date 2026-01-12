@@ -30,6 +30,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 
 export type RootStackParamList = {
   AppTabs: undefined;
+  SupplierOnboarding: undefined;
   Login: undefined;
   Register: undefined;
   ProductForm: { productId?: string } | undefined;
@@ -110,27 +111,43 @@ function AppTabs() {
 }
 
 const Routes = () => {
-  const { signed, loading } = useAuth();
+  const { signed, loading, account, user } = useAuth();
 
   if (loading) {
     return <AppSplashScreen />;
   }
+
+  const requiresFirstSupplier =
+    !!signed &&
+    user?.role !== 'ADMIN' &&
+    account?.type === 'COMPANY' &&
+    account?.onboardingStatus === 'REQUIRES_SUPPLIER';
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {signed ? (
           <>
-            <Stack.Screen name="AppTabs" component={AppTabs} />
-            <Stack.Screen name="ProductForm" component={ProductFormScreen} />
-            <Stack.Screen name="ProductsList" component={ProductsListScreen} />
-            <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
-            <Stack.Screen name="OrderForm" component={OrderFormScreen} />
-            <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
-            <Stack.Screen name="Reports" component={ReportsScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="Financial" component={FinancialScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="AdminFinancial" component={AdminFinancialScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="AdminIntegrations" component={AdminIntegrationsScreen} options={{ title: 'Integrações' }} />
+            {requiresFirstSupplier ? (
+              <Stack.Screen
+                name="SupplierOnboarding"
+                component={SupplierFormScreen}
+                initialParams={{ onboardingMode: true }}
+              />
+            ) : (
+              <>
+                <Stack.Screen name="AppTabs" component={AppTabs} />
+                <Stack.Screen name="ProductForm" component={ProductFormScreen} />
+                <Stack.Screen name="ProductsList" component={ProductsListScreen} />
+                <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
+                <Stack.Screen name="OrderForm" component={OrderFormScreen} />
+                <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
+                <Stack.Screen name="Reports" component={ReportsScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="Financial" component={FinancialScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="AdminFinancial" component={AdminFinancialScreen} options={{ headerShown: false }} />
+                <Stack.Screen name="AdminIntegrations" component={AdminIntegrationsScreen} options={{ title: 'Integrações' }} />
+              </>
+            )}
           </>
         ) : (
           <>
