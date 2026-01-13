@@ -2,121 +2,132 @@ import React, { createContext, useState, useEffect, useContext, useRef } from 'r
 import * as SecureStore from 'expo-secure-store';
 import api from '../services/api';
 import { registerForPushNotificationsAsync } from '../services/PushNotificationService';
-import { isTokenExpired, isPermissionError } from '../utils/authErrorUtils';
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-}
-
-export interface Account {
-  id: string;
-  name: string;
-  type: 'INDIVIDUAL' | 'COMPANY';
-  planId: string;
-  onboardingStatus: 'COMPLETO' | 'REQUIRES_SUPPLIER';
-}
-
-export interface SupplierSummary {
-  id: string;
-  name: string;
-  type: 'INDIVIDUAL' | 'COMPANY';
-  status: string;
-}
-
-interface AuthContextData {
-  signed: boolean;
-  user: User | null;
-  account: Account | null;
-  supplier: SupplierSummary | null;
+// Consolidated Auth State matching GET /me
+export interface AuthState {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+  } | null;
+  role: 'SYSTEM_ADMIN' | 'ACCOUNT_ADMIN' | 'SUPPLIER_ADMIN' | 'SUPPLIER_USER' | null;
+  onboardingStatus: 'PENDING' | 'COMPLETED';
+  activeAccountId: string | null;
+  activeSupplierId: string | null;
+  accountType: string | null;
+  isAuthenticated: boolean;
   loading: boolean;
+}
+
+interface AuthContextData extends AuthState {
   signIn: (email: string, pass: string) => Promise<void>;
   signUp: (data: any) => Promise<void>;
-  signOut: () => void;
-  updateUser: (data: Partial<User>) => Promise<void>;
-  updateAccount: (data: Partial<Account>) => Promise<void>;
+  signOut: () => Promise<void>;
+  refetchUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [account, setAccount] = useState<Account | null>(null);
-  const [supplier, setSupplier] = useState<SupplierSummary | null>(null);
-    const [loading, setLoading] = useState(true);
-// Ref to track if logot i in progrss to prevent loops
+  const [auth, setAuth] = useState<AuthState>({
+    user: null,
+    role: null,
+    onboardingStatus: 'PENDING',
+    activeAccountId: null,
+    activeSupplierId: null,
+    accountType: null,
+    isAuthenticated: false,
+    loading: true,
+  });
+
   const isLoggingOut = useRef(false);
 
+  const fetchMe = async () => {
+      try {
+          const response = await api.get('/auth/me');
+          const { id, email, name, role, onboardingStatus, activeAccountId, activeSupplierId, accountType } = response.data;
+          
+          setAuth({
+              user: { id, email, name },
+              role,
+              onboardingStatus,
+              activeAccountId,
+              activeSupplierId,
+              accountType,
+              isAuthenticated: true,
+              loading: false
+          });
+
+          return true;
+      } catch (error: any) {
+          console.log('Failed to fetch /me:', error.message);
+          return false;
+      }
+  };
+
+  const signOut = async () => {
+      if (isLoggingOut.current) return;
+      isLoggingOut.current = true;
+      
+      try {
+          await SecureStore.deleteItemAsync('token');
+          // Clear legacy
+          await SecureStore.deleteItemAsync('user');
+          await SecureStore.deleteItemAsync('account');
+          await SecureStore.deleteItemAsync('supplier');
+
+          setAuth({
+            user: null,
+            role: null,
+            onboardingStatus: 'PENDING',
+            activeAccountId: null,
+            activeSupplierId: null,
+            accountType: null,
+            isAuthenticated: false,
+            loading: false,
+          });
+          
+          delete api.defaults.headers.common['Authorization'];
+      } catch (error) {
+          console.log('SignOut Error:', error);
+      } finally {
+          isLoggingOut.current = false;
+      }
+  };
+
   useEffect(() => {
-    // Intercept 401/403 errors (expired token)
+    // Interceptor for 401
     const interceptorId = api.interceptors.response.use(
       response => response,
       async (error) => {
-        // If already logging out, just reject to stop processing
-        if (isLoggingOut.current) {
-          return Promise.reject(error);
+        if (isLoggingOut.current) return Promise.reject(error);
+
+        if (error.response?.status === 401) {
+            console.log('401 detected, signing out...');
+            await signOut();
         }
-
-        // Check for Session Expiration (401 or specific messages)
-        if (isTokenExpired(error)) {
-          console.log('Session expired detected by interceptor, signing out...');
-          isLoggingOut.current = true;
-          
-          try {
-             // Force cleanup
-             await signOut();
-          } catch (e) {
-             console.log('Error during interceptor signout', e);
-          } finally {
-             // Reset flag after delay
-             setTimeout(() => {
-                 isLoggingOut.current = false;
-             }, 1500);
-          }
-
-          return Promise.reject(error);
-        }
-
-        // Permission errors (403) should NOT log out
-        // The UI (screens) should handle 403 by showing empty states or messages
         return Promise.reject(error);
       }
     );
 
     async function loadStorageData() {
       try {
-        const storagedUser = await SecureStore.getItemAsync('user');
-        const storagedToken = await SecureStore.getItemAsync('token');
-        const storagedAccount = await SecureStore.getItemAsync('account');
-        const storagedSupplier = await SecureStore.getItemAsync('supplier');
-
-        if (storagedUser && storagedToken) {
-          try {
-            const parsedUser = JSON.parse(storagedUser);
-            const parsedAccount = storagedAccount ? JSON.parse(storagedAccount) : null;
-            const parsedSupplier = storagedSupplier ? JSON.parse(storagedSupplier) : null;
-            if (parsedUser && parsedUser.id) {
-                api.defaults.headers['Authorization'] = `Bearer ${storagedToken}`;
-                setUser(parsedUser);
-                setAccount(parsedAccount);
-                setSupplier(parsedSupplier);
-                // Refresh push token on app load if logged in
-                registerForPushNotificationsAsync().catch(e => console.log('Push reg error (ignored):', e));
-            } else {
-                console.log('Invalid user data in storage, clearing...');
+        const token = await SecureStore.getItemAsync('token');
+        
+        if (token) {
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            const success = await fetchMe();
+            if (!success) {
                 await signOut();
+            } else {
+                 registerForPushNotificationsAsync().catch(e => console.log('Push reg error:', e));
             }
-          } catch (parseError) {
-             console.log('Error parsing stored user:', parseError);
-             await signOut();
-          }
+        } else {
+            setAuth(prev => ({ ...prev, loading: false }));
         }
       } catch (e) {
         console.log('Error loading storage data:', e);
-      } finally {
-        setLoading(false);
+        setAuth(prev => ({ ...prev, loading: false }));
       }
     }
 
@@ -127,105 +138,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const updateUser = async (data: Partial<User>) => {
-    if (!user) return;
-    const updatedUser = { ...user, ...data };
-    setUser(updatedUser);
-    await SecureStore.setItemAsync('user', JSON.stringify(updatedUser));
-  };
-
-  const updateAccount = async (data: Partial<Account>) => {
-    if (!account) return;
-    const updatedAccount = { ...account, ...data };
-    setAccount(updatedAccount);
-    await SecureStore.setItemAsync('account', JSON.stringify(updatedAccount));
-  };
-
   async function signIn(email: string, pass: string) {
-    const response = await api.post('/auth/login', {
-      email,
-      password: pass,
-    });
-
-    const { token, user, account: apiAccount, supplier: apiSupplier } = response.data;
-
-    if (token && user) {
-        await SecureStore.setItemAsync('token', token);
-        await SecureStore.setItemAsync('user', JSON.stringify(user));
-        if (apiAccount) {
-          await SecureStore.setItemAsync('account', JSON.stringify(apiAccount));
-        } else {
-          await SecureStore.deleteItemAsync('account');
-        }
-        if (apiSupplier) {
-          await SecureStore.setItemAsync('supplier', JSON.stringify(apiSupplier));
-        } else {
-          await SecureStore.deleteItemAsync('supplier');
-        }
-
-        api.defaults.headers['Authorization'] = `Bearer ${token}`;
-        setUser(user);
-        setAccount(apiAccount || null);
-        setSupplier(apiSupplier || null);
+    try {
+        const response = await api.post('/auth/login', { email, password: pass });
+        const { token } = response.data;
         
-        // Register for push notifications
-        registerForPushNotificationsAsync().catch(e => console.log('Push reg error:', e));
-    } else {
-        throw new Error('Invalid response from server');
+        if (token) {
+            await SecureStore.setItemAsync('token', token);
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            
+            const success = await fetchMe();
+            if (!success) {
+                throw new Error('Falha ao obter perfil do usuário');
+            }
+            
+            registerForPushNotificationsAsync().catch(e => console.log('Push reg error:', e));
+        } else {
+            throw new Error('Token não recebido');
+        }
+    } catch (error) {
+        throw error;
     }
   }
 
   async function signUp(data: any) {
-    const response = await api.post('/auth/register', data);
-    const { token, user, account: apiAccount, supplier: apiSupplier } = response.data;
+    try {
+        const response = await api.post('/auth/register', data);
+        const { token } = response.data;
 
-    if (token && user) {
-        await SecureStore.setItemAsync('token', token);
-        await SecureStore.setItemAsync('user', JSON.stringify(user));
-        if (apiAccount) {
-          await SecureStore.setItemAsync('account', JSON.stringify(apiAccount));
-        }
-        if (apiSupplier) {
-          await SecureStore.setItemAsync('supplier', JSON.stringify(apiSupplier));
+        if (token) {
+            await SecureStore.setItemAsync('token', token);
+            api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+            const success = await fetchMe();
+            if (!success) {
+                throw new Error('Falha ao obter perfil após cadastro');
+            }
+
+            registerForPushNotificationsAsync().catch(e => console.log('Push reg error:', e));
         } else {
-          await SecureStore.deleteItemAsync('supplier');
+             throw new Error('Cadastro realizado, mas falha no login automático.');
         }
-
-        api.defaults.headers['Authorization'] = `Bearer ${token}`;
-        setUser(user);
-        setAccount(apiAccount || null);
-        setSupplier(apiSupplier || null);
-
-        registerForPushNotificationsAsync().catch(e => console.log('Push reg error:', e));
-    } else {
-         // Se criou mas não retornou token (ex: pendente confirmação, embora eu tenha ativado auto-confirm)
-         throw new Error('Cadastro realizado, mas falha no login automático. Tente entrar.');
+    } catch (error) {
+        throw error;
     }
   }
-
-  async function signOut() {
-    await SecureStore.deleteItemAsync('token');
-    await SecureStore.deleteItemAsync('user');
-    await SecureStore.deleteItemAsync('account');
-    await SecureStore.deleteItemAsync('supplier');
-    setUser(null);
-    setAccount(null);
-    setSupplier(null);
+  
+  const refetchUser = async () => {
+      await fetchMe();
   }
 
   return (
     <AuthContext.Provider
       value={{
-        signed: !!user,
-        user,
-        account,
-        supplier,
-        loading,
+        ...auth,
         signIn,
         signUp,
         signOut,
-        updateUser,
-        updateAccount,
+        refetchUser
       }}
     >
       {children}

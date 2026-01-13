@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useAuthRole } from '../hooks/useAuthRole';
 
 import Header from '../ui/components/Header';
 import Input from '../ui/components/Input';
@@ -13,7 +14,8 @@ import Button from '../ui/components/Button';
 import { colors, shadow, spacing, radius } from '../ui/theme';
 
 const SettingsScreen = () => {
-  const { signOut, user, updateUser } = useAuth();
+  const { signOut, user, refetchUser } = useAuth();
+  const { isAccountAdmin, isSystemAdmin } = useAuthRole();
   const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
   const [mlConnected, setMlConnected] = useState(false);
@@ -35,7 +37,7 @@ const SettingsScreen = () => {
       setUpdatingProfile(true);
       try {
           await api.put('/auth/profile', { name });
-          await updateUser({ name });
+          await refetchUser();
           Alert.alert('Sucesso', 'Perfil atualizado com sucesso.');
       } catch (error) {
           Alert.alert('Erro', 'Falha ao atualizar perfil.');
@@ -122,7 +124,7 @@ const SettingsScreen = () => {
           </View>
         </View>
 
-        {user?.role === 'ADMIN' && (
+        { (isAccountAdmin || isSystemAdmin) && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Administração</Text>
             <View style={styles.card}>

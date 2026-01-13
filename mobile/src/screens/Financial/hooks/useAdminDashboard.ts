@@ -27,6 +27,7 @@ export const useAdminDashboard = () => {
 
     const fetchDashboard = async (startDate?: Date, endDate?: Date) => {
         try {
+            setLoading(true);
             const params: any = {};
             if (startDate) params.startDate = startDate.toISOString();
             if (endDate) params.endDate = endDate.toISOString();
@@ -37,7 +38,11 @@ export const useAdminDashboard = () => {
             
             // Also fetch alerts
             fetchAlerts();
-        } catch (e: any) { if (!isPermissionError(e)) console.error(e); }
+        } catch (e: any) { 
+            if (!isPermissionError(e)) console.error(e); 
+        } finally {
+            setLoading(false);
+        }
     };
 
     const fetchAlerts = async () => {
@@ -49,6 +54,7 @@ export const useAdminDashboard = () => {
 
     const fetchReconciliation = async (filters?: { startDate?: Date, endDate?: Date, supplierId?: string }) => {
         try {
+            setLoading(true);
             const params: any = {};
             if (filters?.startDate) params.startDate = filters.startDate.toISOString();
             if (filters?.endDate) params.endDate = filters.endDate.toISOString();
@@ -56,11 +62,16 @@ export const useAdminDashboard = () => {
 
             const res = await api.get('/financial-admin/reconciliation', { params });
             setReconciliation(res.data);
-        } catch (e: any) { if (!isPermissionError(e)) console.error('Error fetching reconciliation:', e); }
+        } catch (e: any) { 
+            if (!isPermissionError(e)) console.error('Error fetching reconciliation:', e); 
+        } finally {
+            setLoading(false);
+        }
     };
 
     const fetchWithdrawals = async (status: string, filters?: { startDate?: Date, endDate?: Date, supplierId?: string }) => {
         try {
+            setLoading(true);
             const params: any = { status };
             if (filters?.startDate) params.startDate = filters.startDate.toISOString();
             if (filters?.endDate) params.endDate = filters.endDate.toISOString();
@@ -68,21 +79,31 @@ export const useAdminDashboard = () => {
 
             const res = await api.get('/financial/admin/withdrawals', { params });
             setWithdrawals(res.data);
-        } catch (e: any) { if (!isPermissionError(e)) console.error(e); }
+        } catch (e: any) { 
+            if (!isPermissionError(e)) console.error(e); 
+        } finally {
+            setLoading(false);
+        }
     };
 
     const fetchSuppliers = async (search: string, status: string) => {
         try {
+            setLoading(true);
             // Using NEW endpoint for consolidated view
             const res = await api.get('/financial-admin/suppliers', {
                 params: { search, status }
             });
             setSuppliers(res.data);
-        } catch (e: any) { if (!isPermissionError(e)) console.error(e); }
+        } catch (e: any) { 
+            if (!isPermissionError(e)) console.error(e); 
+        } finally {
+            setLoading(false);
+        }
     };
 
     const fetchSettings = async () => {
         try {
+            setLoading(true);
             const res = await api.get('/financial/admin/settings');
             const data = res.data || {
                 defaultReleaseDays: 14,
@@ -90,11 +111,16 @@ export const useAdminDashboard = () => {
                 defaultWithdrawalLimit: 4
             };
             setSettings(data);
-        } catch (e: any) { if (!isPermissionError(e)) console.error(e); }
+        } catch (e: any) { 
+            if (!isPermissionError(e)) console.error(e); 
+        } finally {
+            setLoading(false);
+        }
     };
 
     const fetchAudit = async (filters?: { action?: string, startDate?: Date, endDate?: Date }) => {
         try {
+            setLoading(true);
             const params: any = {};
             if (filters?.action && filters.action !== 'ALL') params.action = filters.action;
             if (filters?.startDate) params.startDate = filters.startDate.toISOString();
@@ -102,7 +128,11 @@ export const useAdminDashboard = () => {
 
             const res = await api.get('/financial/admin/audit', { params });
             setAuditLogs(res.data);
-        } catch (e: any) { if (!isPermissionError(e)) console.error(e); }
+        } catch (e: any) { 
+            if (!isPermissionError(e)) console.error(e); 
+        } finally {
+            setLoading(false);
+        }
     };
 
     const approveWithdrawal = async (requestId: string) => {

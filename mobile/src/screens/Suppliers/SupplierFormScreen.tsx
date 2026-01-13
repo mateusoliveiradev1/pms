@@ -6,6 +6,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Header from '../../ui/components/Header';
 import { colors, shadow, radius, spacing } from '../../ui/theme';
+import { useAuth } from '../../context/AuthContext';
+import { isPermissionError } from '../../utils/authErrorUtils';
 
 type SupplierParams = {
   supplier?: {
@@ -21,6 +23,7 @@ type SupplierParams = {
 const SupplierFormScreen = () => {
   const route = useRoute();
   const navigation = useNavigation();
+  const { activeAccountId } = useAuth();
   const { supplier, onboardingMode } = (route.params as SupplierParams) || {};
   const isEditing = !!supplier;
 
@@ -41,6 +44,11 @@ const SupplierFormScreen = () => {
   }, [isEditing, supplier, navigation]);
 
   const handleSave = async () => {
+    if (!activeAccountId) {
+        Alert.alert('Erro', 'Contexto de conta não encontrado.');
+        return;
+    }
+
     if (!name || !shippingDeadline) {
       Alert.alert('Erro', 'Preencha todos os campos obrigatórios.');
       return;

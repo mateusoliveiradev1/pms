@@ -1,5 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
+import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -13,6 +14,7 @@ if (!supabaseUrl || !supabaseServiceKey) {
 }
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const prisma = new PrismaClient();
 
 async function createAdmin() {
   const email = 'admin@pms.com';
@@ -30,19 +32,21 @@ async function createAdmin() {
     }
 
     const existingUser = listUsers.users.find(u => u.email === email);
+    let userId = '';
 
     if (existingUser) {
-      console.log('User already exists. Updating metadata to ADMIN...');
+      console.log('User already exists. Updating metadata to SYSTEM_ADMIN...');
+      userId = existingUser.id;
       const { error: updateError } = await supabase.auth.admin.updateUserById(
-        existingUser.id,
+        userId,
         {
-          user_metadata: { role: 'ADMIN', name: name },
+          user_metadata: { role: 'SYSTEM_ADMIN', name: name },
           email_confirm: true
         }
       );
 
       if (updateError) throw updateError;
-      console.log('User updated to ADMIN successfully.');
+      console.log('User updated to SYSTEM_ADMIN successfully.');
       
     } else {
       console.log('Creating new user...');
@@ -52,13 +56,34 @@ async function createAdmin() {
         email_confirm: true,
         user_metadata: {
           name,
-          role: 'ADMIN'
+          role: 'SYSTEM_ADMIN'
         }
       });
 
       if (error) throw error;
-      console.log('Admin user created successfully.');
+      if (!data.user) throw new Error('User creation failed (no user returned)');
+      
+      userId = data.user.id;
+      console.log('SYSTEM_ADMIN user created successfully.');
     }
+
+    // Sync with Prisma
+    console.log(`Syncing with database (ID: ${userId})...`);
+    await prisma.user.upsert({
+        where: { id: userId },
+        update: {
+            email,
+            name,
+            role: 'SYSTEM_ADMIN'
+        },
+        create: {
+            id: userId,
+            email,
+            name,
+            role: 'SYSTEM_ADMIN'
+        }
+    });
+    console.log('Database sync successful.');
 
     console.log('\n-----------------------------------');
     console.log('ADMIN CREDENTIALS:');
@@ -68,6 +93,8 @@ async function createAdmin() {
 
   } catch (error: any) {
     console.error('Error creating admin:', error.message);
+  } finally {
+      await prisma.$disconnect();
   }
 }
 

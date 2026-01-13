@@ -5,6 +5,7 @@ import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/nativ
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import Header from '../../ui/components/Header';
+import { useAuth } from '../../context/AuthContext';
 import { colors, shadow, radius, spacing } from '../../ui/theme';
 
 type Product = {
@@ -25,6 +26,7 @@ const ProductsListScreen = () => {
   const [filter, setFilter] = useState<FilterType>('ALL');
   const navigation = useNavigation();
   const route = useRoute();
+  const { activeAccountId, loading: authLoading } = useAuth();
 
   useEffect(() => {
     // @ts-ignore
@@ -35,6 +37,11 @@ const ProductsListScreen = () => {
   }, [route.params]);
 
   const loadProducts = async () => {
+    if (!activeAccountId) {
+        setLoading(false);
+        return;
+    }
+
     try {
       if (!refreshing) setLoading(true);
       const response = await api.get('/products', { params: query ? { query } : undefined });
@@ -50,7 +57,7 @@ const ProductsListScreen = () => {
   useFocusEffect(
     useCallback(() => {
         loadProducts();
-    }, [query])
+    }, [query, activeAccountId])
   );
 
   const getFilteredProducts = () => {
@@ -133,6 +140,28 @@ const ProductsListScreen = () => {
         </TouchableOpacity>
       );
   };
+
+  if (authLoading) {
+      return (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+              <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+      );
+  }
+
+  if (!activeAccountId) {
+      return (
+          <SafeAreaView style={styles.container} edges={['top']}>
+              <Header title="Produtos" onBack={() => navigation.goBack()} />
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+                  <Ionicons name="cube-outline" size={64} color={colors.muted} />
+                  <Text style={{ marginTop: 16, color: colors.muted, textAlign: 'center' }}>
+                      Nenhuma conta ativa identificada.
+                  </Text>
+              </View>
+          </SafeAreaView>
+      );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

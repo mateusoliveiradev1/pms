@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert, Modal, TextInput, Text, TouchableOpacity, Share } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert, Modal, TextInput, Text, TouchableOpacity, Share, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, radius, shadow } from '../../ui/theme';
 import { useAuth } from '../../context/AuthContext';
@@ -19,10 +19,14 @@ import ReconciliationList from './components/ReconciliationList';
 import OperationalAlerts from './components/OperationalAlerts';
 
 const AdminFinancialScreen = () => {
-  const { user } = useAuth();
+  const { user, activeAccountId, activeSupplierId } = useAuth();
   const { isAccountAdmin, isSystemAdmin } = useAuthRole();
   const navigation = useNavigation<any>();
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'SUPPLIERS' | 'WITHDRAWALS' | 'SETTINGS' | 'AUDIT' | 'RECONCILIATION'>('DASHBOARD');
+  const isAuthorized = isAccountAdmin || isSystemAdmin;
+  
+  // Enforce Context Guard for ALL roles
+  const missingContext = !activeAccountId;
   
   // Filters
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -65,9 +69,7 @@ const AdminFinancialScreen = () => {
   const [localSettings, setLocalSettings] = useState<any>(null);
 
   useEffect(() => {
-    if (!isAccountAdmin && !isSystemAdmin) {
-        navigation.goBack();
-    }
+    // Gate apenas via UI; sem redirecionamento
   }, [isAccountAdmin, isSystemAdmin, navigation]);
 
   useEffect(() => {
@@ -75,6 +77,9 @@ const AdminFinancialScreen = () => {
   }, [settings]);
 
   const loadData = useCallback(async () => {
+    if (!isAuthorized) return;
+    if (missingContext) return;
+
     if (activeTab === 'DASHBOARD') {
         let start = new Date();
         let end = new Date();
@@ -112,7 +117,7 @@ const AdminFinancialScreen = () => {
             supplierId: recSupplierId || undefined
          });
      }
-   }, [activeTab, withdrawalFilter, supplierSearch, supplierFilter, period, customStart, customEnd, auditAction, auditStartDate, auditEndDate, recStartDate, recEndDate, recSupplierId, withdrawalStartDate, withdrawalEndDate, withdrawalSupplierId]);
+   }, [isAuthorized, missingContext, activeTab, withdrawalFilter, supplierSearch, supplierFilter, period, customStart, customEnd, auditAction, auditStartDate, auditEndDate, recStartDate, recEndDate, recSupplierId, withdrawalStartDate, withdrawalEndDate, withdrawalSupplierId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -128,6 +133,28 @@ const AdminFinancialScreen = () => {
          return () => clearTimeout(timeout);
      }
   }, [supplierSearch]);
+
+  // Rendering States Hierarchy
+  if (!isAuthorized) return null; // Or redirect
+
+  if (missingContext) {
+      return (
+          <SafeAreaView style={styles.container} edges={['top']}>
+              <View style={[styles.content, styles.center]}>
+                  <Text style={styles.emptyTitle}>Nenhuma Conta Selecionada</Text>
+                  <Text style={styles.emptyText}>Selecione uma conta para visualizar o financeiro.</Text>
+              </View>
+          </SafeAreaView>
+      );
+  }
+
+  if (loading && !refreshing) {
+       return (
+          <View style={[styles.container, styles.center]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+      );
+  }
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -281,17 +308,38 @@ const AdminFinancialScreen = () => {
       <SafeAreaView style={styles.container} edges={['top']}>
           <Text style={styles.headerTitle}>Financeiro Admin</Text>
           {renderTabs()}
-          
           <ScrollView 
-            contentContainerStyle={styles.content}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+              contentContainerStyle={styles.content}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           >
               {activeTab === 'DASHBOARD' && (
                   <>
                       {renderPeriodFilter()}
-                      <OperationalAlerts alerts={alerts} />
-                      <AdminStatsCards stats={stats} formatCurrency={formatCurrency} />
-                      <RevenueCharts stats={stats} />
+                      
+                      {loading && !stats ? (
+                          <View style={styles.loadingContainer}>
+                              <ActivityIndicator size="large" color={colors.primary} />
+                              <Text style={styles.loadingText}>Carregando dados financeiros...</Text>
+                          </View>
+                      ) : !stats ? (
+                          <View style={styles.emptyContainer}>
+                              <Text style={styles.emptyTitle}>Ainda não há dados financeiros suficientes</Text>
+                              <Text style={styles.emptyText}>Assim que pedidos forem processados, os indicadores aparecerão aqui.</Text>
+                          </View>
+                      ) : (
+                          <>
+                              <OperationalAlerts alerts={alerts} />
+                              <AdminStatsCards stats={stats} formatCurrency={formatCurrency} />
+                              
+                              {stats.charts?.revenue?.labels?.length > 0 ? (
+                                  <RevenueCharts stats={stats} />
+                              ) : (
+                                  <View style={styles.emptyChartContainer}>
+                                      <Text style={styles.emptyText}>Ainda não há dados financeiros suficientes para exibir gráficos.</Text>
+                                  </View>
+                              )}
+                          </>
+                      )}
                   </>
               )}
 
@@ -416,7 +464,7 @@ const AdminFinancialScreen = () => {
                       </View>
                   </View>
               )}
-          </ScrollView>
+            </ScrollView>
 
           <Modal visible={rejectModalVisible} transparent animationType="slide">
             <View style={styles.modalOverlay}>
@@ -446,8 +494,30 @@ const AdminFinancialScreen = () => {
 
 const styles = StyleSheet.create({
   container: {
-      flex: 1,
-      backgroundColor: colors.background,
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  content: {
+    flex: 1,
+    padding: spacing.md,
+  },
+  emptyTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: colors.text,
+      marginTop: 16,
+      textAlign: 'center',
+  },
+  emptyText: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      marginTop: 8,
+      textAlign: 'center',
+      marginBottom: 24,
   },
   headerTitle: {
       fontSize: 24,
@@ -456,10 +526,6 @@ const styles = StyleSheet.create({
       marginHorizontal: spacing.md,
       marginTop: spacing.md,
       marginBottom: spacing.lg,
-  },
-  content: {
-      padding: spacing.md,
-      paddingBottom: 100,
   },
   tabsContainer: {
       backgroundColor: '#fff',
@@ -636,6 +702,34 @@ const styles = StyleSheet.create({
       color: '#fff',
       fontWeight: 'bold',
   },
+  loadingContainer: {
+      padding: 40,
+      alignItems: 'center',
+      justifyContent: 'center',
+  },
+  loadingText: {
+      marginTop: 10,
+      color: colors.textSecondary,
+  },
+  emptyContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 40,
+      minHeight: 300,
+  },
+  emptyChartContainer: {
+      padding: 20,
+      backgroundColor: '#fff',
+      borderRadius: radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 16,
+      marginBottom: 16,
+      borderStyle: 'dashed',
+      borderWidth: 1,
+      borderColor: colors.border,
+  }
 });
 
 export default AdminFinancialScreen;

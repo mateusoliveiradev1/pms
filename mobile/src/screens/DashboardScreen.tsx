@@ -68,7 +68,7 @@ const StatCard = ({ title, value, icon, color, onPress }: StatCardProps) => (
 );
 
 const DashboardScreen = () => {
-  const { user } = useAuth();
+  const { user, role, activeAccountId, activeSupplierId, loading: authLoading, signOut } = useAuth();
   const { isAccountAdmin, isSupplierAdmin, isSystemAdmin } = useAuthRole();
   const isFocused = useIsFocused();
   const navigation = useNavigation<any>();
@@ -88,6 +88,13 @@ const DashboardScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
+    // 1. Context Guard
+    if (!isSystemAdmin && !activeAccountId) {
+        console.log('Dashboard: Missing activeAccountId, skipping fetch');
+        setLoading(false);
+        return;
+    }
+
     try {
       // Don't show full screen loader on refresh
       if (!refreshing) setLoading(true);
@@ -100,7 +107,7 @@ const DashboardScreen = () => {
           return { data: [] as Product[] };
       });
 
-      const canFetchSales = isAccountAdmin || isSupplierAdmin || isSystemAdmin;
+      const canFetchSales = (isAccountAdmin || isSupplierAdmin || isSystemAdmin) && activeAccountId;
       const fetchSales = canFetchSales
         ? api.get<SalesStatsResponse>('/reports/sales').catch(err => {
             if (err.response?.status !== 403) {
@@ -156,7 +163,7 @@ const DashboardScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [refreshing, isAccountAdmin, isSupplierAdmin, isSystemAdmin]);
+  }, [refreshing, isAccountAdmin, isSupplierAdmin, isSystemAdmin, activeAccountId]);
 
   useEffect(() => {
     if (isFocused) {
@@ -166,9 +173,6 @@ const DashboardScreen = () => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    // Trigger loadData via dependency change or direct call logic
-    // loadData handles the refreshing state logic internally if needed
-    // but here we just need to ensure it runs
     loadData();
   };
 
@@ -179,6 +183,46 @@ const DashboardScreen = () => {
     if (hour < 18) return 'Boa tarde';
     return 'Boa noite';
   };
+
+  // Rendering States Hierarchy
+  if (authLoading) {
+      return (
+          <View style={[styles.container, styles.center]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+      );
+  }
+
+  if (loading && !refreshing && products.length === 0) {
+      return (
+          <View style={[styles.container, styles.center]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+      );
+  }
+
+  if (!isSystemAdmin && !activeAccountId) {
+      return (
+          <SafeAreaView style={styles.container} edges={['top']}>
+             <View style={[styles.content, styles.center]}>
+                 <Ionicons name="business-outline" size={64} color={colors.textSecondary} />
+                 <Text style={[styles.subtitle, { marginTop: 16, textAlign: 'center' }]}>
+                     Nenhuma conta ativa identificada.
+                 </Text>
+                 <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 8 }}>
+                     Entre em contato com o suporte ou aguarde a ativação.
+                 </Text>
+                 <TouchableOpacity onPress={loadData} style={{ marginTop: 20 }}>
+                    <Ionicons name="reload-circle" size={48} color={colors.primary} />
+                 </TouchableOpacity>
+                 <TouchableOpacity onPress={signOut} style={{ marginTop: 20, flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="log-out-outline" size={24} color={colors.error} />
+                    <Text style={{ color: colors.error, marginLeft: 8, fontWeight: 'bold' }}>Sair</Text>
+                 </TouchableOpacity>
+             </View>
+          </SafeAreaView>
+      );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -191,9 +235,16 @@ const DashboardScreen = () => {
             <Text style={styles.greeting}>Olá, {user?.name || 'Usuário'}</Text>
             <Text style={styles.subtitle}>Visão geral do seu negócio</Text>
           </View>
-          <TouchableOpacity onPress={loadData}>
-            <Ionicons name="reload-circle" size={32} color={colors.primary} />
-          </TouchableOpacity>
+          <View style={{flexDirection: 'row', alignItems: 'center'}}>
+            <TouchableOpacity onPress={loadData} style={{marginRight: 12}}>
+                <View style={{ backgroundColor: colors.primary, borderRadius: 20, padding: 4, width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}>
+                    <Ionicons name="reload" size={20} color="#FFF" />
+                </View>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={signOut}>
+                <Ionicons name="log-out-outline" size={28} color={colors.error} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.statsGrid}>
@@ -227,11 +278,11 @@ const DashboardScreen = () => {
           />
           <StatCard 
             title="Financeiro" 
-            value={user?.role === 'ADMIN' || user?.role === 'SYSTEM_ADMIN' ? 'Plataforma' : 'Carteira'}
+            value={role === 'SYSTEM_ADMIN' ? 'Plataforma' : 'Carteira'}
             icon="wallet-outline" 
             color={colors.info} 
             onPress={() => {
-              if (user?.role === 'ADMIN' || user?.role === 'SYSTEM_ADMIN') {
+              if (role === 'SYSTEM_ADMIN') {
                 navigation.navigate('AdminFinancial' as never);
               } else {
                 navigation.navigate('Financial' as never);
@@ -349,6 +400,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    flex: 1,
   },
   header: {
     flexDirection: 'row',

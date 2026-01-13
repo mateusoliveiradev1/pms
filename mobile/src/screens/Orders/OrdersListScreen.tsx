@@ -17,7 +17,10 @@ interface Order {
   createdAt: string;
 }
 
+import { useAuth } from '../../context/AuthContext';
+
 const OrdersListScreen = () => {
+  const { activeAccountId } = useAuth(); // Import activeAccountId
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -41,13 +44,18 @@ const OrdersListScreen = () => {
         loadOrders();
         loadCounts();
     }
-  }, [isFocused]);
+  }, [isFocused, activeAccountId]); // Add dependency
 
   useEffect(() => {
     loadOrders();
-  }, [selectedStatus]);
+  }, [selectedStatus, activeAccountId]); // Add dependency
 
   const loadOrders = async () => {
+    if (!activeAccountId) {
+        setLoading(false);
+        return;
+    }
+
     try {
       setLoading(true);
       const response = await api.get('/orders', { params: selectedStatus ? { status: selectedStatus } : undefined });
@@ -61,6 +69,8 @@ const OrdersListScreen = () => {
   };
 
   const loadCounts = async () => {
+    if (!activeAccountId) return;
+
     try {
       const response = await api.get('/orders/stats');
       setCounts(response.data || {});
@@ -86,6 +96,25 @@ const OrdersListScreen = () => {
     if (!selectedStatus) return orders;
     return orders.filter(o => o.status === selectedStatus);
   }, [orders, selectedStatus]);
+
+  // Rendering Hierarchy
+  if (!activeAccountId) {
+      return (
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <Header 
+            showLogo 
+            logoSize={32} 
+            animateLogo={isFocused} 
+            animateKey={animateTick} 
+          />
+          <View style={styles.center}>
+             <Ionicons name="albums-outline" size={64} color={colors.border} />
+             <Text style={styles.emptyTitle}>Nenhuma Conta Selecionada</Text>
+             <Text style={styles.emptyText}>Selecione uma conta para visualizar os pedidos.</Text>
+          </View>
+        </SafeAreaView>
+      );
+  }
 
   const onRefresh = () => {
       setRefreshing(true);

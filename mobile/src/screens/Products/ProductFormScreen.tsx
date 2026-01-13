@@ -14,9 +14,16 @@ type Supplier = {
     status?: string;
 };
 
+import { useAuth } from '../../context/AuthContext';
+import { useAuthRole } from '../../hooks/useAuthRole';
+import { isPermissionError } from '../../utils/authErrorUtils';
+
 const ProductFormScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const { activeAccountId, activeSupplierId } = useAuth();
+  const { isSystemAdmin, isAccountAdmin } = useAuthRole();
+
   // @ts-ignore
   const { productId } = route.params || {};
   const isEditing = !!productId;
@@ -44,6 +51,7 @@ const ProductFormScreen = () => {
   }, [productId, navigation]);
 
   const loadProductData = async () => {
+    if (!activeAccountId) return;
     try {
         setLoading(true);
         const response = await api.get(`/products/${productId}`);
@@ -72,15 +80,22 @@ const ProductFormScreen = () => {
   };
 
   const fetchSuppliers = async () => {
+    if (!activeAccountId) return;
     try {
         const response = await api.get('/suppliers');
         setSuppliers(response.data);
     } catch (error) {
+        if (isPermissionError(error)) return;
         console.log('Error fetching suppliers', error);
     }
   };
 
   const handleSave = async () => {
+    if (!activeAccountId) {
+        Alert.alert('Erro', 'Contexto de conta não encontrado.');
+        return;
+    }
+
     if (!name || !sku || !supplierPrice || !selectedSupplier) {
       Alert.alert('Erro', 'Preencha os campos obrigatórios (Nome, SKU, Preço, Fornecedor).');
       return;
@@ -110,6 +125,7 @@ const ProductFormScreen = () => {
       
       navigation.goBack();
     } catch (error) {
+      if (isPermissionError(error)) return;
       console.log('Error saving product', error);
       Alert.alert('Erro', 'Falha ao salvar o produto.');
     } finally {

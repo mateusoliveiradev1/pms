@@ -23,10 +23,16 @@ const SuppliersListScreen = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const navigation = useNavigation();
   const isFocused = useIsFocused();
-  const { user } = useAuth();
+  const { user, activeAccountId, loading: authLoading } = useAuth();
   const { isAccountAdmin, isSystemAdmin, isSupplierUser, isSupplierAdmin } = useAuthRole();
 
   const fetchSuppliers = async () => {
+    // Context Guard
+    if (!isSystemAdmin && !activeAccountId) {
+      setLoading(false);
+      return;
+    }
+
     if (isSupplierUser || isSupplierAdmin) {
       setLoading(false);
       return;
@@ -47,10 +53,10 @@ const SuppliersListScreen = () => {
   };
 
   useEffect(() => {
-    if (isFocused) {
+    if (isFocused && !authLoading) {
       fetchSuppliers();
     }
-  }, [isFocused]);
+  }, [isFocused, authLoading, activeAccountId]);
 
   const handleDelete = async (id: string) => {
     if (!isAccountAdmin && !isSystemAdmin) {
@@ -143,6 +149,28 @@ const SuppliersListScreen = () => {
       </View>
     </View>
   );
+
+  if (authLoading) {
+    return (
+      <View style={[styles.center, { backgroundColor: '#f8f9fa' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!isSystemAdmin && !activeAccountId) {
+    return (
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <Header title="Fornecedores" onBack={() => navigation.goBack()} />
+            <View style={styles.center}>
+                <Ionicons name="business-outline" size={64} color={colors.textSecondary} />
+                <Text style={{ marginTop: 16, color: colors.textSecondary, textAlign: 'center' }}>
+                    Nenhuma conta ativa identificada.
+                </Text>
+            </View>
+        </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

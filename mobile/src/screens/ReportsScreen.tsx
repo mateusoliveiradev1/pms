@@ -7,6 +7,7 @@ import api from '../services/api';
 import Header from '../ui/components/Header';
 import { colors, shadow } from '../ui/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
 import { useAuthRole } from '../hooks/useAuthRole';
 import { isPermissionError } from '../utils/authErrorUtils';
 
@@ -38,6 +39,7 @@ interface StatusData {
 
 const ReportsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { activeAccountId, loading: authLoading } = useAuth();
   const { isSupplierUser } = useAuthRole();
   
   const [salesStats, setSalesStats] = useState<SalesStatsResponse | null>(null);
@@ -48,6 +50,12 @@ const ReportsScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async (isRefresh = false) => {
+    // Context Guard
+    if (!activeAccountId) {
+        setLoading(false);
+        return;
+    }
+
     // Gate: Supplier User should not access reports
     if (isSupplierUser) return;
 
@@ -85,7 +93,7 @@ const ReportsScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isSupplierUser]);
+  }, [isSupplierUser, activeAccountId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -180,6 +188,28 @@ const ReportsScreen: React.FC = () => {
 
   const totalSales = salesStats?.totalSales || 0;
   const averageSales = salesStats?.chartData?.length ? totalSales / salesStats.chartData.length : 0;
+
+  if (authLoading) {
+      return (
+          <View style={[styles.center, { backgroundColor: '#F5F5F5' }]}>
+              <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+      );
+  }
+
+  if (!activeAccountId) {
+      return (
+          <SafeAreaView style={styles.container} edges={['top']}>
+              <Header title="Relatórios e Gráficos" onBack={() => navigation.goBack()} />
+              <View style={styles.center}>
+                  <Ionicons name="bar-chart-outline" size={64} color={colors.border} />
+                  <Text style={{ marginTop: 16, color: '#666', textAlign: 'center' }}>
+                      Nenhuma conta ativa identificada.
+                  </Text>
+              </View>
+          </SafeAreaView>
+      );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

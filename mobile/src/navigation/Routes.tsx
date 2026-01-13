@@ -97,6 +97,10 @@ function AppTabs() {
             iconName = focused ? 'server' : 'server-outline';
           } else if (route.name === 'Saúde') {
             iconName = focused ? 'pulse' : 'pulse-outline';
+          } else if (route.name === 'Notificações') {
+            iconName = focused ? 'notifications' : 'notifications-outline';
+          } else if (route.name === 'BI Financeiro') {
+            iconName = focused ? 'pie-chart' : 'pie-chart-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -108,6 +112,7 @@ function AppTabs() {
       {/* 1. SUPPLIER_USER */}
       {isSupplierUser && (
         <>
+            <Tab.Screen name="Dashboard" component={DashboardScreen} />
             <Tab.Screen name="Pedidos" component={OrdersListScreen} />
             <Tab.Screen name="Produtos" component={ProductsListScreen} />
             <Tab.Screen name="Perfil" component={SettingsScreen} />
@@ -117,10 +122,11 @@ function AppTabs() {
       {/* 2. SUPPLIER_ADMIN */}
       {isSupplierAdmin && (
         <>
+            <Tab.Screen name="Dashboard" component={DashboardScreen} />
             <Tab.Screen name="Pedidos" component={OrdersListScreen} />
             <Tab.Screen name="Produtos" component={ProductsListScreen} />
             <Tab.Screen name="Financeiro" component={FinancialScreen} />
-            <Tab.Screen name="Métricas" component={ReportsScreen} />
+            <Tab.Screen name="Relatórios" component={ReportsScreen} />
             <Tab.Screen name="Perfil" component={SettingsScreen} />
         </>
       )}
@@ -128,34 +134,39 @@ function AppTabs() {
       {/* 3. ACCOUNT_ADMIN */}
       {isAccountAdmin && (
         <>
+            <Tab.Screen name="Dashboard" component={DashboardScreen} />
             <Tab.Screen name="Pedidos" component={OrdersListScreen} />
+            <Tab.Screen name="Produtos" component={ProductsListScreen} />
             <Tab.Screen name="Suppliers" component={SuppliersStack} />
             <Tab.Screen name="Financeiro" component={AdminFinancialScreen} />
-            <Tab.Screen name="Métricas" component={ReportsScreen} />
+            <Tab.Screen name="Relatórios" component={ReportsScreen} />
             <Tab.Screen name="Configurações" component={SettingsScreen} />
         </>
       )}
 
-      {/* 4. SYSTEM_ADMIN */}
+      {/* 4. SYSTEM_ADMIN - Reverted to Tabs as requested */}
       {isSystemAdmin && (
         <>
-            <Tab.Screen name="Visão Global" component={DashboardScreen} />
-            {/* Using SuppliersStack for "Contas" placeholder or actual Suppliers list? 
-                Prompt says: "Contas", "Suppliers".
-                I will put SuppliersStack for "Suppliers".
-                For "Contas", I don't have a screen. I will omit it to avoid broken nav, 
-                or duplicate SuppliersStack if that's what was intended (unlikely). 
-                I'll stick to what I have: Dashboard, Suppliers, AdminFinancial, Health/System. 
-            */}
+            <Tab.Screen name="Dashboard" component={DashboardScreen} />
+            <Tab.Screen name="Pedidos" component={OrdersListScreen} />
             <Tab.Screen name="Suppliers" component={SuppliersStack} />
-            <Tab.Screen name="Financeiro Global" component={AdminFinancialScreen} />
-            <Tab.Screen name="Sistema" component={HealthMonitorScreen} />
+            <Tab.Screen name="BI Financeiro" component={AdminBIFinancialScreen} />
+            <Tab.Screen name="Saúde" component={HealthMonitorScreen} />
+            <Tab.Screen name="Relatórios" component={ReportsScreen} />
+            <Tab.Screen name="Configurações" component={SettingsScreen} />
         </>
       )}
       
-      {/* Fallback if no role matched (shouldn't happen if auth works, but good safety) */}
+      {/* Fallback for Normal Users (Matches Screenshot 2) */}
       {!isSupplierUser && !isSupplierAdmin && !isAccountAdmin && !isSystemAdmin && (
-         <Tab.Screen name="Dashboard" component={DashboardScreen} />
+         <>
+            <Tab.Screen name="Dashboard" component={DashboardScreen} />
+            <Tab.Screen name="Pedidos" component={OrdersListScreen} />
+            <Tab.Screen name="Fornecedores" component={SuppliersStack} />
+            <Tab.Screen name="Notificações" component={NotificationsScreen} />
+            <Tab.Screen name="Relatórios" component={ReportsScreen} />
+            <Tab.Screen name="Ajustes" component={SettingsScreen} />
+         </>
       )}
 
     </Tab.Navigator>
@@ -163,7 +174,7 @@ function AppTabs() {
 }
 
 const Routes = () => {
-  const { signed, loading } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const { requiresOnboarding, isSupplierPending } = useAuthRole();
 
   if (loading) {
@@ -171,7 +182,7 @@ const Routes = () => {
   }
 
   // Handle Token Expiry/Logout State explicitly
-  if (!signed) {
+  if (!isAuthenticated) {
     return (
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -203,12 +214,17 @@ const Routes = () => {
             />
           ) : (
             <>
+              {/* Main App Tabs for Everyone */}
               <Stack.Screen name="AppTabs" component={AppTabs} />
+              
+              {/* Global Screens (Pushable from any Tab) */}
               <Stack.Screen name="ProductForm" component={ProductFormScreen} />
               <Stack.Screen name="ProductsList" component={ProductsListScreen} />
               <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
               <Stack.Screen name="OrderForm" component={OrderFormScreen} />
               <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
+              
+              {/* Screens that might be accessed from Dashboard Cards */}
               <Stack.Screen name="Reports" component={ReportsScreen} options={{ headerShown: false }} />
               <Stack.Screen name="Financial" component={FinancialScreen} options={{ headerShown: false }} />
               <Stack.Screen name="AdminFinancial" component={AdminFinancialScreen} options={{ headerShown: false }} />

@@ -123,7 +123,7 @@ import { useAuthRole } from '../../hooks/useAuthRole';
 
 const FinancialScreen = () => {
   const navigation = useNavigation<any>();
-  const { user } = useAuth();
+  const { user, activeSupplierId, loading: authLoading } = useAuth();
   const { isAccountAdmin, isSystemAdmin } = useAuthRole();
 
   useEffect(() => {
@@ -251,22 +251,22 @@ Este é um comprovante digital gerado pelo sistema PMS.
   const [cards, setCards] = useState<any[]>([]);
 
   const loadData = useCallback(async () => {
+    // Context Guard
+    if (!activeSupplierId) {
+        setLoading(false);
+        return;
+    }
+
     try {
       if (!refreshing) setLoading(true);
 
-      const suppliersRes = await api.get('/suppliers');
-      const firstSupplier = suppliersRes.data[0];
+      // Use activeSupplierId directly from context (SSOT)
+      const financialRes = await api.get(`/financial/supplier/${activeSupplierId}`);
+      setSupplier(financialRes.data.supplier);
+      setLedger(financialRes.data.ledger);
+      setSubscription(financialRes.data.subscription || null);
+      setLimits(financialRes.data.withdrawalLimits || null);
 
-      if (firstSupplier) {
-        const financialRes = await api.get(`/financial/supplier/${firstSupplier.id}`);
-        setSupplier(financialRes.data.supplier);
-        setLedger(financialRes.data.ledger);
-        setSubscription(financialRes.data.subscription || null);
-        setLimits(financialRes.data.withdrawalLimits || null);
-      } else {
-        console.log('Nenhum fornecedor encontrado.');
-        Alert.alert('Aviso', 'Nenhum fornecedor vinculado a este usuário.');
-      }
     } catch (error) {
       console.log('Error loading financial data', error);
       Alert.alert('Erro', 'Não foi possível carregar os dados financeiros.');
@@ -274,7 +274,7 @@ Este é um comprovante digital gerado pelo sistema PMS.
       setLoading(false);
       setRefreshing(false);
     }
-  }, [refreshing]);
+  }, [refreshing, activeSupplierId]);
 
   const openPlanModal = async () => {
       setSettingsModalVisible(false); // Close settings modal to avoid overlap

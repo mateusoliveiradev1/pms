@@ -2,6 +2,83 @@ import { Request, Response } from 'express';
 import prisma from '../prisma';
 import { supabase } from '../lib/supabase';
 
+export const getMe = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    
+    if (!userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        account: true,
+      }
+    });
+
+    if (!user) {
+      res.status(404).json({ message: 'User not found' });
+      return;
+    }
+
+    let activeAccountId = user.accountId;
+    let activeSupplierId = null;
+    let onboardingStatus = 'PENDING';
+    let accountStatus = user.account?.onboardingStatus;
+    let accountType = user.account?.type;
+
+    // Determine Context & ID based on Role
+    if (user.role === 'SUPPLIER_ADMIN' || user.role === 'SUPPLIER_USER') {
+       // Find the supplier linked to this user
+       const supplier = await prisma.supplier.findFirst({
+           where: { userId: user.id },
+           include: { account: true }
+       });
+       
+       if (supplier) {
+           activeSupplierId = supplier.id;
+           // If user has no explicit accountId, use the supplier's account
+           if (!activeAccountId) {
+               activeAccountId = supplier.accountId;
+               if (supplier.account) {
+                   accountStatus = supplier.account.onboardingStatus;
+                   accountType = supplier.account.type;
+               }
+           }
+       }
+    }
+
+    // Normalize Onboarding Status
+    if (user.role === 'SYSTEM_ADMIN') {
+        onboardingStatus = 'COMPLETED';
+    } else if (accountStatus === 'COMPLETO') {
+        onboardingStatus = 'COMPLETED';
+    } else if (accountStatus === 'REQUIRES_SUPPLIER' && activeSupplierId) {
+        // If waiting for supplier but we have one (maybe edge case), consider complete? 
+        // Or keep pending? Let's stick to account status mapping.
+        // Actually, if account says REQUIRES_SUPPLIER, it is PENDING.
+        onboardingStatus = 'PENDING';
+    }
+
+    res.json({
+       id: user.id,
+       email: user.email,
+       name: user.name,
+       role: user.role,
+       onboardingStatus,
+       activeAccountId,
+       activeSupplierId,
+       accountType
+     });
+
+  } catch (error: any) {
+    console.error('GetMe Error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
 export const register = async (req: Request, res: Response): Promise<void> => {
   const { name, email, password, accountName, accountType } = req.body;
 
@@ -13,7 +90,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       options: {
         data: {
           name,
-          role: 'OWNER',
+          role: 'ACCOUNT_ADMIN', // CORRECT ROLE
         }
       }
     });
@@ -51,14 +128,14 @@ export const register = async (req: Request, res: Response): Promise<void> => {
           update: {
             name,
             email,
-            role: 'OWNER',
+            role: 'ACCOUNT_ADMIN', // CORRECT ROLE
             accountId: account.id,
           },
           create: {
             id: data.user!.id,
             email,
             name,
-            role: 'OWNER',
+            role: 'ACCOUNT_ADMIN', // CORRECT ROLE
             status: 'ACTIVE',
             accountId: account.id,
           },
