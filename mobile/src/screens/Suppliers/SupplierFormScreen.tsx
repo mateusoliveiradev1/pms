@@ -96,7 +96,17 @@ const SupplierFormScreen = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Header title={isEditing ? "Editar Fornecedor" : "Novo Fornecedor"} onBack={() => navigation.goBack()} />
+      <Header 
+        title={isEditing ? "Editar Fornecedor" : "Novo Fornecedor"} 
+        onBack={!onboardingMode ? () => navigation.goBack() : undefined} 
+      />
+
+      {onboardingMode && (
+        <View style={{ padding: 20, backgroundColor: '#E3F2FD', marginBottom: 10 }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1565C0', marginBottom: 5 }}>Bem-vindo!</Text>
+            <Text style={{ fontSize: 14, color: '#1565C0' }}>Para começar a vender, crie seu primeiro fornecedor.</Text>
+        </View>
+      )}
 
       <KeyboardAvoidingView 
         behavior={Platform.OS === "ios" ? "padding" : "height"}

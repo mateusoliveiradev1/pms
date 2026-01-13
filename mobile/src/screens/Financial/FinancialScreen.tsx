@@ -119,16 +119,19 @@ const luhnCheck = (value: string) => {
     return (nSum % 10) == 0;
 };
 
+import { useAuthRole } from '../../hooks/useAuthRole';
+
 const FinancialScreen = () => {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
+  const { isAccountAdmin, isSystemAdmin } = useAuthRole();
 
   useEffect(() => {
-    if (user?.role === 'ADMIN' || user?.role === 'SYSTEM_ADMIN') {
+    if (isAccountAdmin || isSystemAdmin) {
       // Redirect Admin to AdminFinancial if they somehow reach here
       navigation.replace('AdminFinancial' as never);
     }
-  }, [user, navigation]);
+  }, [isAccountAdmin, isSystemAdmin, navigation]);
   
   const [supplier, setSupplier] = useState<SupplierData | null>(null);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);

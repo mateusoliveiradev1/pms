@@ -176,7 +176,7 @@ const SuppliersListScreen = () => {
               </View>
               <Text style={styles.emptyTitle}>Nenhum fornecedor</Text>
               <Text style={styles.emptyText}>
-                  {searchQuery ? 'Nenhum resultado para sua busca.' : 'Cadastre seus fornecedores para começar.'}
+                  {searchQuery ? 'Nenhum resultado para sua busca.' : 'Para começar a vender, crie seu primeiro fornecedor.'}
               </Text>
             </View>
           }

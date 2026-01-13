@@ -226,8 +226,8 @@ const OrdersListScreen = () => {
                 </View>
                 <Text style={styles.emptyTitle}>Nenhum pedido encontrado</Text>
                 <Text style={styles.emptyText}>
-                    {selectedStatus ? 'Não há pedidos com este status.' : 'Seus pedidos aparecerão aqui.'}
-                </Text>
+            {selectedStatus ? 'Não há pedidos com este status.' : 'Quando um pedido for realizado, ele aparecerá aqui.'}
+          </Text>
             </View>
           }
         />

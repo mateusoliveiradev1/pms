@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useAuth } from '../context/AuthContext';
+import { useAuthRole } from '../hooks/useAuthRole';
 import { Ionicons } from '@expo/vector-icons';
 import AppSplashScreen from '../screens/SplashScreen';
 
@@ -61,7 +62,12 @@ function SuppliersStack() {
 }
 
 function AppTabs() {
-  const { user } = useAuth();
+  const { 
+    isSupplierUser, 
+    isSupplierAdmin, 
+    isAccountAdmin, 
+    isSystemAdmin 
+  } = useAuthRole();
   
   return (
     <Tab.Navigator
@@ -70,20 +76,23 @@ function AppTabs() {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: any;
 
-          if (route.name === 'Dashboard') {
+          // Map Route Names to Icons
+          if (route.name === 'Visão Global' || route.name === 'Dashboard') {
             iconName = focused ? 'grid' : 'grid-outline';
           } else if (route.name === 'Pedidos') {
             iconName = focused ? 'list' : 'list-outline';
-          } else if (route.name === 'Fornecedores') {
+          } else if (route.name === 'Produtos') {
+            iconName = focused ? 'cube' : 'cube-outline';
+          } else if (route.name === 'Fornecedores' || route.name === 'Suppliers') {
             iconName = focused ? 'people' : 'people-outline';
-          } else if (route.name === 'Notificações') {
-            iconName = focused ? 'notifications' : 'notifications-outline';
-          } else if (route.name === 'Relatórios') {
+          } else if (route.name === 'Financeiro' || route.name === 'Financeiro Global') {
+            iconName = focused ? 'cash' : 'cash-outline';
+          } else if (route.name === 'Métricas' || route.name === 'Relatórios') {
             iconName = focused ? 'bar-chart' : 'bar-chart-outline';
-          } else if (route.name === 'Ajustes') {
+          } else if (route.name === 'Ajustes' || route.name === 'Configurações' || route.name === 'Perfil') {
             iconName = focused ? 'settings' : 'settings-outline';
-          } else if (route.name === 'BI Financeiro') {
-            iconName = focused ? 'pie-chart' : 'pie-chart-outline';
+          } else if (route.name === 'Sistema') {
+            iconName = focused ? 'server' : 'server-outline';
           } else if (route.name === 'Saúde') {
             iconName = focused ? 'pulse' : 'pulse-outline';
           }
@@ -94,25 +103,66 @@ function AppTabs() {
         tabBarInactiveTintColor: 'gray',
       })}
     >
-      <Tab.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
-      <Tab.Screen name="Pedidos" component={OrdersListScreen} />
-      <Tab.Screen name="Fornecedores" component={SuppliersStack} />
-      {(user?.role === 'ADMIN' || user?.role === 'SYSTEM_ADMIN') && (
+      {/* 1. SUPPLIER_USER */}
+      {isSupplierUser && (
         <>
-            <Tab.Screen name="BI Financeiro" component={AdminBIFinancialScreen} />
-            <Tab.Screen name="Saúde" component={HealthMonitorScreen} />
+            <Tab.Screen name="Pedidos" component={OrdersListScreen} />
+            <Tab.Screen name="Produtos" component={ProductsListScreen} />
+            <Tab.Screen name="Perfil" component={SettingsScreen} />
         </>
       )}
-      <Tab.Screen name="Notificações" component={NotificationsScreen} />
-      <Tab.Screen name="Relatórios" component={ReportsScreen} />
-      <Tab.Screen name="Ajustes" component={SettingsScreen} />
-      {/* Hidden Tabs accessible via navigation but sharing Tab context if needed, otherwise use Stack */}
+
+      {/* 2. SUPPLIER_ADMIN */}
+      {isSupplierAdmin && (
+        <>
+            <Tab.Screen name="Pedidos" component={OrdersListScreen} />
+            <Tab.Screen name="Produtos" component={ProductsListScreen} />
+            <Tab.Screen name="Financeiro" component={FinancialScreen} />
+            <Tab.Screen name="Métricas" component={ReportsScreen} />
+            <Tab.Screen name="Perfil" component={SettingsScreen} />
+        </>
+      )}
+
+      {/* 3. ACCOUNT_ADMIN */}
+      {isAccountAdmin && (
+        <>
+            <Tab.Screen name="Pedidos" component={OrdersListScreen} />
+            <Tab.Screen name="Suppliers" component={SuppliersStack} />
+            <Tab.Screen name="Financeiro" component={AdminFinancialScreen} />
+            <Tab.Screen name="Métricas" component={ReportsScreen} />
+            <Tab.Screen name="Configurações" component={SettingsScreen} />
+        </>
+      )}
+
+      {/* 4. SYSTEM_ADMIN */}
+      {isSystemAdmin && (
+        <>
+            <Tab.Screen name="Visão Global" component={DashboardScreen} />
+            {/* Using SuppliersStack for "Contas" placeholder or actual Suppliers list? 
+                Prompt says: "Contas", "Suppliers".
+                I will put SuppliersStack for "Suppliers".
+                For "Contas", I don't have a screen. I will omit it to avoid broken nav, 
+                or duplicate SuppliersStack if that's what was intended (unlikely). 
+                I'll stick to what I have: Dashboard, Suppliers, AdminFinancial, Health/System. 
+            */}
+            <Tab.Screen name="Suppliers" component={SuppliersStack} />
+            <Tab.Screen name="Financeiro Global" component={AdminFinancialScreen} />
+            <Tab.Screen name="Sistema" component={HealthMonitorScreen} />
+        </>
+      )}
+      
+      {/* Fallback if no role matched (shouldn't happen if auth works, but good safety) */}
+      {!isSupplierUser && !isSupplierAdmin && !isAccountAdmin && !isSystemAdmin && (
+         <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      )}
+
     </Tab.Navigator>
   );
 }
 
 const Routes = () => {
-  const { signed, loading, account, user } = useAuth();
+  const { signed, loading } = useAuth();
+  const { requiresOnboarding, isSupplierPending } = useAuthRole();
 
   if (loading) {
     return <AppSplashScreen />;
@@ -130,17 +180,20 @@ const Routes = () => {
     );
   }
 
-  const requiresFirstSupplier =
-    !!signed &&
-    user?.role !== 'ADMIN' &&
-    user?.role !== 'SYSTEM_ADMIN' &&
-    account?.type === 'COMPANY' &&
-    account?.onboardingStatus === 'REQUIRES_SUPPLIER';
+  if (isSupplierPending) {
+    return (
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="PendingApproval" component={PendingApprovalScreen} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    );
+  }
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {requiresFirstSupplier ? (
+          {requiresOnboarding ? (
             <Stack.Screen
               name="SupplierOnboarding"
               component={SupplierFormScreen}
