@@ -14,6 +14,8 @@ import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import { useAuth } from '../context/AuthContext';
+import { useAuthRole } from '../hooks/useAuthRole';
+import { isPermissionError } from '../utils/authErrorUtils';
 import api from '../services/api';
 import { colors, shadow } from '../ui/theme';
 
@@ -67,6 +69,7 @@ const StatCard = ({ title, value, icon, color, onPress }: StatCardProps) => (
 
 const DashboardScreen = () => {
   const { user } = useAuth();
+  const { isAccountAdmin, isSupplierAdmin, isSystemAdmin } = useAuthRole();
   const isFocused = useIsFocused();
   const navigation = useNavigation<any>();
   
@@ -91,17 +94,21 @@ const DashboardScreen = () => {
       
       // Independent fetches for resilience
       const fetchProducts = api.get<Product[]>('/products').catch(err => {
-          console.log('Dashboard: Failed to fetch products', err.message);
+          if (err.response?.status !== 403) {
+            console.log('Dashboard: Failed to fetch products', err.message);
+          }
           return { data: [] as Product[] };
       });
 
-      const fetchSales = api.get<SalesStatsResponse>('/reports/sales').catch(err => {
-          // If 403, just ignore silently (permission)
-          if (err.response?.status !== 403) {
-             console.log('Dashboard: Failed to fetch sales', err.message);
-          }
-          return { data: null };
-      });
+      const canFetchSales = isAccountAdmin || isSupplierAdmin || isSystemAdmin;
+      const fetchSales = canFetchSales
+        ? api.get<SalesStatsResponse>('/reports/sales').catch(err => {
+            if (err.response?.status !== 403) {
+               console.log('Dashboard: Failed to fetch sales', err.message);
+            }
+            return { data: null };
+          })
+        : Promise.resolve({ data: null as any });
 
       const [productsRes, salesRes] = await Promise.all([fetchProducts, fetchSales]);
 
@@ -122,8 +129,8 @@ const DashboardScreen = () => {
           if (salesRes.data.chartData && Array.isArray(salesRes.data.chartData)) {
             const last7Days = salesRes.data.chartData.slice(-7);
             if (last7Days.length > 0) {
-                chartValues = last7Days.map(d => d.value);
-                chartLabels = last7Days.map(d => d.date.split('/')[0]);
+                chartValues = last7Days.map((d: SalesChartItem) => d.value);
+                chartLabels = last7Days.map((d: SalesChartItem) => d.date.split('/')[0]);
             }
           }
       }
@@ -139,13 +146,17 @@ const DashboardScreen = () => {
         totalSales: realTotalSales
       });
 
-    } catch (error) {
-      console.log('Error loading dashboard data', error);
+    } catch (error: any) {
+      if (isPermissionError(error)) {
+        return;
+      } else {
+        console.log('Error loading dashboard data', error);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [refreshing]);
+  }, [refreshing, isAccountAdmin, isSupplierAdmin, isSystemAdmin]);
 
   useEffect(() => {
     if (isFocused) {

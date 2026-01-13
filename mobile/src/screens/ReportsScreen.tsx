@@ -8,6 +8,7 @@ import Header from '../ui/components/Header';
 import { colors, shadow } from '../ui/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthRole } from '../hooks/useAuthRole';
+import { isPermissionError } from '../utils/authErrorUtils';
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -74,8 +75,12 @@ const ReportsScreen: React.FC = () => {
       setSalesStats(salesRes.data);
       setTopProducts(topRes.data);
       setStatusData(statusRes.data);
-    } catch (error) {
-      console.log('Error fetching reports', error);
+    } catch (error: any) {
+      if (isPermissionError(error)) {
+        return;
+      } else {
+        console.log('Error fetching reports', error);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -192,6 +197,15 @@ const ReportsScreen: React.FC = () => {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />
           }
         >
+        {isSupplierUser ? (
+          <View style={styles.center}>
+            <Ionicons name="bar-chart-outline" size={64} color={colors.border} />
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333', marginTop: 12 }}>
+              Este relatório não está disponível para seu perfil.
+            </Text>
+          </View>
+        ) : (
+        <>
         
         {/* Summary Cards */}
         <View style={styles.summaryContainer}>
@@ -304,6 +318,16 @@ const ReportsScreen: React.FC = () => {
             </View>
         )}
 
+        {(!lineChartData && (!weekdayChartData.datasets.length || !weekdayChartData.datasets[0].data.some(v => v > 0)) && pieChartData.length === 0 && topProducts.length === 0) && (
+            <View style={styles.center}>
+              <Ionicons name="bar-chart-outline" size={64} color={colors.border} />
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333', marginTop: 12 }}>
+                Este relatório não está disponível para seu perfil.
+              </Text>
+            </View>
+        )}
+        </>
+        )}
         </ScrollView>
       )}
     </SafeAreaView>

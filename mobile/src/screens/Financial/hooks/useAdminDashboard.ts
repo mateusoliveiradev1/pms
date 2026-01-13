@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import api from '../../../services/api';
+import { isPermissionError } from '../../../utils/authErrorUtils';
 import { 
     AdminDashboardStats, 
     SupplierFinancial, 
@@ -36,14 +37,14 @@ export const useAdminDashboard = () => {
             
             // Also fetch alerts
             fetchAlerts();
-        } catch (e) { console.error(e); }
+        } catch (e: any) { if (!isPermissionError(e)) console.error(e); }
     };
 
     const fetchAlerts = async () => {
         try {
             const res = await api.get('/financial-admin/alerts');
             setAlerts(res.data);
-        } catch (e) { console.error('Error fetching alerts:', e); }
+        } catch (e: any) { if (!isPermissionError(e)) console.error('Error fetching alerts:', e); }
     };
 
     const fetchReconciliation = async (filters?: { startDate?: Date, endDate?: Date, supplierId?: string }) => {
@@ -55,7 +56,7 @@ export const useAdminDashboard = () => {
 
             const res = await api.get('/financial-admin/reconciliation', { params });
             setReconciliation(res.data);
-        } catch (e) { console.error('Error fetching reconciliation:', e); }
+        } catch (e: any) { if (!isPermissionError(e)) console.error('Error fetching reconciliation:', e); }
     };
 
     const fetchWithdrawals = async (status: string, filters?: { startDate?: Date, endDate?: Date, supplierId?: string }) => {
@@ -67,7 +68,7 @@ export const useAdminDashboard = () => {
 
             const res = await api.get('/financial/admin/withdrawals', { params });
             setWithdrawals(res.data);
-        } catch (e) { console.error(e); }
+        } catch (e: any) { if (!isPermissionError(e)) console.error(e); }
     };
 
     const fetchSuppliers = async (search: string, status: string) => {
@@ -77,7 +78,7 @@ export const useAdminDashboard = () => {
                 params: { search, status }
             });
             setSuppliers(res.data);
-        } catch (e) { console.error(e); }
+        } catch (e: any) { if (!isPermissionError(e)) console.error(e); }
     };
 
     const fetchSettings = async () => {
@@ -89,7 +90,7 @@ export const useAdminDashboard = () => {
                 defaultWithdrawalLimit: 4
             };
             setSettings(data);
-        } catch (e) { console.error(e); }
+        } catch (e: any) { if (!isPermissionError(e)) console.error(e); }
     };
 
     const fetchAudit = async (filters?: { action?: string, startDate?: Date, endDate?: Date }) => {
@@ -101,7 +102,7 @@ export const useAdminDashboard = () => {
 
             const res = await api.get('/financial/admin/audit', { params });
             setAuditLogs(res.data);
-        } catch (e) { console.error(e); }
+        } catch (e: any) { if (!isPermissionError(e)) console.error(e); }
     };
 
     const approveWithdrawal = async (requestId: string) => {
@@ -109,7 +110,10 @@ export const useAdminDashboard = () => {
             await api.post(`/financial/admin/withdrawals/${requestId}/approve`);
             Alert.alert('Sucesso', 'Saque aprovado e processado.');
             return true;
-        } catch (error) {
+        } catch (error: any) {
+            if (isPermissionError(error)) {
+                return false;
+            }
             Alert.alert('Erro', 'Falha ao aprovar saque.');
             return false;
         }
@@ -120,7 +124,10 @@ export const useAdminDashboard = () => {
             await api.post(`/financial/admin/withdrawals/${requestId}/reject`, { reason });
             Alert.alert('Sucesso', 'Saque rejeitado.');
             return true;
-        } catch (error) {
+        } catch (error: any) {
+            if (isPermissionError(error)) {
+                return false;
+            }
             Alert.alert('Erro', 'Falha ao rejeitar saque.');
             return false;
         }
@@ -132,7 +139,10 @@ export const useAdminDashboard = () => {
             Alert.alert('Sucesso', 'Configurações atualizadas.');
             setSettings(newSettings);
             return true;
-        } catch (error) {
+        } catch (error: any) {
+            if (isPermissionError(error)) {
+                return false;
+            }
             Alert.alert('Erro', 'Falha ao salvar configurações.');
             return false;
         }

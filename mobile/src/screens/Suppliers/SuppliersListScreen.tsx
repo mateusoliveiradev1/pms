@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useAuthRole } from '../../hooks/useAuthRole';
+import { isPermissionError } from '../../utils/authErrorUtils';
 import Header from '../../ui/components/Header';
 import { colors, shadow, spacing, radius } from '../../ui/theme';
 
@@ -26,13 +27,20 @@ const SuppliersListScreen = () => {
   const { isAccountAdmin, isSystemAdmin, isSupplierUser, isSupplierAdmin } = useAuthRole();
 
   const fetchSuppliers = async () => {
+    if (isSupplierUser || isSupplierAdmin) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const response = await api.get('/suppliers');
       setSuppliers(response.data);
-    } catch (error) {
-      console.log(error);
-      Alert.alert('Erro', 'Não foi possível carregar os fornecedores.');
+    } catch (error: any) {
+      if (isPermissionError(error)) {
+        return;
+      } else {
+        Alert.alert('Erro', 'Não foi possível carregar os fornecedores.');
+      }
     } finally {
       setLoading(false);
     }
@@ -45,6 +53,9 @@ const SuppliersListScreen = () => {
   }, [isFocused]);
 
   const handleDelete = async (id: string) => {
+    if (!isAccountAdmin && !isSystemAdmin) {
+      return;
+    }
     Alert.alert(
       'Confirmar exclusão',
       'Tem certeza que deseja excluir este fornecedor?',
@@ -58,8 +69,8 @@ const SuppliersListScreen = () => {
               await api.delete(`/suppliers/${id}`);
               await fetchSuppliers();
             } catch (error: any) {
-              if (error?.response?.status === 403) {
-                Alert.alert('Permissão negada', 'Apenas usuários ADMIN podem excluir fornecedores.');
+              if (isPermissionError(error)) {
+                return;
               } else {
                 Alert.alert('Erro', 'Falha ao excluir fornecedor.');
               }
@@ -171,25 +182,37 @@ const SuppliersListScreen = () => {
           renderItem={renderItem}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconContainer}>
-                  <Ionicons name="business-outline" size={64} color={colors.border} />
+            isSupplierUser || isSupplierAdmin ? (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconContainer}>
+                    <Ionicons name="business-outline" size={64} color={colors.border} />
+                </View>
+                <Text style={styles.emptyTitle}>Nenhum fornecedor disponível</Text>
+                <Text style={styles.emptyText}>Nenhum fornecedor disponível para sua conta.</Text>
               </View>
-              <Text style={styles.emptyTitle}>Nenhum fornecedor</Text>
-              <Text style={styles.emptyText}>
-                  {searchQuery ? 'Nenhum resultado para sua busca.' : 'Para começar a vender, crie seu primeiro fornecedor.'}
-              </Text>
-            </View>
+            ) : (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconContainer}>
+                    <Ionicons name="business-outline" size={64} color={colors.border} />
+                </View>
+                <Text style={styles.emptyTitle}>Nenhum fornecedor disponível</Text>
+                <Text style={styles.emptyText}>
+                    {searchQuery ? 'Nenhum resultado para sua busca.' : 'Nenhum fornecedor disponível para sua conta.'}
+                </Text>
+              </View>
+            )
           }
         />
       )}
 
-      <TouchableOpacity 
-        style={styles.fab}
-        onPress={() => (navigation as any).navigate('SupplierForm')}
-      >
-        <Ionicons name="add" size={30} color="#FFF" />
-      </TouchableOpacity>
+      {(isAccountAdmin || isSystemAdmin) && (
+        <TouchableOpacity 
+          style={styles.fab}
+          onPress={() => (navigation as any).navigate('SupplierForm')}
+        >
+          <Ionicons name="add" size={30} color="#FFF" />
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 };
