@@ -11,6 +11,11 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum SupplierType {
+  INTERNAL
+  EXTERNAL
+}
+
 model User {
   id        String   @id @db.Uuid // Linked to auth.users.id
   name      String?
@@ -34,11 +39,13 @@ model Account {
   type      String   @default("INDIVIDUAL")
   planId    String   @default("basic")
   onboardingStatus String @default("COMPLETO")
+  defaultCommissionRate Float?
   
   users     User[]
   suppliers Supplier[]
   subscriptions Subscription[]
   plan       Plan     @relation(fields: [planId], references: [id])
+  commissions SupplierCommission[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -50,11 +57,14 @@ model Plan {
   monthlyPrice Float
   cycleDays    Int        @default(30)
   maxSuppliers Int        @default(1)
+  maxInternalSuppliers Int?
+  maxExternalSuppliers Int?
   maxUsers     Int        @default(3)
   // Business rules
   limitProducts   Int      @default(100)
   limitOrders     Int      @default(1000)
   commissionPercent Float  @default(10.0)
+  withdrawalFee     Float?
   priorityLevel   Int      @default(1)
   
   // Financial Limits
@@ -101,6 +111,7 @@ model Supplier {
   id              String    @id @default(uuid())
   name            String
   type            String    @default("INDIVIDUAL")
+  supplierType    SupplierType @default(INTERNAL)
   integrationType String    // MANUAL, API
   shippingDeadline Int?     // Days
   status          String    @default("ACTIVE") // ACTIVE, PAUSED
@@ -118,6 +129,11 @@ model Supplier {
   plan            Plan?     @relation(fields: [planId], references: [id])
   financialStatus String    @default("ACTIVE") // ACTIVE, SUSPENDED, OVERDUE
   commissionRate  Float     @default(10.0) // Percentage
+  rankingScore    Float?
+  featuredUntil   DateTime?
+  withdrawalFeeRate Float?
+  suspensionReason String?
+  slaViolationCount Int      @default(0)
   
   // Wallet Balances
   walletBalance   Float     @default(0.0) // AVAILABLE
@@ -140,9 +156,24 @@ model Supplier {
   subscriptions   Subscription[]
   financialLedger FinancialLedger[]
   withdrawals     WithdrawalRequest[]
+  commissions     SupplierCommission[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model SupplierCommission {
+  id          String   @id @default(uuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [id])
+  commissionRate Float
+  overridePlanRate Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([supplierId, accountId])
 }
 
 model Subscription {

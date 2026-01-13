@@ -42,8 +42,120 @@ export const getSuppliers = async (req: Request, res: Response) => {
   }
 };
 
+export const createExternalSupplier = async (req: Request, res: Response) => {
+  const { name, accountId, integrationType, shippingDeadline } = req.body;
+  try {
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    if (!authUser?.userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    const account = await prisma.account.findUnique({
+      where: { id: String(accountId) },
+      include: { plan: true, suppliers: true }
+    });
+    if (!account) {
+      res.status(400).json({ message: 'Conta inválida' });
+      return;
+    }
+
+    const maxExternal = account.plan?.maxExternalSuppliers ?? null;
+    const currentExternalCount = await prisma.supplier.count({
+      where: { accountId: account.id, supplierType: 'EXTERNAL' }
+    });
+    if (maxExternal !== null && maxExternal !== undefined && maxExternal > 0 && currentExternalCount >= maxExternal) {
+      res.status(403).json({ message: 'Limite de sellers externos do plano atingido' });
+      return;
+    }
+
+    const supplier = await prisma.$transaction(async (tx) => {
+      const created = await tx.supplier.create({
+        data: {
+          name,
+          type: 'COMPANY',
+          supplierType: 'EXTERNAL',
+          integrationType: integrationType || 'MANUAL',
+          shippingDeadline: shippingDeadline ? parseInt(shippingDeadline) : null,
+          status: 'ACTIVE',
+          active: false,
+          accountId: account.id,
+          isDefault: false,
+          planId: account.planId,
+          userId: authUser.userId,
+          financialStatus: 'ACTIVE',
+          verificationStatus: 'PENDING_APPROVAL'
+        }
+      });
+
+      await tx.adminLog.create({
+        data: {
+          adminId: authUser.userId!,
+          adminName: 'SellerOnboarding',
+          action: 'EXTERNAL_SELLER_ONBOARDING_REQUEST',
+          targetId: created.id,
+          details: JSON.stringify({ accountId: account.id, name }),
+          reason: 'Pending approval'
+        }
+      });
+
+      return created;
+    });
+
+    res.status(201).json(supplier);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error creating external supplier', error: error.message });
+  }
+};
+
+export const approveExternalSupplier = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    if (!authUser?.userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    // Must be Account Admin or System Admin
+    if (!['ACCOUNT_ADMIN', 'SYSTEM_ADMIN', 'ADMIN'].includes(String(authUser.role))) {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+
+    const supplier = await prisma.supplier.findUnique({ where: { id } });
+    if (!supplier) {
+      res.status(404).json({ message: 'Supplier not found' });
+      return;
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const up = await tx.supplier.update({
+        where: { id },
+        data: { verificationStatus: 'APPROVED', active: true }
+      });
+
+      await tx.adminLog.create({
+        data: {
+          adminId: authUser.userId!,
+          adminName: 'AccountAdmin',
+          action: 'EXTERNAL_SELLER_APPROVED',
+          targetId: id,
+          details: JSON.stringify({ supplierId: id, accountId: up.accountId })
+        }
+      });
+
+      return up;
+    });
+
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error approving external supplier', error: error.message });
+  }
+};
+
 export const createSupplier = async (req: Request, res: Response) => {
-  const { name, integrationType, shippingDeadline, type } = req.body;
+  const { name, integrationType, shippingDeadline, type, supplierType } = req.body;
   try {
     const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
     if (!authUser?.userId) {
@@ -73,17 +185,27 @@ export const createSupplier = async (req: Request, res: Response) => {
     }
 
     // 2. Check Plan Limits
-    const planMaxSuppliers = user.account.plan?.maxSuppliers ?? 1;
-    const currentSuppliersCount = await prisma.supplier.count({
-      where: { accountId: user.account.id },
-    });
+    const desiredType: 'INTERNAL' | 'EXTERNAL' = (supplierType === 'EXTERNAL') ? 'EXTERNAL' : 'INTERNAL';
+    const plan = user.account.plan;
+    let maxForType: number | null = null;
+    if (desiredType === 'INTERNAL') {
+      maxForType = (plan?.maxInternalSuppliers ?? null);
+    } else {
+      maxForType = (plan?.maxExternalSuppliers ?? null);
+    }
 
-    if (currentSuppliersCount >= planMaxSuppliers) {
-      res.status(403).json({ message: 'Limite de fornecedores do plano atingido' });
-      return;
+    if (maxForType !== null && maxForType !== undefined) {
+      const currentTypeCount = await prisma.supplier.count({
+        where: { accountId: user.account.id, supplierType: desiredType }
+      });
+      if (currentTypeCount >= maxForType) {
+        res.status(403).json({ message: `Limite de fornecedores ${desiredType.toLowerCase()} do plano atingido` });
+        return;
+      }
     }
 
     const account = user.account;
+    const totalSuppliersCount = await prisma.supplier.count({ where: { accountId: account.id } });
 
     // 3. Create Supplier
     const newSupplier = await prisma.$transaction(async (tx) => {
@@ -91,6 +213,7 @@ export const createSupplier = async (req: Request, res: Response) => {
         data: {
           name,
           type: type || 'INDIVIDUAL', // Default to INDIVIDUAL if not specified
+          supplierType: desiredType,
           integrationType: integrationType || 'MANUAL',
           status: 'ACTIVE',
           active: true,
@@ -100,7 +223,7 @@ export const createSupplier = async (req: Request, res: Response) => {
           userId: authUser.userId,
           shippingDeadline,
           financialStatus: 'ACTIVE',
-          verificationStatus: 'PENDING',
+          verificationStatus: desiredType === 'EXTERNAL' ? 'PENDING_APPROVAL' : 'VERIFIED',
         },
       });
 
@@ -117,7 +240,7 @@ export const createSupplier = async (req: Request, res: Response) => {
       });
 
       // Update Account Status if it's the first supplier for a Company
-      if (account.type === 'COMPANY' && currentSuppliersCount === 0) {
+      if (account.type === 'COMPANY' && totalSuppliersCount === 0) {
           await tx.account.update({
               where: { id: account.id },
               data: { onboardingStatus: 'COMPLETO' }

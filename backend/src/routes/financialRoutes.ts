@@ -14,7 +14,9 @@ import {
     getFinancialSettings,
     updateFinancialSettings,
     getAdminSupplierFinancials,
-    getAdminAuditLogs
+    getAdminAuditLogs,
+    getAccountMetrics,
+    getSupplierMetrics
 } from '../controllers/financialController';
 import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
 
@@ -29,12 +31,14 @@ router.post('/admin/withdrawals/:id/approve', authenticateToken, requireRole(['S
 router.post('/admin/withdrawals/:id/reject', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), rejectWithdraw);
 router.get('/admin/settings', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), getFinancialSettings);
 router.put('/admin/settings', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), updateFinancialSettings);
+router.get('/admin/metrics', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN', 'ACCOUNT_ADMIN']), getAccountMetrics);
 
 // Public / Supplier Routes
 router.post('/cron/check-overdue', checkOverdue);
 router.post('/subscription/pay', authenticateToken, paySubscription);
 router.get('/ledger', authenticateToken, getLedger);
 router.get('/supplier/:id', authenticateToken, getSupplierFinancials);
+router.get('/supplier/metrics', authenticateToken, getSupplierMetrics);
 router.post('/withdraw', authenticateToken, withdrawFunds);
 router.post('/subscription/change-plan', authenticateToken, changePlan);
 router.post('/billing-info', authenticateToken, updateBillingInfo);

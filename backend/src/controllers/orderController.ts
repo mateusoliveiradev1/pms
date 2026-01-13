@@ -5,8 +5,51 @@ import { FinancialService } from '../services/financialService';
 
 export const getOrders = async (req: Request, res: Response) => {
   try {
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
     const { status } = req.query as { status?: string };
-    const where = status ? { status: String(status) } : undefined;
+    let where: any = {};
+    if (status) where.status = String(status);
+
+    if (!authUser?.userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    if (authUser.role === 'SYSTEM_ADMIN' || authUser.role === 'ADMIN') {
+      // Full visibility; optionally filter by accountId or supplierId
+      if (req.query.supplierId) where.supplierId = String(req.query.supplierId);
+      if (req.query.accountId) {
+        const supplierIds = await prisma.supplier.findMany({
+          where: { accountId: String(req.query.accountId) },
+          select: { id: true }
+        }).then(list => list.map(s => s.id));
+        where.supplierId = { in: supplierIds };
+      }
+    } else {
+      const user = await prisma.user.findUnique({ where: { id: authUser.userId }, select: { accountId: true, role: true } });
+      if (!user?.accountId) {
+        res.json([]);
+        return;
+      }
+      if (user.role === 'ACCOUNT_ADMIN') {
+        const supplierIds = await prisma.supplier.findMany({
+          where: { accountId: user.accountId },
+          select: { id: true }
+        }).then(list => list.map(s => s.id));
+        where.supplierId = { in: supplierIds };
+      } else {
+        const supplierIds = await prisma.supplier.findMany({
+          where: { userId: authUser.userId },
+          select: { id: true }
+        }).then(list => list.map(s => s.id));
+        if (supplierIds.length === 0) {
+          res.json([]);
+          return;
+        }
+        where.supplierId = { in: supplierIds };
+      }
+    }
+
     const orders = await prisma.order.findMany({
       where,
       include: { items: { include: { product: true } } },
@@ -130,7 +173,7 @@ export const createOrder = async (req: Request, res: Response) => {
                   throw new Error(`Order limit reached for current plan cycle.`);
                 }
                 orderSupplierId = supplierRel.supplierId;
-                orderCommissionRate = activeSub.plan.commissionPercent || 10; // Commission from plan
+                orderCommissionRate = await (await import('../services/commissionService')).CommissionService.getCommissionRateForSupplier(orderSupplierId);
                 }
 
                 await tx.productSupplier.update({

@@ -451,6 +451,91 @@ export const getAdminSupplierFinancials = async (req: Request, res: Response) =>
     }
 };
 
+export const getAccountMetrics = async (req: Request, res: Response) => {
+  try {
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    if (!authUser?.userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: authUser.userId } });
+    if (!user?.accountId) {
+      res.status(400).json({ message: 'Account context missing' });
+      return;
+    }
+
+    if (!['ACCOUNT_ADMIN', 'ADMIN', 'SYSTEM_ADMIN'].includes(String(authUser.role))) {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+
+    const supplierIds = await prisma.supplier.findMany({
+      where: { accountId: user.accountId },
+      select: { id: true }
+    }).then(list => list.map(s => s.id));
+
+    const gmvAgg = await prisma.order.aggregate({
+      where: { supplierId: { in: supplierIds }, status: { not: 'CANCELLED' } },
+      _sum: { totalAmount: true }
+    });
+
+    const revenueAgg = await prisma.financialLedger.aggregate({
+      where: { supplierId: { in: supplierIds }, type: 'PLATFORM_COMMISSION' },
+      _sum: { amount: true }
+    });
+
+    const perSupplier = await prisma.financialLedger.groupBy({
+      by: ['supplierId'],
+      where: { supplierId: { in: supplierIds }, type: 'PLATFORM_COMMISSION' },
+      _sum: { amount: true }
+    });
+
+    res.json({
+      gmvTotal: gmvAgg._sum.totalAmount || 0,
+      receitaEmpresa: Math.abs(revenueAgg._sum.amount || 0),
+      receitaPorSupplier: perSupplier.map(r => ({ supplierId: r.supplierId, commissionTotal: Math.abs(r._sum.amount || 0) }))
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error fetching account metrics', error: error.message });
+  }
+};
+
+export const getSupplierMetrics = async (req: Request, res: Response) => {
+  try {
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    if (!authUser?.userId) {
+      res.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+    const suppliers = await prisma.supplier.findMany({
+      where: { userId: authUser.userId },
+      select: { id: true, walletBalance: true }
+    });
+    if (suppliers.length === 0) {
+      res.json({ gmv: 0, comissao: 0, saldoDisponivel: 0 });
+      return;
+    }
+    const supplierIds = suppliers.map(s => s.id);
+    const gmvAgg = await prisma.order.aggregate({
+      where: { supplierId: { in: supplierIds }, status: { not: 'CANCELLED' } },
+      _sum: { totalAmount: true }
+    });
+    const comAgg = await prisma.financialLedger.aggregate({
+      where: { supplierId: { in: supplierIds }, type: 'PLATFORM_COMMISSION' },
+      _sum: { amount: true }
+    });
+    const saldo = suppliers.reduce((acc, s) => acc + s.walletBalance, 0);
+    res.json({
+      gmv: gmvAgg._sum.totalAmount || 0,
+      comissao: Math.abs(comAgg._sum.amount || 0),
+      saldoDisponivel: saldo
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error fetching supplier metrics', error: error.message });
+  }
+};
+
 export const getAdminAuditLogs = async (req: Request, res: Response) => {
     try {
         const { action, startDate, endDate } = req.query;

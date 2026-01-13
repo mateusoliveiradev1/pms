@@ -2,6 +2,7 @@ import prisma from '../prisma';
 import MercadoPagoConfig, { Payment } from 'mercadopago';
 import Stripe from 'stripe';
 import { logFinancialEvent, logger } from '../lib/logger';
+import { CommissionService } from './commissionService';
 
 // Initialize Gateways
 const mpAccessToken = process.env.MERCADOPAGO_ACCESS_TOKEN || 'TEST-ACCESS-TOKEN';
@@ -389,7 +390,7 @@ export const PaymentService = {
             if (commission === 0 && netValue === 0) {
                 // Calculate if missing
                 const netAmount = amountPaid; // Assuming amountPaid is full amount
-                const commissionRate = order.supplier.plan?.commissionPercent || 10;
+                const commissionRate = await CommissionService.getCommissionRateForSupplier(order.supplierId);
                 const platformCommission = netAmount * (commissionRate / 100);
                 const supplierPayout = netAmount - platformCommission;
                 
@@ -435,17 +436,19 @@ export const PaymentService = {
             });
 
             // 2. PLATFORM_COMMISSION
-            await tx.financialLedger.create({
-                data: {
-                    supplierId: order.supplierId,
-                    type: 'PLATFORM_COMMISSION',
-                    amount: -commission,
-                    status: 'COMPLETED',
-                    referenceId: order.id,
-                    description: `Comissão Marketplace #${order.orderNumber}`,
-                    releaseDate: null
-                }
-            });
+            if (commission > 0) {
+                await tx.financialLedger.create({
+                    data: {
+                        supplierId: order.supplierId,
+                        type: 'PLATFORM_COMMISSION',
+                        amount: -commission,
+                        status: 'COMPLETED',
+                        referenceId: order.id,
+                        description: `Comissão Marketplace #${order.orderNumber}`,
+                        releaseDate: null
+                    }
+                });
+            }
 
             // 3. ORDER_CREDIT_PENDING
             await tx.financialLedger.create({

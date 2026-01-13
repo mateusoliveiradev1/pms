@@ -10,5 +10,5 @@
     "skipLibCheck": true
   },
   "include": ["src/**/*", "prisma/**/*"],
-  "exclude": ["node_modules", "mobile", "dist"]
+  "exclude": ["node_modules", "mobile", "dist", "src/**/*.test.ts"]
 }

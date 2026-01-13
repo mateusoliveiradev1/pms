@@ -1,4 +1,5 @@
 import prisma from '../prisma';
+import { CommissionService } from './commissionService';
 import { 
   Prisma, 
   Supplier, 
@@ -107,8 +108,7 @@ export const FinancialService = {
 
         // Fallback calculation if values are missing (e.g. legacy orders)
         if (commission === 0 && netValue === 0) {
-            const plan = order.supplier.plan;
-            const commissionRate = plan?.commissionPercent || 10;
+            const commissionRate = await CommissionService.getCommissionRateForSupplier(order.supplierId);
             const financials = FinancialService.calculateOrderFinancials(totalPaid, commissionRate, 0);
             commission = financials.platformCommission;
             netValue = financials.supplierPayout;
@@ -140,17 +140,19 @@ export const FinancialService = {
         });
 
         // B. PLATFORM_COMMISSION (Debit - Audit)
-        await tx.financialLedger.create({
-            data: {
-                supplierId: order.supplierId,
-                type: 'PLATFORM_COMMISSION',
-                amount: -commission,
-                status: 'COMPLETED',
-                referenceId: order.id,
-                description: `Comissão Marketplace Pedido #${order.orderNumber}`,
-                releaseDate: null
-            }
-        });
+        if (commission > 0) {
+            await tx.financialLedger.create({
+                data: {
+                    supplierId: order.supplierId,
+                    type: 'PLATFORM_COMMISSION',
+                    amount: -commission,
+                    status: 'COMPLETED',
+                    referenceId: order.id,
+                    description: `Comissão Marketplace Pedido #${order.orderNumber}`,
+                    releaseDate: null
+                }
+            });
+        }
 
         // C. ORDER_CREDIT_PENDING (Net - Affects Pending Balance)
         await tx.financialLedger.create({
