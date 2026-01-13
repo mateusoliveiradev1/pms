@@ -89,12 +89,23 @@ const DashboardScreen = () => {
       // Don't show full screen loader on refresh
       if (!refreshing) setLoading(true);
       
-      const [productsRes, salesRes] = await Promise.all([
-        api.get<Product[]>('/products'),
-        api.get<SalesStatsResponse>('/reports/sales').catch(() => ({ data: null }))
-      ]);
+      // Independent fetches for resilience
+      const fetchProducts = api.get<Product[]>('/products').catch(err => {
+          console.log('Dashboard: Failed to fetch products', err.message);
+          return { data: [] as Product[] };
+      });
 
-      const allProducts = productsRes.data;
+      const fetchSales = api.get<SalesStatsResponse>('/reports/sales').catch(err => {
+          // If 403, just ignore silently (permission)
+          if (err.response?.status !== 403) {
+             console.log('Dashboard: Failed to fetch sales', err.message);
+          }
+          return { data: null };
+      });
+
+      const [productsRes, salesRes] = await Promise.all([fetchProducts, fetchSales]);
+
+      const allProducts = productsRes.data || [];
       setProducts(allProducts.slice(0, 5));
 
       // Process Sales Data for Dashboard
@@ -104,15 +115,17 @@ const DashboardScreen = () => {
       let chartLabels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']; // Default
 
       if (salesRes.data) {
-          realTotalSales = salesRes.data.totalSales;
-          realTotalOrders = salesRes.data.totalOrders;
+          realTotalSales = salesRes.data.totalSales || 0;
+          realTotalOrders = salesRes.data.totalOrders || 0;
 
           // Get last 7 days data for the chart
-          // The backend returns 30 days ordered by date
-          const last7Days = salesRes.data.chartData.slice(-7);
-          
-          chartValues = last7Days.map(d => d.value);
-          chartLabels = last7Days.map(d => d.date.split('/')[0]); // Just the day number
+          if (salesRes.data.chartData && Array.isArray(salesRes.data.chartData)) {
+            const last7Days = salesRes.data.chartData.slice(-7);
+            if (last7Days.length > 0) {
+                chartValues = last7Days.map(d => d.value);
+                chartLabels = last7Days.map(d => d.date.split('/')[0]);
+            }
+          }
       }
 
       setWeeklyChartData(chartValues);
@@ -122,7 +135,7 @@ const DashboardScreen = () => {
         totalProducts: allProducts.length,
         totalOrders: realTotalOrders, 
         lowStockProducts: allProducts.filter((p) => p.stockAvailable < 5).length,
-        pendingOrders: 0, // Need a specific endpoint for this later
+        pendingOrders: 0, 
         totalSales: realTotalSales
       });
 

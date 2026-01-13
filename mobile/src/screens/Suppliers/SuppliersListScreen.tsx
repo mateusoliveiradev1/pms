@@ -97,7 +97,7 @@ const SuppliersListScreen = () => {
             </View>
         </View>
         
-        {isAdmin && (
+        {(isAccountAdmin || isSystemAdmin) && (
             <TouchableOpacity 
                 onPress={() => handleDelete(item.id)} 
                 style={styles.deleteButton}

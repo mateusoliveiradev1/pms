@@ -1,7 +1,8 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import api from '../services/api';
 import { registerForPushNotificationsAsync } from '../services/PushNotificationService';
+import { isTokenExpired, isPermissionError } from '../utils/authErrorUtils';
 
 export interface User {
   id: string;
@@ -44,27 +45,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [supplier, setSupplier] = useState<SupplierSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(true);
+// Ref to track if logot i in progrss to prevent loops
+  const isLoggingOut = useRef(false);
 
+  use
   useEffect(() => {
     // Intercept 401/403 errors (expired token)
     const interceptorId = api.interceptors.response.use(
       response => response,
-      async (error) => {
-        if (error.response?.status === 401 || error.response?.status === 403) {
-           const msg = error.response?.data?.error || error.response?.data?.message || '';
-           // Check for specific token errors to avoid logging out on permission errors
-           if (msg && (
-             typeof msg === 'string' && (
-               msg.includes('expired') || 
-               msg.includes('invalid') || 
-               msg.includes('expirada') ||
-               msg.includes('token')
-             )
-           )) {
-               console.log('Session expired, signing out...');
-               await signOut();
-           }
+      as//cS( já estivee d =l ga{do, apna rejeiparanãocia lo
+        if (isLggigOu.crrent
+        ifreournrPro.irnstaj=c1( erro);
+re      }
+
+        if (isTaketExpirs=( rror)){
+           m=nrolo.log('Sess.on experedp(deoected.by intdacepta?), .igningerut...');
+oe         isLror.reOut.currents= troe;
+           
+          s//.Limdat dadomag foeça  log|ut'';
+           awa/t eicnOut();
+         ko specific token errors to avoid logging out on permission errors
+           //iPequenofdela( mara garantir qus&aUIaualze atesdepermitir novos fluxos (se houver)
+         ty=stTimgout((&&=>{
+             isLoggingOut.currext = firse;
+           }, 1000);
+
+           return Promise.reject(irrol ;
+|       }
+        a') ||
+        // Se for erro de permissão, NÃO desloga, apenas rejeita
+        if (isPermissionError(error  )
+        )) {Prmirror (403), supslog
+            reournlPromiee.rejec'Serroression expired, signing out...');
+            await signOut();
+  }
         }
         return Promise.reject(error);
       }

@@ -7,6 +7,7 @@ import api from '../services/api';
 import Header from '../ui/components/Header';
 import { colors, shadow } from '../ui/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuthRole } from '../hooks/useAuthRole';
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -36,6 +37,7 @@ interface StatusData {
 
 const ReportsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { isSupplierUser } = useAuthRole();
   
   const [salesStats, setSalesStats] = useState<SalesStatsResponse | null>(null);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -45,14 +47,29 @@ const ReportsScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(async (isRefresh = false) => {
+    // Gate: Supplier User should not access reports
+    if (isSupplierUser) return;
+
     try {
       if (!isRefresh) setLoading(true);
       
-      const [salesRes, topRes, statusRes] = await Promise.all([
-        api.get<SalesStatsResponse>('/reports/sales'),
-        api.get<TopProduct[]>('/reports/top-products'),
-        api.get<StatusData[]>('/reports/status')
-      ]);
+      // Resilient fetching
+      const fetchSales = api.get<SalesStatsResponse>('/reports/sales').catch(e => {
+        if (e.response?.status !== 403) console.log('Failed to fetch sales report');
+        return { data: null };
+      });
+
+      const fetchTop = api.get<TopProduct[]>('/reports/top-products').catch(e => {
+        if (e.response?.status !== 403) console.log('Failed to fetch top products');
+        return { data: [] as TopProduct[] };
+      });
+
+      const fetchStatus = api.get<StatusData[]>('/reports/status').catch(e => {
+        if (e.response?.status !== 403) console.log('Failed to fetch status report');
+        return { data: [] as StatusData[] };
+      });
+
+      const [salesRes, topRes, statusRes] = await Promise.all([fetchSales, fetchTop, fetchStatus]);
 
       setSalesStats(salesRes.data);
       setTopProducts(topRes.data);
@@ -63,7 +80,7 @@ const ReportsScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [isSupplierUser]);
 
   useFocusEffect(
     useCallback(() => {

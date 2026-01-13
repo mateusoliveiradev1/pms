@@ -20,22 +20,20 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Apenas logar erro genérico se não for cancelamento
+    if (axios.isCancel(error)) {
+       return Promise.reject(error);
+    }
+    
+    // Logs limpos - Apenas erros reais (não 401/403 que são tratados no AuthContext)
     if (error.response) {
-        console.log(`API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, error.response.status, error.response.data);
+        if (error.response.status !== 401 && error.response.status !== 403) {
+            console.log(`API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, error.response.status);
+        }
     } else {
         console.log(`API Connection Error: ${error.message}`);
     }
 
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      // Clear storage to force re-login logic on next app load or via context if possible
-      SecureStore.deleteItemAsync('token').catch(console.log);
-      SecureStore.deleteItemAsync('user').catch(console.log);
-      
-      Alert.alert(
-        'Sessão Expirada',
-        'Sua sessão expirou ou você não tem permissão. Por favor, faça login novamente.'
-      );
-    }
     return Promise.reject(error);
   }
 );
