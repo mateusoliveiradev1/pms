@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAuthRole } from '../hooks/useAuthRole';
 import { Ionicons } from '@expo/vector-icons';
 import AppSplashScreen from '../screens/SplashScreen';
+import PendingApprovalScreen from '../screens/PendingApprovalScreen';
 
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
@@ -46,6 +47,7 @@ export type RootStackParamList = {
   AdminIntegrations: undefined;
   HealthMonitor: undefined;
   Receipt: { entry: any };
+  PendingApproval: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

@@ -49,38 +49,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 // Ref to track if logot i in progrss to prevent loops
   const isLoggingOut = useRef(false);
 
-  use
   useEffect(() => {
     // Intercept 401/403 errors (expired token)
     const interceptorId = api.interceptors.response.use(
       response => response,
-      as//cS( já estivee d =l ga{do, apna rejeiparanãocia lo
-        if (isLggigOu.crrent
-        ifreournrPro.irnstaj=c1( erro);
-re      }
-
-        if (isTaketExpirs=( rror)){
-           m=nrolo.log('Sess.on experedp(deoected.by intdacepta?), .igningerut...');
-oe         isLror.reOut.currents= troe;
-           
-          s//.Limdat dadomag foeça  log|ut'';
-           awa/t eicnOut();
-         ko specific token errors to avoid logging out on permission errors
-           //iPequenofdela( mara garantir qus&aUIaualze atesdepermitir novos fluxos (se houver)
-         ty=stTimgout((&&=>{
-             isLoggingOut.currext = firse;
-           }, 1000);
-
-           return Promise.reject(irrol ;
-|       }
-        a') ||
-        // Se for erro de permissão, NÃO desloga, apenas rejeita
-        if (isPermissionError(error  )
-        )) {Prmirror (403), supslog
-            reournlPromiee.rejec'Serroression expired, signing out...');
-            await signOut();
-  }
+      async (error) => {
+        // If already logging out, just reject to stop processing
+        if (isLoggingOut.current) {
+          return Promise.reject(error);
         }
+
+        // Check for Session Expiration (401 or specific messages)
+        if (isTokenExpired(error)) {
+          console.log('Session expired detected by interceptor, signing out...');
+          isLoggingOut.current = true;
+          
+          try {
+             // Force cleanup
+             await signOut();
+          } catch (e) {
+             console.log('Error during interceptor signout', e);
+          } finally {
+             // Reset flag after delay
+             setTimeout(() => {
+                 isLoggingOut.current = false;
+             }, 1500);
+          }
+
+          return Promise.reject(error);
+        }
+
+        // Permission errors (403) should NOT log out
+        // The UI (screens) should handle 403 by showing empty states or messages
         return Promise.reject(error);
       }
     );

@@ -4,6 +4,7 @@ import { View, StyleSheet, ScrollView, RefreshControl, Alert, Modal, TextInput, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, radius, shadow } from '../../ui/theme';
 import { useAuth } from '../../context/AuthContext';
+import { useAuthRole } from '../../hooks/useAuthRole';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { useAdminDashboard } from './hooks/useAdminDashboard';
@@ -19,6 +20,7 @@ import OperationalAlerts from './components/OperationalAlerts';
 
 const AdminFinancialScreen = () => {
   const { user } = useAuth();
+  const { isAccountAdmin, isSystemAdmin } = useAuthRole();
   const navigation = useNavigation<any>();
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'SUPPLIERS' | 'WITHDRAWALS' | 'SETTINGS' | 'AUDIT' | 'RECONCILIATION'>('DASHBOARD');
   

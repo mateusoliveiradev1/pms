@@ -62,7 +62,7 @@ const RegisterScreen = () => {
            <Text style={[styles.subtitle, { marginTop: 8, marginBottom: 32, maxWidth: 300 }]}>
               Bem-vindo(a) à plataforma. Verifique seu email para confirmar o cadastro.
            </Text>
-           <Button title="Ir para Login" onPress={() => navigation.navigate('Login')} style={{ width: '100%' }} />
+           <Button title="Ir para Login" onPress={() => navigation.navigate('Login' as never)} style={{ width: '100%' }} />
         </View>
       </SafeAreaView>
     );

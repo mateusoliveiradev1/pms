@@ -5,6 +5,7 @@ import api from '../../services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { useAuthRole } from '../../hooks/useAuthRole';
 import Header from '../../ui/components/Header';
 import { colors, shadow, spacing, radius } from '../../ui/theme';
 
@@ -22,7 +23,7 @@ const SuppliersListScreen = () => {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   const { user } = useAuth();
-  const isAdmin = (user as any)?.role === 'ADMIN';
+  const { isAccountAdmin, isSystemAdmin, isSupplierUser, isSupplierAdmin } = useAuthRole();
 
   const fetchSuppliers = async () => {
     try {
