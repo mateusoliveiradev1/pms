@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../ui/theme';
 import { MonitorService, HealthMetrics } from '../../services/monitorService';
 import Card from '../../ui/components/Card';
@@ -14,9 +15,10 @@ const HealthMonitorScreen = () => {
     const [data, setData] = useState<HealthMetrics | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchData = async () => {
+    const fetchData = async (silent = false) => {
         try {
             setError(null);
+            if (!silent) setLoading(true);
             const health = await MonitorService.getHealth();
             setData(health);
         } catch (error) {
@@ -28,8 +30,18 @@ const HealthMonitorScreen = () => {
         }
     };
 
+    useFocusEffect(
+        useCallback(() => {
+            fetchData();
+            const interval = setInterval(() => {
+                fetchData(true);
+            }, 5000);
+            return () => clearInterval(interval);
+        }, [])
+    );
+
     useEffect(() => {
-        fetchData();
+        // Initial load handled by useFocusEffect
     }, []);
 
     const onRefresh = () => {
@@ -55,7 +67,7 @@ const HealthMonitorScreen = () => {
                 <View style={styles.center}>
                     <Ionicons name="alert-circle-outline" size={48} color={theme.colors.error} />
                     <Text style={{ color: theme.colors.text, marginTop: 16, fontSize: 16 }}>{error || 'Dados indisponíveis'}</Text>
-                    <TouchableOpacity onPress={fetchData} style={styles.retryButton}>
+                    <TouchableOpacity onPress={() => fetchData()} style={styles.retryButton}>
                         <Text style={{ color: theme.colors.primary, fontWeight: 'bold' }}>TENTAR NOVAMENTE</Text>
                     </TouchableOpacity>
                 </View>
@@ -135,7 +147,7 @@ const HealthMonitorScreen = () => {
                         <Text style={[styles.sectionTitle, { color: theme.colors.error }]}>Último Erro Crítico</Text>
                         <Text style={{ color: theme.colors.text, fontWeight: 'bold', marginTop: 8 }}>{data.lastCritical.action}</Text>
                         <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>{new Date(data.lastCritical.createdAt).toLocaleString()}</Text>
-                        <Text style={{ color: theme.colors.text, marginTop: 4 }}>{JSON.stringify(data.lastCritical.payload || {})}</Text>
+                        <Text style={{ color: theme.colors.text, marginTop: 4 }}>{JSON.stringify(data.lastCritical.payload || {}, null, 2)}</Text>
                     </Card>
                 )}
             </ScrollView>

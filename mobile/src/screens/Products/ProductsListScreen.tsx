@@ -8,12 +8,14 @@ import Header from '../../ui/components/Header';
 import { useAuth } from '../../context/AuthContext';
 import { colors, shadow, radius, spacing } from '../../ui/theme';
 
+import { useAuthRole } from '../../hooks/useAuthRole';
+
 type Product = {
   id: string;
   name: string;
   sku: string;
   stockAvailable: number;
-  finalPrice: number;
+  price: number;
 };
 
 type FilterType = 'ALL' | 'LOW_STOCK' | 'OUT_OF_STOCK';
@@ -26,7 +28,12 @@ const ProductsListScreen = () => {
   const [filter, setFilter] = useState<FilterType>('ALL');
   const navigation = useNavigation();
   const route = useRoute();
+  
+  // @ts-ignore
+  const { initialSupplier } = (route.params as { initialSupplier?: any }) || {};
+
   const { activeAccountId, loading: authLoading } = useAuth();
+  const { isSystemAdmin } = useAuthRole();
 
   useEffect(() => {
     // @ts-ignore
@@ -36,15 +43,24 @@ const ProductsListScreen = () => {
     }
   }, [route.params]);
 
-  const loadProducts = async () => {
-    if (!activeAccountId) {
+  const loadProducts = async (silent = false) => {
+    if (!isSystemAdmin && !activeAccountId) {
         setLoading(false);
         return;
     }
 
     try {
-      if (!refreshing) setLoading(true);
-      const response = await api.get('/products', { params: query ? { query } : undefined });
+      if (!refreshing && !silent) setLoading(true);
+      
+      const params: any = {};
+      if (query) params.query = query;
+      
+      // Apply initial supplier filter if present (simple implementation for MVP)
+      if (initialSupplier) {
+          params.supplierId = initialSupplier.id;
+      }
+      
+      const response = await api.get('/products', { params });
       setProducts(response.data);
     } catch (error) {
       console.log('Error loading products', error);
@@ -57,7 +73,11 @@ const ProductsListScreen = () => {
   useFocusEffect(
     useCallback(() => {
         loadProducts();
-    }, [query, activeAccountId])
+        const interval = setInterval(() => {
+            loadProducts(true);
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [query, activeAccountId, isSystemAdmin])
   );
 
   const getFilteredProducts = () => {
@@ -119,7 +139,7 @@ const ProductsListScreen = () => {
             
             <View style={styles.cardFooter}>
                 <Text style={styles.price}>
-                    R$ <Text style={styles.priceValue}>{item.finalPrice?.toFixed(2)}</Text>
+                    R$ <Text style={styles.priceValue}>{(item.price || 0).toFixed(2)}</Text>
                 </Text>
                 <View style={styles.stockContainer}>
                     <Ionicons name="layers-outline" size={14} color={colors.muted} style={{marginRight: 4}} />
@@ -149,7 +169,7 @@ const ProductsListScreen = () => {
       );
   }
 
-  if (!activeAccountId) {
+  if (!isSystemAdmin && !activeAccountId) {
       return (
           <SafeAreaView style={styles.container} edges={['top']}>
               <Header title="Produtos" onBack={() => navigation.goBack()} />

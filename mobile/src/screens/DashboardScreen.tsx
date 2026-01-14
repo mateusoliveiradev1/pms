@@ -7,7 +7,10 @@ import {
   RefreshControl, 
   Dimensions, 
   TouchableOpacity,
-  ActivityIndicator
+  ActivityIndicator,
+  Modal,
+  TextInput,
+  FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
@@ -24,7 +27,7 @@ interface Product {
   name: string;
   sku: string;
   stockAvailable: number;
-  finalPrice: number;
+  price: number;
 }
 
 interface DashboardStats {
@@ -45,6 +48,12 @@ interface SalesStatsResponse {
     totalSales: number;
     totalOrders: number;
     chartData: SalesChartItem[];
+}
+
+interface Supplier {
+    id: string;
+    name: string;
+    fantasyName?: string;
 }
 
 interface StatCardProps {
@@ -87,33 +96,55 @@ const DashboardScreen = () => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Admin Filters
+  const [modalVisible, setModalVisible] = useState(false);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const loadSuppliers = async () => {
+      try {
+          const response = await api.get('/suppliers');
+          setSuppliers(response.data);
+      } catch (error) {
+          console.log('Error loading suppliers', error);
+      }
+  };
+
   const loadData = useCallback(async () => {
     // 1. Context Guard
     if (!isSystemAdmin && !activeAccountId) {
-        console.log('Dashboard: Missing activeAccountId, skipping fetch');
         setLoading(false);
         return;
     }
 
     try {
-      // Don't show full screen loader on refresh
       if (!refreshing) setLoading(true);
       
+      let queryParams = '';
+      if (isSystemAdmin && selectedSupplier) {
+          queryParams = `?supplierId=${selectedSupplier.id}`;
+      }
+
       // Independent fetches for resilience
-      const fetchProducts = api.get<Product[]>('/products').catch(err => {
+      const fetchProducts = api.get<Product[]>(`/products${queryParams}`)
+        .catch(err => {
           if (err.response?.status !== 403) {
             console.log('Dashboard: Failed to fetch products', err.message);
           }
           return { data: [] as Product[] };
       });
 
-      const canFetchSales = (isAccountAdmin || isSupplierAdmin || isSystemAdmin) && activeAccountId;
+      // Fetch Sales allowed for System Admin (Global or Supplier filtered) or Account Users
+      const canFetchSales = isSystemAdmin || ((isAccountAdmin || isSupplierAdmin) && activeAccountId);
+      
       const fetchSales = canFetchSales
-        ? api.get<SalesStatsResponse>('/reports/sales').catch(err => {
-            if (err.response?.status !== 403) {
-               console.log('Dashboard: Failed to fetch sales', err.message);
-            }
-            return { data: null };
+        ? api.get<SalesStatsResponse>(`/reports/sales${queryParams}`)
+            .catch(err => {
+                if (err.response?.status !== 403) {
+                   console.log('Dashboard: Failed to fetch sales', err.message);
+                }
+                return { data: null };
           })
         : Promise.resolve({ data: null as any });
 
@@ -163,13 +194,21 @@ const DashboardScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [refreshing, isAccountAdmin, isSupplierAdmin, isSystemAdmin, activeAccountId]);
+  }, [refreshing, isAccountAdmin, isSupplierAdmin, isSystemAdmin, activeAccountId, selectedSupplier]);
 
   useEffect(() => {
     if (isFocused) {
-      loadData();
+        if (isSystemAdmin) loadSuppliers();
+        loadData();
     }
-  }, [isFocused, loadData]);
+  }, [isFocused, loadData, isSystemAdmin]);
+
+  // Force reload when filter changes
+  useEffect(() => {
+      if (isSystemAdmin && isFocused) {
+          loadData();
+      }
+  }, [selectedSupplier]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -236,6 +275,13 @@ const DashboardScreen = () => {
             <Text style={styles.subtitle}>Visão geral do seu negócio</Text>
           </View>
           <View style={{flexDirection: 'row', alignItems: 'center'}}>
+            {isSystemAdmin && (
+                <TouchableOpacity onPress={() => setModalVisible(true)} style={{marginRight: 12}}>
+                    <View style={{ backgroundColor: colors.secondary, borderRadius: 20, padding: 4, width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}>
+                        <Ionicons name="filter" size={20} color="#FFF" />
+                    </View>
+                </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={loadData} style={{marginRight: 12}}>
                 <View style={{ backgroundColor: colors.primary, borderRadius: 20, padding: 4, width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}>
                     <Ionicons name="reload" size={20} color="#FFF" />
@@ -247,20 +293,36 @@ const DashboardScreen = () => {
           </View>
         </View>
 
+        {isSystemAdmin && (
+            <View style={styles.adminFilterBar}>
+                <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                    <Ionicons name={selectedSupplier ? "business" : "globe-outline"} size={16} color={colors.primary} style={{marginRight: 8}} />
+                    <Text style={styles.adminFilterText}>
+                        {selectedSupplier ? `${selectedSupplier.name}` : 'Visão Global'}
+                    </Text>
+                </View>
+                {selectedSupplier && (
+                    <TouchableOpacity onPress={() => setSelectedSupplier(null)}>
+                        <Ionicons name="close-circle" size={20} color={colors.primary} />
+                    </TouchableOpacity>
+                )}
+            </View>
+        )}
+
         <View style={styles.statsGrid}>
           <StatCard 
             title="Produtos" 
             value={stats.totalProducts} 
             icon="cube-outline" 
             color={colors.primary}
-            onPress={() => navigation.navigate('ProductsList' as never)}
+            onPress={() => navigation.navigate('ProductsList' as never, { initialSupplier: selectedSupplier } as never)}
           />
           <StatCard 
             title="Pedidos" 
             value={stats.totalOrders} 
             icon="cart-outline" 
             color={colors.secondary} 
-            onPress={() => navigation.navigate('Pedidos' as never)}
+            onPress={() => navigation.navigate('Pedidos' as never, { initialSupplier: selectedSupplier } as never)}
           />
           <StatCard 
             title="Baixo Estoque" 
@@ -381,7 +443,7 @@ const DashboardScreen = () => {
               <Text style={styles.productSku}>{product.sku}</Text>
             </View>
             <View style={styles.productMeta}>
-              <Text style={styles.productPrice}>R$ {product.finalPrice.toFixed(2)}</Text>
+              <Text style={styles.productPrice}>R$ {(product.price || 0).toFixed(2)}</Text>
               <Text style={[
                 styles.stockBadge, 
                 { color: product.stockAvailable < 5 ? colors.error : colors.success }
@@ -392,6 +454,74 @@ const DashboardScreen = () => {
           </View>
         ))}
       </ScrollView>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Filtrar por Fornecedor</Text>
+                    <TouchableOpacity onPress={() => setModalVisible(false)}>
+                        <Ionicons name="close" size={24} color={colors.text} />
+                    </TouchableOpacity>
+                </View>
+                
+                <View style={styles.searchContainer}>
+                    <Ionicons name="search" size={20} color={colors.textSecondary} style={{marginRight: 8}} />
+                    <TextInput 
+                        style={styles.searchInput}
+                        placeholder="Buscar fornecedor..."
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </View>
+                
+                <FlatList
+                    data={suppliers.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))}
+                    keyExtractor={item => item.id}
+                    style={{maxHeight: 400}}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity 
+                            style={styles.supplierItem}
+                            onPress={() => {
+                                setSelectedSupplier(item);
+                                setModalVisible(false);
+                            }}
+                        >
+                            <View>
+                                <Text style={styles.supplierName}>{item.name}</Text>
+                                {item.fantasyName && <Text style={styles.supplierSub}>{item.fantasyName}</Text>}
+                            </View>
+                            {selectedSupplier?.id === item.id && (
+                                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                            )}
+                        </TouchableOpacity>
+                    )}
+                    ListHeaderComponent={
+                        <TouchableOpacity 
+                            style={styles.supplierItem} 
+                            onPress={() => {
+                                setSelectedSupplier(null);
+                                setModalVisible(false);
+                            }}
+                        >
+                            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                                <Ionicons name="globe-outline" size={20} color={colors.primary} style={{marginRight: 12}} />
+                                <Text style={[styles.supplierName, { color: colors.primary, fontWeight: 'bold' }]}>
+                                    Ver Todos (Global)
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
+                    }
+                />
+            </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -558,6 +688,76 @@ const styles = StyleSheet.create({
   stockBadge: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  adminFilterBar: {
+      backgroundColor: '#E3F2FD',
+      padding: 12,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderBottomWidth: 1,
+      borderBottomColor: '#BBDEFB',
+      marginBottom: 16,
+      borderRadius: 8,
+  },
+  adminFilterText: {
+      color: colors.primary,
+      fontWeight: '600',
+      fontSize: 14,
+  },
+  modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+  },
+  modalContent: {
+      backgroundColor: '#fff',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 20,
+      maxHeight: '80%',
+  },
+  modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+  },
+  modalTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: colors.text,
+  },
+  searchContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#f5f5f5',
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      marginBottom: 16,
+  },
+  searchInput: {
+      flex: 1,
+      paddingVertical: 12,
+      fontSize: 16,
+      color: colors.text,
+  },
+  supplierItem: {
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: '#f0f0f0',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+  },
+  supplierName: {
+      fontSize: 16,
+      color: colors.text,
+      marginBottom: 4,
+  },
+  supplierSub: {
+      fontSize: 12,
+      color: colors.textSecondary,
   },
 });
 

@@ -55,6 +55,7 @@ export interface AdminDashboardStats {
     commissions: number;
     subscriptions: number;
     total: number;
+    gross?: number;
   };
   payouts: {
       totalPaid: number;
@@ -82,7 +83,7 @@ export interface SupplierFinancial {
     totalCommission: number;
     totalWithdrawn?: number;
     plan: { name: string } | null;
-    _count: { orders: number };
+    totalOrders: number;
     totalBalance: number;
 }
 

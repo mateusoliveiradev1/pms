@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, Modal, TextInput, FlatList } from 'react-native';
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -37,10 +37,16 @@ interface StatusData {
   count: number;
 }
 
+interface Supplier {
+    id: string;
+    name: string;
+    fantasyName?: string;
+}
+
 const ReportsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { activeAccountId, loading: authLoading } = useAuth();
-  const { isSupplierUser } = useAuthRole();
+  const { isSupplierUser, isSystemAdmin } = useAuthRole();
   
   const [salesStats, setSalesStats] = useState<SalesStatsResponse | null>(null);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
@@ -49,9 +55,24 @@ const ReportsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Admin Filters
+  const [modalVisible, setModalVisible] = useState(false);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const loadSuppliers = async () => {
+      try {
+          const response = await api.get('/suppliers');
+          setSuppliers(response.data);
+      } catch (error) {
+          console.log('Error loading suppliers', error);
+      }
+  };
+
   const fetchData = useCallback(async (isRefresh = false) => {
     // Context Guard
-    if (!activeAccountId) {
+    if (!activeAccountId && !isSystemAdmin) {
         setLoading(false);
         return;
     }
@@ -62,18 +83,23 @@ const ReportsScreen: React.FC = () => {
     try {
       if (!isRefresh) setLoading(true);
       
+      let queryParams = '';
+      if (isSystemAdmin && selectedSupplier) {
+          queryParams = `?supplierId=${selectedSupplier.id}`;
+      }
+
       // Resilient fetching
-      const fetchSales = api.get<SalesStatsResponse>('/reports/sales').catch(e => {
+      const fetchSales = api.get<SalesStatsResponse>(`/reports/sales${queryParams}`).catch(e => {
         if (e.response?.status !== 403) console.log('Failed to fetch sales report');
         return { data: null };
       });
 
-      const fetchTop = api.get<TopProduct[]>('/reports/top-products').catch(e => {
+      const fetchTop = api.get<TopProduct[]>(`/reports/top-products${queryParams}`).catch(e => {
         if (e.response?.status !== 403) console.log('Failed to fetch top products');
         return { data: [] as TopProduct[] };
       });
 
-      const fetchStatus = api.get<StatusData[]>('/reports/status').catch(e => {
+      const fetchStatus = api.get<StatusData[]>(`/reports/status${queryParams}`).catch(e => {
         if (e.response?.status !== 403) console.log('Failed to fetch status report');
         return { data: [] as StatusData[] };
       });
@@ -93,13 +119,21 @@ const ReportsScreen: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isSupplierUser, activeAccountId]);
+  }, [isSupplierUser, activeAccountId, isSystemAdmin, selectedSupplier]);
 
   useFocusEffect(
     useCallback(() => {
+      if (isSystemAdmin) loadSuppliers();
       fetchData();
-    }, [fetchData])
+    }, [fetchData, isSystemAdmin])
   );
+
+  // Force reload when filter changes (Validated Fix)
+  useEffect(() => {
+      if (isSystemAdmin) {
+          fetchData();
+      }
+  }, [selectedSupplier]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -197,7 +231,7 @@ const ReportsScreen: React.FC = () => {
       );
   }
 
-  if (!activeAccountId) {
+  if (!activeAccountId && !isSystemAdmin) {
       return (
           <SafeAreaView style={styles.container} edges={['top']}>
               <Header title="Relatórios e Gráficos" onBack={() => navigation.goBack()} />
@@ -213,7 +247,12 @@ const ReportsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Header title="Relatórios e Gráficos" onBack={() => navigation.goBack()} />
+      <Header 
+        title="Relatórios e Gráficos" 
+        onBack={() => navigation.goBack()}
+        rightIcon={isSystemAdmin ? "filter" : undefined}
+        onRightPress={isSystemAdmin ? () => setModalVisible(true) : undefined}
+      />
       
       {loading && !refreshing ? (
         <View style={styles.center}>
@@ -360,6 +399,75 @@ const ReportsScreen: React.FC = () => {
         )}
         </ScrollView>
       )}
+
+      {/* Admin Filter Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Filtrar por Fornecedor</Text>
+                    <TouchableOpacity onPress={() => setModalVisible(false)}>
+                        <Ionicons name="close" size={24} color={colors.text} />
+                    </TouchableOpacity>
+                </View>
+                
+                <View style={styles.searchContainer}>
+                    <Ionicons name="search" size={20} color="#666" style={{marginRight: 8}} />
+                    <TextInput 
+                        style={styles.searchInput}
+                        placeholder="Buscar fornecedor..."
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </View>
+                
+                <FlatList
+                    data={suppliers.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))}
+                    keyExtractor={item => item.id}
+                    style={{maxHeight: 400}}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity 
+                            style={styles.supplierItem}
+                            onPress={() => {
+                                setSelectedSupplier(item);
+                                setModalVisible(false);
+                            }}
+                        >
+                            <View>
+                                <Text style={styles.supplierName}>{item.name}</Text>
+                                {item.fantasyName && <Text style={styles.supplierSub}>{item.fantasyName}</Text>}
+                            </View>
+                            {selectedSupplier?.id === item.id && (
+                                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                            )}
+                        </TouchableOpacity>
+                    )}
+                    ListHeaderComponent={
+                        <TouchableOpacity 
+                            style={styles.supplierItem} 
+                            onPress={() => {
+                                setSelectedSupplier(null);
+                                setModalVisible(false);
+                            }}
+                        >
+                            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                                <Ionicons name="globe-outline" size={20} color={colors.primary} style={{marginRight: 12}} />
+                                <Text style={[styles.supplierName, { color: colors.primary, fontWeight: 'bold' }]}>
+                                    Ver Todos (Global)
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
+                    }
+                />
+            </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -456,7 +564,61 @@ const styles = StyleSheet.create({
       fontSize: 16,
       fontWeight: 'bold',
       color: colors.secondary,
-  }
+  },
+  modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+  },
+  modalContent: {
+      backgroundColor: '#fff',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 20,
+      maxHeight: '80%',
+  },
+  modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+  },
+  modalTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: colors.text,
+  },
+  searchContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#f5f5f5',
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      marginBottom: 16,
+  },
+  searchInput: {
+      flex: 1,
+      paddingVertical: 12,
+      fontSize: 16,
+      color: colors.text,
+  },
+  supplierItem: {
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: '#f0f0f0',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+  },
+  supplierName: {
+      fontSize: 16,
+      color: colors.text,
+      marginBottom: 4,
+  },
+  supplierSub: {
+      fontSize: 12,
+      color: '#999',
+  },
 });
 
 export default ReportsScreen;

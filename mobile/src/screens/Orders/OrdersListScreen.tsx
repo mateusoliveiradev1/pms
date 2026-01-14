@@ -1,12 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, ScrollView, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../../services/api';
-import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Header from '../../ui/components/Header';
 import Badge from '../../ui/components/Badge';
 import { colors, spacing, shadow } from '../../ui/theme';
+
+import { useAuth } from '../../context/AuthContext';
+import { useAuthRole } from '../../hooks/useAuthRole';
 
 interface Order {
   id: string;
@@ -17,48 +20,79 @@ interface Order {
   createdAt: string;
 }
 
-import { useAuth } from '../../context/AuthContext';
+interface Supplier {
+    id: string;
+    name: string;
+    fantasyName?: string;
+}
 
 const OrdersListScreen = () => {
-  const { activeAccountId } = useAuth(); // Import activeAccountId
+  const { activeAccountId } = useAuth();
+  const { isSystemAdmin } = useAuthRole();
+  
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [animateTick, setAnimateTick] = useState(0);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  
+  // Admin Filter States
+  const [modalVisible, setModalVisible] = useState(false);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
   const navigation = useNavigation();
-  const isFocused = useIsFocused();
+  // @ts-ignore
+  const { initialSupplier } = (useRoute().params as { initialSupplier?: Supplier }) || {};
+
+  useEffect(() => {
+    if (initialSupplier) {
+        setSelectedSupplier(initialSupplier);
+    }
+  }, [initialSupplier]);
 
   const STATUS_OPTIONS = [
     { label: 'Todos', value: null as string | null, icon: 'list' as const },
     { label: 'Novo', value: 'NEW' as const, icon: 'sparkles' as const },
+    { label: 'Pendente', value: 'PENDING' as const, icon: 'time' as const },
     { label: 'Enviado', value: 'SENT_TO_SUPPLIER' as const, icon: 'paper-plane' as const },
     { label: 'Transporte', value: 'SHIPPING' as const, icon: 'bus' as const },
     { label: 'Entregue', value: 'DELIVERED' as const, icon: 'checkmark-circle' as const },
     { label: 'Cancelado', value: 'CANCELLED' as const, icon: 'close-circle' as const },
   ];
 
-  useEffect(() => {
-    if (isFocused) {
-        loadOrders();
-        loadCounts();
-    }
-  }, [isFocused, activeAccountId]); // Add dependency
+  const loadSuppliers = async () => {
+      try {
+          const response = await api.get('/suppliers');
+          setSuppliers(response.data);
+      } catch (error) {
+          console.log('Error loading suppliers', error);
+      }
+  };
 
-  useEffect(() => {
-    loadOrders();
-  }, [selectedStatus, activeAccountId]); // Add dependency
-
-  const loadOrders = async () => {
-    if (!activeAccountId) {
+  const loadOrders = async (silent = false) => {
+    // If NOT admin and NO account, block.
+    if (!isSystemAdmin && !activeAccountId) {
         setLoading(false);
         return;
     }
 
     try {
-      setLoading(true);
-      const response = await api.get('/orders', { params: selectedStatus ? { status: selectedStatus } : undefined });
+      if (!silent) setLoading(true);
+      
+      const params: any = {};
+      if (selectedStatus) params.status = selectedStatus;
+      
+      if (isSystemAdmin) {
+          if (selectedSupplier) {
+              params.supplierId = selectedSupplier.id;
+          }
+          // If no supplier selected, no params -> Global Fetch
+      }
+
+      const response = await api.get('/orders', { params });
       setOrders(response.data);
     } catch (error) {
       console.log('Error loading orders', error);
@@ -69,17 +103,16 @@ const OrdersListScreen = () => {
   };
 
   const loadCounts = async () => {
-    if (!activeAccountId) return;
+    if (!isSystemAdmin && !activeAccountId) return;
 
     try {
       const response = await api.get('/orders/stats');
       setCounts(response.data || {});
     } catch (err) {
+      // Fallback: Calculate from current list if API fails
       try {
-        const response = await api.get('/orders');
-        const list: Order[] = response.data || [];
-        const local: Record<string, number> = { ALL: list.length, NEW: 0, SENT_TO_SUPPLIER: 0, SHIPPING: 0, DELIVERED: 0, CANCELLED: 0 };
-        for (const o of list) {
+        const local: Record<string, number> = { ALL: orders.length, NEW: 0, SENT_TO_SUPPLIER: 0, SHIPPING: 0, DELIVERED: 0, CANCELLED: 0 };
+        for (const o of orders) {
           const key = o.status;
           if (local[key] !== undefined) {
             local[key] += 1;
@@ -92,19 +125,37 @@ const OrdersListScreen = () => {
     }
   };
 
+  useFocusEffect(
+    useCallback(() => {
+        if (isSystemAdmin) {
+            loadSuppliers();
+        }
+        loadOrders();
+        loadCounts();
+
+        const interval = setInterval(() => {
+            loadOrders(true);
+            loadCounts();
+        }, 5000);
+
+        return () => clearInterval(interval);
+    }, [activeAccountId, selectedStatus, selectedSupplier, isSystemAdmin])
+  );
+
   const visibleOrders = useMemo(() => {
     if (!selectedStatus) return orders;
     return orders.filter(o => o.status === selectedStatus);
   }, [orders, selectedStatus]);
 
   // Rendering Hierarchy
-  if (!activeAccountId) {
+  if (!isSystemAdmin && !activeAccountId) {
       return (
         <SafeAreaView style={styles.container} edges={['top']}>
           <Header 
             showLogo 
             logoSize={32} 
-            animateLogo={isFocused} 
+            // @ts-ignore
+            animateLogo={true} 
             animateKey={animateTick} 
           />
           <View style={styles.center}>
@@ -198,12 +249,28 @@ const OrdersListScreen = () => {
       <Header 
         showLogo 
         logoSize={32} 
-        animateLogo={isFocused} 
+        animateLogo={true} 
         animateKey={animateTick} 
         logoDuration={700} 
-        rightIcon="refresh" 
-        onRightPress={() => loadOrders()} 
+        rightIcon={isSystemAdmin ? "filter" : "refresh"} 
+        onRightPress={() => isSystemAdmin ? setModalVisible(true) : loadOrders()} 
       />
+
+      {isSystemAdmin && (
+          <View style={styles.adminFilterBar}>
+              <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                 <Ionicons name={selectedSupplier ? "business" : "globe-outline"} size={16} color={colors.primary} style={{marginRight: 8}} />
+                 <Text style={styles.adminFilterText}>
+                    {selectedSupplier ? `${selectedSupplier.name}` : 'Visão Global (Todos os Pedidos)'}
+                 </Text>
+              </View>
+              {selectedSupplier && (
+                  <TouchableOpacity onPress={() => setSelectedSupplier(null)}>
+                      <Ionicons name="close-circle" size={20} color={colors.primary} />
+                  </TouchableOpacity>
+              )}
+          </View>
+      )}
 
       <View style={styles.filtersContainer}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
@@ -268,6 +335,74 @@ const OrdersListScreen = () => {
       >
         <Ionicons name="add" size={30} color="#FFF" />
       </TouchableOpacity>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Filtrar por Fornecedor</Text>
+                    <TouchableOpacity onPress={() => setModalVisible(false)}>
+                        <Ionicons name="close" size={24} color={colors.text} />
+                    </TouchableOpacity>
+                </View>
+                
+                <View style={styles.searchContainer}>
+                    <Ionicons name="search" size={20} color={colors.textSecondary} style={{marginRight: 8}} />
+                    <TextInput 
+                        style={styles.searchInput}
+                        placeholder="Buscar fornecedor..."
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </View>
+                
+                <FlatList
+                    data={suppliers.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))}
+                    keyExtractor={item => item.id}
+                    style={{maxHeight: 400}}
+                    renderItem={({ item }) => (
+                        <TouchableOpacity 
+                            style={styles.supplierItem}
+                            onPress={() => {
+                                setSelectedSupplier(item);
+                                setModalVisible(false);
+                            }}
+                        >
+                            <View>
+                                <Text style={styles.supplierName}>{item.name}</Text>
+                                {item.fantasyName && <Text style={styles.supplierSub}>{item.fantasyName}</Text>}
+                            </View>
+                            {selectedSupplier?.id === item.id && (
+                                <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                            )}
+                        </TouchableOpacity>
+                    )}
+                    ListHeaderComponent={
+                        <TouchableOpacity 
+                            style={styles.supplierItem} 
+                            onPress={() => {
+                                setSelectedSupplier(null);
+                                setModalVisible(false);
+                            }}
+                        >
+                            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                                <Ionicons name="globe-outline" size={20} color={colors.primary} style={{marginRight: 12}} />
+                                <Text style={[styles.supplierName, { color: colors.primary, fontWeight: 'bold' }]}>
+                                    Ver Todos (Global)
+                                </Text>
+                            </View>
+                        </TouchableOpacity>
+                    }
+                />
+            </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 };
@@ -401,7 +536,7 @@ const styles = StyleSheet.create({
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: 4,
-      display: 'none', // Hiding for now to clean up UI, or enable if needed
+      display: 'none', 
   },
   mlText: {
       fontSize: 10,
@@ -445,6 +580,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...shadow.lg,
     zIndex: 10,
+  },
+  adminFilterBar: {
+      backgroundColor: '#E3F2FD',
+      padding: 12,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderBottomWidth: 1,
+      borderBottomColor: '#BBDEFB',
+  },
+  adminFilterText: {
+      color: colors.primary,
+      fontWeight: '600',
+      fontSize: 14,
+  },
+  modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'flex-end',
+  },
+  modalContent: {
+      backgroundColor: '#fff',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 20,
+      maxHeight: '80%',
+  },
+  modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+  },
+  modalTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: colors.text,
+  },
+  searchContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#f5f5f5',
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      marginBottom: 16,
+  },
+  searchInput: {
+      flex: 1,
+      paddingVertical: 12,
+      fontSize: 16,
+      color: colors.text,
+  },
+  supplierItem: {
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: '#f0f0f0',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+  },
+  supplierName: {
+      fontSize: 16,
+      color: colors.text,
+      marginBottom: 4,
+  },
+  supplierSub: {
+      fontSize: 12,
+      color: colors.textSecondary,
   },
 });
 

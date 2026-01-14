@@ -31,7 +31,7 @@ export const getOrders = async (req: Request, res: Response) => {
         res.json([]);
         return;
       }
-      if (user.role === 'ACCOUNT_ADMIN') {
+      if (user.role === 'ACCOUNT_ADMIN' || user.role === 'OWNER') {
         const supplierIds = await prisma.supplier.findMany({
           where: { accountId: user.accountId },
           select: { id: true }
@@ -63,8 +63,49 @@ export const getOrders = async (req: Request, res: Response) => {
 
 export const getOrderStatusStats = async (req: Request, res: Response) => {
   try {
+    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    const where: any = {};
+
+    if (authUser?.role !== 'SYSTEM_ADMIN' && authUser?.role !== 'ADMIN') {
+        if (!authUser?.userId) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return;
+        }
+        const user = await prisma.user.findUnique({ 
+            where: { id: authUser.userId }, 
+            select: { accountId: true, role: true } 
+        });
+
+        if (!user?.accountId) {
+             // Return zeros if no account
+            res.json({ ALL: 0, NEW: 0, SENT_TO_SUPPLIER: 0, SHIPPING: 0, DELIVERED: 0, CANCELLED: 0 });
+            return;
+        }
+
+        if (user.role === 'ACCOUNT_ADMIN' || user.role === 'OWNER') {
+             const supplierIds = await prisma.supplier.findMany({
+                 where: { accountId: user.accountId },
+                 select: { id: true }
+             }).then(list => list.map(s => s.id));
+             where.supplierId = { in: supplierIds };
+        } else {
+             // Supplier User
+             const supplierIds = await prisma.supplier.findMany({
+                 where: { userId: authUser.userId },
+                 select: { id: true }
+             }).then(list => list.map(s => s.id));
+             
+             if (supplierIds.length === 0) {
+                 res.json({ ALL: 0, NEW: 0, SENT_TO_SUPPLIER: 0, SHIPPING: 0, DELIVERED: 0, CANCELLED: 0 });
+                 return;
+             }
+             where.supplierId = { in: supplierIds };
+        }
+    }
+
     const grouped = await prisma.order.groupBy({
       by: ['status'],
+      where,
       _count: { _all: true }
     });
     const map: Record<string, number> = {};
@@ -72,7 +113,7 @@ export const getOrderStatusStats = async (req: Request, res: Response) => {
       // @ts-ignore
       map[g.status] = g._count._all || 0;
     }
-    const all = await prisma.order.count();
+    const all = await prisma.order.count({ where });
     res.json({
       ALL: all,
       NEW: map['NEW'] || 0,

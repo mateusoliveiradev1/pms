@@ -100,7 +100,7 @@ const RegisterScreen = () => {
             </View>
 
             <Input
-                label="Nome Completo (Admin)"
+                label={accountType === 'INDIVIDUAL' ? "Seu Nome Completo" : "Nome Completo (Admin)"}
                 placeholder="Seu nome"
                 value={name}
                 onChangeText={setName}

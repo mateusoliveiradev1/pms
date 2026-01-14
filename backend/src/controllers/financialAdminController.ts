@@ -4,7 +4,7 @@ import prisma from '../prisma';
 // 1. Visão Geral Financeira (Overview)
 export const getFinancialOverview = async (req: Request, res: Response) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, supplierId } = req.query;
 
     const start = startDate ? new Date(String(startDate)) : new Date(new Date().setDate(new Date().getDate() - 30)); // Default 30 days
     const end = endDate ? new Date(String(endDate)) : new Date();
@@ -12,12 +12,16 @@ export const getFinancialOverview = async (req: Request, res: Response) => {
     const endOfDay = new Date(end);
     endOfDay.setHours(23, 59, 59, 999);
 
+    const supplierFilter = supplierId ? { supplierId: String(supplierId) } : {};
+    const supplierIdFilter = supplierId ? { id: String(supplierId) } : {};
+
     // Receita Bruta (Total Amount of Paid Orders)
     const grossRevenueAgg = await prisma.order.aggregate({
       _sum: { totalAmount: true },
       where: {
         paymentStatus: 'PAID',
-        paidAt: { gte: start, lte: endOfDay }
+        paidAt: { gte: start, lte: endOfDay },
+        ...supplierFilter
       }
     });
 
@@ -26,7 +30,8 @@ export const getFinancialOverview = async (req: Request, res: Response) => {
       _sum: { amount: true },
       where: {
         type: 'PLATFORM_COMMISSION',
-        createdAt: { gte: start, lte: endOfDay }
+        createdAt: { gte: start, lte: endOfDay },
+        ...supplierFilter
       }
     });
 
@@ -35,7 +40,8 @@ export const getFinancialOverview = async (req: Request, res: Response) => {
       _sum: { amount: true },
       where: {
         type: 'SUBSCRIPTION_PAYMENT',
-        createdAt: { gte: start, lte: endOfDay }
+        createdAt: { gte: start, lte: endOfDay },
+        ...supplierFilter
       }
     });
 
@@ -44,18 +50,25 @@ export const getFinancialOverview = async (req: Request, res: Response) => {
       _sum: { amount: true },
       where: {
         status: 'PAID',
-        processedAt: { gte: start, lte: endOfDay }
+        processedAt: { gte: start, lte: endOfDay },
+        ...supplierFilter
       }
     });
 
     // Pending Withdrawals Count (Snapshot, not period filtered usually, but let's keep it snapshot)
     const pendingWithdrawalsCount = await prisma.withdrawalRequest.count({
-        where: { status: 'PENDING' }
+        where: { 
+            status: 'PENDING',
+            ...supplierFilter
+        }
     });
 
     const pendingWithdrawalsAgg = await prisma.withdrawalRequest.aggregate({
         _sum: { amount: true },
-        where: { status: 'PENDING' }
+        where: { 
+            status: 'PENDING',
+            ...supplierFilter
+        }
     });
     const pendingWithdrawalsAmount = pendingWithdrawalsAgg._sum.amount || 0;
 
@@ -65,16 +78,16 @@ export const getFinancialOverview = async (req: Request, res: Response) => {
           pendingBalance: true,
           walletBalance: true,
           blockedBalance: true
-      }
+      },
+      where: supplierIdFilter
     });
     
     // Charts Generation (Revenue Evolution)
     const revenueEntries = await prisma.financialLedger.findMany({
         where: {
             createdAt: { gte: start, lte: endOfDay },
-            type: { in: ['PLATFORM_COMMISSION', 'SUBSCRIPTION_PAYMENT'] } // Note: Commissions are usually negative in ledger? 
-            // In FinancialService: "PLATFORM_COMMISSION ... amount: -commission".
-            // So we need to take ABS value for revenue chart.
+            type: { in: ['PLATFORM_COMMISSION', 'SUBSCRIPTION_PAYMENT'] },
+            ...supplierFilter
         },
         select: {
             createdAt: true,

@@ -77,7 +77,7 @@ const SuppliersTable: React.FC<SuppliersTableProps> = ({
                         </View>
                     </View>
                     <View style={styles.rowBetween}>
-                      <Text style={styles.label}>Pedidos: {sup._count.orders}</Text>
+                      <Text style={styles.label}>Pedidos: {sup.totalOrders || 0}</Text>
                     </View>
                 </View>
                ))

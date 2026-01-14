@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { View, StyleSheet, ScrollView, RefreshControl, Alert, Modal, TextInput, Text, TouchableOpacity, Share, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Alert, Modal, TextInput, Text, TouchableOpacity, Share, ActivityIndicator, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, radius, shadow } from '../../ui/theme';
 import { useAuth } from '../../context/AuthContext';
 import { useAuthRole } from '../../hooks/useAuthRole';
 import { useFocusEffect } from '@react-navigation/native';
+import Skeleton from '../../ui/components/Skeleton';
 
 import { useAdminDashboard } from './hooks/useAdminDashboard';
 import { WithdrawalRequest } from './types';
@@ -19,14 +20,19 @@ import ReconciliationList from './components/ReconciliationList';
 import OperationalAlerts from './components/OperationalAlerts';
 
 const AdminFinancialScreen = () => {
-  const { user, activeAccountId, activeSupplierId } = useAuth();
+  const { activeAccountId } = useAuth();
   const { isAccountAdmin, isSystemAdmin } = useAuthRole();
   const navigation = useNavigation<any>();
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'SUPPLIERS' | 'WITHDRAWALS' | 'SETTINGS' | 'AUDIT' | 'RECONCILIATION'>('DASHBOARD');
   const isAuthorized = isAccountAdmin || isSystemAdmin;
   
   // Enforce Context Guard for ALL roles
-  const missingContext = !activeAccountId;
+  const missingContext = !activeAccountId && !isSystemAdmin;
+
+  // Supplier Selection for System Admin
+  const [selectedSupplier, setSelectedSupplier] = useState<{id: string, name: string} | null>(null);
+  const [supplierModalVisible, setSupplierModalVisible] = useState(false);
+  const [modalSearch, setModalSearch] = useState('');
   
   // Filters
   const [supplierSearch, setSupplierSearch] = useState('');
@@ -55,7 +61,7 @@ const AdminFinancialScreen = () => {
   const {
       stats, suppliers, withdrawals, auditLogs, settings,
       reconciliation, alerts,
-      loading, refreshing, setRefreshing,
+      loading, refreshing, setRefreshing, setLoading,
       fetchDashboard, fetchWithdrawals, fetchSuppliers, fetchSettings, fetchAudit, fetchReconciliation,
       approveWithdrawal, rejectWithdrawal, updateSettings
   } = useAdminDashboard();
@@ -76,7 +82,7 @@ const AdminFinancialScreen = () => {
       if (settings) setLocalSettings(settings);
   }, [settings]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (silent = false) => {
     if (!isAuthorized) return;
     if (missingContext) return;
 
@@ -92,36 +98,47 @@ const AdminFinancialScreen = () => {
             if (period === '30d') start.setDate(end.getDate() - 30);
             if (period === '90d') start.setDate(end.getDate() - 90);
         }
-        fetchDashboard(start, end);
+        fetchDashboard(start, end, selectedSupplier?.id, silent);
     }
     if (activeTab === 'WITHDRAWALS') {
         fetchWithdrawals(withdrawalFilter, {
             startDate: withdrawalStartDate ? new Date(withdrawalStartDate) : undefined,
             endDate: withdrawalEndDate ? new Date(withdrawalEndDate) : undefined,
-            supplierId: withdrawalSupplierId || undefined
-        });
+            supplierId: withdrawalSupplierId || selectedSupplier?.id || undefined
+        }, silent);
     }
-    if (activeTab === 'SUPPLIERS') fetchSuppliers(supplierSearch, supplierFilter);
-    if (activeTab === 'SETTINGS') fetchSettings();
+    if (activeTab === 'SUPPLIERS') fetchSuppliers(supplierSearch, supplierFilter, silent);
+    if (activeTab === 'SETTINGS') fetchSettings(silent);
     if (activeTab === 'AUDIT') {
         fetchAudit({
             action: auditAction,
             startDate: auditStartDate ? new Date(auditStartDate) : undefined,
             endDate: auditEndDate ? new Date(auditEndDate) : undefined
-        });
+        }, silent);
     }
     if (activeTab === 'RECONCILIATION') {
         fetchReconciliation({
             startDate: recStartDate ? new Date(recStartDate) : undefined,
             endDate: recEndDate ? new Date(recEndDate) : undefined,
-            supplierId: recSupplierId || undefined
-         });
+            supplierId: recSupplierId || selectedSupplier?.id || undefined
+         }, silent);
      }
-   }, [isAuthorized, missingContext, activeTab, withdrawalFilter, supplierSearch, supplierFilter, period, customStart, customEnd, auditAction, auditStartDate, auditEndDate, recStartDate, recEndDate, recSupplierId, withdrawalStartDate, withdrawalEndDate, withdrawalSupplierId]);
+    }, [
+        isAuthorized, missingContext, activeTab, 
+        withdrawalFilter, supplierSearch, supplierFilter, period, 
+        customStart, customEnd, auditAction, auditStartDate, auditEndDate, 
+        recStartDate, recEndDate, recSupplierId, withdrawalStartDate, withdrawalEndDate, withdrawalSupplierId, 
+        selectedSupplier,
+        fetchDashboard, fetchWithdrawals, fetchSuppliers, fetchSettings, fetchAudit, fetchReconciliation
+    ]);
 
   useFocusEffect(
     useCallback(() => {
       loadData();
+      const interval = setInterval(() => {
+        loadData(true);
+      }, 5000);
+      return () => clearInterval(interval);
     }, [loadData])
   );
 
@@ -133,6 +150,52 @@ const AdminFinancialScreen = () => {
          return () => clearTimeout(timeout);
      }
   }, [supplierSearch]);
+
+  useEffect(() => {
+      if (supplierModalVisible && modalSearch !== '') {
+          const timeout = setTimeout(() => {
+              fetchSuppliers(modalSearch, 'ALL');
+          }, 500);
+          return () => clearTimeout(timeout);
+      } else if (supplierModalVisible && modalSearch === '') {
+          // If search is cleared while modal is open, fetch all immediately (or debounced if preferred, but usually immediate reset is better)
+           fetchSuppliers('', 'ALL');
+      }
+  }, [modalSearch]); // Removed supplierModalVisible dependency to avoid double fetch on open
+
+  const renderDashboardSkeleton = () => (
+      <View style={{ padding: spacing.md }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.md }}>
+              <Skeleton width="48%" height={100} borderRadius={radius.md} />
+              <Skeleton width="48%" height={100} borderRadius={radius.md} />
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.md }}>
+              <Skeleton width="48%" height={100} borderRadius={radius.md} />
+              <Skeleton width="48%" height={100} borderRadius={radius.md} />
+          </View>
+          <Skeleton width="100%" height={200} borderRadius={radius.md} />
+      </View>
+  );
+
+  const renderTabs = () => (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsContainer}>
+          {(['DASHBOARD', 'SUPPLIERS', 'WITHDRAWALS', 'SETTINGS', 'AUDIT', 'RECONCILIATION'] as const).map((tab) => (
+              <TouchableOpacity
+                  key={tab}
+                  style={[styles.tabButton, activeTab === tab && styles.activeTabButton]}
+                  onPress={() => setActiveTab(tab)}
+              >
+                  <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+                      {tab === 'DASHBOARD' ? 'Visão Geral' : 
+                       tab === 'SUPPLIERS' ? 'Fornecedores' :
+                       tab === 'WITHDRAWALS' ? 'Saques' :
+                       tab === 'SETTINGS' ? 'Config' : 
+                       tab === 'AUDIT' ? 'Auditoria' : 'Reconciliação'}
+                  </Text>
+              </TouchableOpacity>
+          ))}
+      </ScrollView>
+  );
 
   // Rendering States Hierarchy
   if (!isAuthorized) return null; // Or redirect
@@ -147,12 +210,16 @@ const AdminFinancialScreen = () => {
           </SafeAreaView>
       );
   }
-
-  if (loading && !refreshing) {
+  
+  // NON-BLOCKING LOADING PATTERN
+  // We only block if it's the INITIAL load (no stats yet)
+  if (loading && !stats && !refreshing) {
        return (
-          <View style={[styles.container, styles.center]}>
-              <ActivityIndicator size="large" color={colors.primary} />
-          </View>
+          <SafeAreaView style={styles.container} edges={['top']}>
+              <Text style={styles.headerTitle}>Financeiro Admin</Text>
+              {renderTabs()}
+              {renderDashboardSkeleton()}
+          </SafeAreaView>
       );
   }
 
@@ -223,29 +290,9 @@ const AdminFinancialScreen = () => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
-  const renderTabs = () => (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsContainer}>
-          {['DASHBOARD', 'SUPPLIERS', 'WITHDRAWALS', 'SETTINGS', 'AUDIT', 'RECONCILIATION'].map((tab) => (
-              <TouchableOpacity
-                  key={tab}
-                  style={[styles.tabButton, activeTab === tab && styles.activeTabButton]}
-                  onPress={() => setActiveTab(tab as any)}
-              >
-                  <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-                      {tab === 'DASHBOARD' ? 'Visão Geral' : 
-                       tab === 'SUPPLIERS' ? 'Fornecedores' :
-                       tab === 'WITHDRAWALS' ? 'Saques' :
-                       tab === 'SETTINGS' ? 'Config' : 
-                       tab === 'AUDIT' ? 'Auditoria' : 'Reconciliação'}
-                  </Text>
-              </TouchableOpacity>
-          ))}
-      </ScrollView>
-  );
-
   const renderPeriodFilter = () => (
       <View style={{ flexDirection: 'row', paddingHorizontal: 16, marginTop: 16, gap: 8 }}>
-          {['7d', '30d', '90d', 'custom'].map((p) => (
+          {(['7d', '30d', '90d', 'custom'] as const).map((p) => (
               <TouchableOpacity 
                   key={p} 
                   style={[
@@ -254,7 +301,7 @@ const AdminFinancialScreen = () => {
                   ]}
                   onPress={() => {
                       if (p === 'custom') setShowCustomModal(true);
-                      setPeriod(p as any);
+                      setPeriod(p);
                   }}
               >
                   <Text style={[
@@ -304,6 +351,95 @@ const AdminFinancialScreen = () => {
       </Modal>
   );
 
+  const renderHeaderFilter = () => {
+      if (!isSystemAdmin) return null;
+      return (
+          <View style={styles.headerFilterContainer}>
+              <View style={{ flex: 1 }}>
+                  <Text style={styles.headerFilterLabel}>Exibindo dados de:</Text>
+                  <Text style={styles.headerFilterValue}>
+                      {selectedSupplier ? selectedSupplier.name : 'Visão Global (Todos)'}
+                  </Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                  {selectedSupplier && (
+                      <TouchableOpacity 
+                          style={[styles.filterActionButton, { backgroundColor: '#FFEBEE', borderWidth: 1, borderColor: colors.error }]}
+                          onPress={() => setSelectedSupplier(null)}
+                      >
+                          <Text style={[styles.filterActionButtonText, { color: colors.error }]}>Limpar</Text>
+                      </TouchableOpacity>
+                  )}
+                  <TouchableOpacity 
+                      style={styles.filterActionButton}
+                      onPress={() => {
+                          setModalSearch('');
+                          setSupplierModalVisible(true);
+                          fetchSuppliers('', 'ALL'); // Fetch immediately on open
+                      }}
+                  >
+                      <Text style={styles.filterActionButtonText}>Alterar</Text>
+                  </TouchableOpacity>
+              </View>
+          </View>
+      );
+  };
+
+  const renderSupplierSelectionModal = () => (
+      <Modal visible={supplierModalVisible} animationType="slide">
+          <SafeAreaView style={styles.container}>
+              <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Selecionar Fornecedor</Text>
+                  <TouchableOpacity onPress={() => setSupplierModalVisible(false)} style={{ padding: 8 }}>
+                      <Text style={styles.closeButtonText}>Fechar</Text>
+                  </TouchableOpacity>
+              </View>
+              <View style={{ padding: 16, paddingBottom: 0 }}>
+                  <TextInput 
+                      style={styles.input} 
+                      placeholder="Buscar fornecedor..." 
+                      value={modalSearch}
+                      onChangeText={setModalSearch}
+                  />
+              </View>
+              {loading && suppliers.length === 0 ? (
+                  <View style={{ flex: 1, justifyContent: 'center' }}>
+                      <ActivityIndicator size="large" color={colors.primary} />
+                  </View>
+              ) : (
+                  <FlatList
+                      data={suppliers}
+                      keyExtractor={item => item.id}
+                      renderItem={({ item }) => (
+                          <TouchableOpacity 
+                                style={styles.supplierItem}
+                                onPress={() => {
+                                    const supplier = { id: item.id, name: item.name };
+                                    setSelectedSupplier(supplier);
+                                    setSupplierModalVisible(false);
+                                    // Immediate update triggering
+                                    setLoading(true); // Show loading immediately to prevent "old data" lag perception
+                                    // The useEffect will catch the selectedSupplier change and fetch, 
+                                    // but we set loading here to give instant feedback.
+                                }}
+                            >
+                              <View>
+                                  <Text style={styles.supplierName}>{item.name}</Text>
+                                  <Text style={styles.supplierStatus}>{item.financialStatus}</Text>
+                              </View>
+                              {selectedSupplier?.id === item.id && (
+                                  <View style={styles.selectedBadge} />
+                              )}
+                          </TouchableOpacity>
+                      )}
+                      contentContainerStyle={{ padding: 16 }}
+                      ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20, color: colors.textSecondary }}>Nenhum fornecedor encontrado</Text>}
+                  />
+              )}
+          </SafeAreaView>
+      </Modal>
+  );
+
   return (
       <SafeAreaView style={styles.container} edges={['top']}>
           <Text style={styles.headerTitle}>Financeiro Admin</Text>
@@ -314,12 +450,13 @@ const AdminFinancialScreen = () => {
           >
               {activeTab === 'DASHBOARD' && (
                   <>
+                      {renderHeaderFilter()}
                       {renderPeriodFilter()}
                       
                       {loading && !stats ? (
                           <View style={styles.loadingContainer}>
                               <ActivityIndicator size="large" color={colors.primary} />
-                              <Text style={styles.loadingText}>Carregando dados financeiros...</Text>
+                              <Text style={styles.loadingText}>Atualizando dados...</Text>
                           </View>
                       ) : !stats ? (
                           <View style={styles.emptyContainer}>
@@ -329,7 +466,7 @@ const AdminFinancialScreen = () => {
                       ) : (
                           <>
                               <OperationalAlerts alerts={alerts} />
-                              <AdminStatsCards stats={stats} formatCurrency={formatCurrency} />
+                              <AdminStatsCards stats={stats} formatCurrency={formatCurrency} isFiltered={!!selectedSupplier} loading={loading} />
                               
                               {stats.charts?.revenue?.labels?.length > 0 ? (
                                   <RevenueCharts stats={stats} />
@@ -353,7 +490,7 @@ const AdminFinancialScreen = () => {
                                    value={withdrawalSupplierId}
                                    onChangeText={setWithdrawalSupplierId}
                                />
-                               <TouchableOpacity onPress={loadData} style={styles.filterButton}>
+                               <TouchableOpacity onPress={() => loadData()} style={styles.filterButton}>
                                    <Text style={styles.filterButtonText}>Buscar</Text>
                                </TouchableOpacity>
                            </View>
@@ -402,7 +539,7 @@ const AdminFinancialScreen = () => {
                               value={auditAction}
                               onChangeText={setAuditAction}
                           />
-                          <TouchableOpacity onPress={loadData} style={styles.filterButton}>
+                          <TouchableOpacity onPress={() => loadData()} style={styles.filterButton}>
                               <Text style={styles.filterButtonText}>Filtrar</Text>
                           </TouchableOpacity>
                       </View>
@@ -422,7 +559,7 @@ const AdminFinancialScreen = () => {
                               value={recSupplierId}
                               onChangeText={setRecSupplierId}
                           />
-                          <TouchableOpacity onPress={loadData} style={styles.filterButton}>
+                          <TouchableOpacity onPress={() => loadData()} style={styles.filterButton}>
                               <Text style={styles.filterButtonText}>Filtrar</Text>
                           </TouchableOpacity>
                       </View>
@@ -488,6 +625,7 @@ const AdminFinancialScreen = () => {
                 </View>
             </View>
           </Modal>
+          {renderSupplierSelectionModal()}
       </SafeAreaView>
   );
 };
@@ -729,6 +867,78 @@ const styles = StyleSheet.create({
       borderStyle: 'dashed',
       borderWidth: 1,
       borderColor: colors.border,
+  },
+  headerFilterContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      marginTop: 16,
+      marginBottom: 8,
+      backgroundColor: '#fff',
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+  },
+  headerFilterLabel: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginBottom: 2,
+  },
+  headerFilterValue: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: colors.text,
+  },
+  filterActionButton: {
+      backgroundColor: colors.surface,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+  },
+  filterActionButtonText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.text,
+  },
+  modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+  },
+  closeButtonText: {
+      color: colors.primary,
+      fontWeight: '600',
+      fontSize: 16,
+  },
+  supplierItem: {
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+  },
+  supplierName: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.text,
+  },
+  supplierStatus: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 4,
+  },
+  selectedBadge: {
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: colors.primary,
   }
 });
 

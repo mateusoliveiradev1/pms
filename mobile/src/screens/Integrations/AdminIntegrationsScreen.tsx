@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { 
     View, 
     Text, 
@@ -124,8 +125,8 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
     const [secret, setSecret] = useState('');
     const [events, setEvents] = useState('');
 
-    const fetchData = async () => {
-        setLoading(true);
+    const fetchData = async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
             const [healthRes, webhooksRes] = await Promise.all([
                 api.get('/admin/integrations/health'),
@@ -141,9 +142,15 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
         }
     };
 
-    useEffect(() => {
-        fetchData();
-    }, []);
+    useFocusEffect(
+        useCallback(() => {
+            fetchData();
+            const interval = setInterval(() => {
+                fetchData(true);
+            }, 5000);
+            return () => clearInterval(interval);
+        }, [])
+    );
 
     const handleSaveWebhook = async () => {
         if (!url || !secret) {

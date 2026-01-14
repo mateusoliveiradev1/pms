@@ -25,19 +25,20 @@ export const useAdminDashboard = () => {
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
-    const fetchDashboard = async (startDate?: Date, endDate?: Date) => {
+    const fetchDashboard = async (startDate?: Date, endDate?: Date, supplierId?: string, silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const params: any = {};
             if (startDate) params.startDate = startDate.toISOString();
             if (endDate) params.endDate = endDate.toISOString();
+            if (supplierId) params.supplierId = supplierId;
 
             // Using NEW endpoint for overview with date filters
             const res = await api.get('/financial-admin/overview', { params });
             setStats(res.data);
             
             // Also fetch alerts
-            fetchAlerts();
+            fetchAlerts(silent);
         } catch (e: any) { 
             if (!isPermissionError(e)) console.error(e); 
         } finally {
@@ -45,16 +46,16 @@ export const useAdminDashboard = () => {
         }
     };
 
-    const fetchAlerts = async () => {
+    const fetchAlerts = async (silent = false) => {
         try {
             const res = await api.get('/financial-admin/alerts');
             setAlerts(res.data);
         } catch (e: any) { if (!isPermissionError(e)) console.error('Error fetching alerts:', e); }
     };
 
-    const fetchReconciliation = async (filters?: { startDate?: Date, endDate?: Date, supplierId?: string }) => {
+    const fetchReconciliation = async (filters?: { startDate?: Date, endDate?: Date, supplierId?: string }, silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const params: any = {};
             if (filters?.startDate) params.startDate = filters.startDate.toISOString();
             if (filters?.endDate) params.endDate = filters.endDate.toISOString();
@@ -69,9 +70,9 @@ export const useAdminDashboard = () => {
         }
     };
 
-    const fetchWithdrawals = async (status: string, filters?: { startDate?: Date, endDate?: Date, supplierId?: string }) => {
+    const fetchWithdrawals = async (status: string, filters?: { startDate?: Date, endDate?: Date, supplierId?: string }, silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const params: any = { status };
             if (filters?.startDate) params.startDate = filters.startDate.toISOString();
             if (filters?.endDate) params.endDate = filters.endDate.toISOString();
@@ -86,9 +87,9 @@ export const useAdminDashboard = () => {
         }
     };
 
-    const fetchSuppliers = async (search: string, status: string) => {
+    const fetchSuppliers = async (search: string, status: string, silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             // Using NEW endpoint for consolidated view
             const res = await api.get('/financial-admin/suppliers', {
                 params: { search, status }
@@ -101,9 +102,9 @@ export const useAdminDashboard = () => {
         }
     };
 
-    const fetchSettings = async () => {
+    const fetchSettings = async (silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const res = await api.get('/financial/admin/settings');
             const data = res.data || {
                 defaultReleaseDays: 14,
@@ -118,9 +119,9 @@ export const useAdminDashboard = () => {
         }
     };
 
-    const fetchAudit = async (filters?: { action?: string, startDate?: Date, endDate?: Date }) => {
+    const fetchAudit = async (filters?: { action?: string, startDate?: Date, endDate?: Date }, silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             const params: any = {};
             if (filters?.action && filters.action !== 'ALL') params.action = filters.action;
             if (filters?.startDate) params.startDate = filters.startDate.toISOString();

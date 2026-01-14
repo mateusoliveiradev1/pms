@@ -15,51 +15,86 @@ export const getProducts = async (req: Request, res: Response) => {
         ];
     }
 
-    if (authUser?.role !== 'ADMIN') {
-      if (!authUser?.userId) {
-        res.status(401).json({ message: 'Unauthorized' });
-        return;
-      }
+    // 1. Determine Allowed Scope and Filter
+    let allowedSupplierIds: string[] = [];
+    const isSystemAdmin = authUser?.role === 'SYSTEM_ADMIN' || authUser?.role === 'ADMIN';
 
-      const user = await prisma.user.findUnique({
-        where: { id: authUser.userId },
-        select: { accountId: true, role: true },
-      });
-
-      if (!user?.accountId) {
-        res.json([]);
-        return;
-      }
-
-      let suppliers: Array<{ id: string }> = [];
-
-      if (user.role === 'SUPPLIER') {
-        suppliers = await prisma.supplier.findMany({
-          where: { userId: authUser.userId },
-          select: { id: true },
-        });
-
-        if (suppliers.length === 0) {
-          const defaultSupplier = await prisma.supplier.findFirst({
-            where: { accountId: user.accountId, isDefault: true },
-            select: { id: true },
-          });
-          suppliers = defaultSupplier ? [defaultSupplier] : [];
+    if (isSystemAdmin) {
+        // System Admin: see everything
+    } else {
+        if (!authUser?.userId) {
+            res.status(401).json({ message: 'Unauthorized' });
+            return;
         }
-      } else {
-        suppliers = await prisma.supplier.findMany({
-          where: { accountId: user.accountId },
-          select: { id: true },
+
+        const user = await prisma.user.findUnique({
+            where: { id: authUser.userId },
+            select: { accountId: true, role: true },
         });
-      }
 
-      if (suppliers.length === 0) {
-        res.json([]);
-        return;
-      }
+        if (!user?.accountId) {
+            res.json([]);
+            return;
+        }
 
-      where.suppliers = { some: { supplierId: { in: suppliers.map((s) => s.id) } } };
+        if (user.role === 'SUPPLIER' || user.role === 'SUPPLIER_USER') {
+            allowedSupplierIds = await prisma.supplier.findMany({
+                where: { userId: authUser.userId },
+                select: { id: true },
+            }).then(list => list.map(s => s.id));
+
+            if (allowedSupplierIds.length === 0) {
+                const defaultSupplier = await prisma.supplier.findFirst({
+                    where: { accountId: user.accountId, isDefault: true },
+                    select: { id: true },
+                });
+                if (defaultSupplier) allowedSupplierIds.push(defaultSupplier.id);
+            }
+        } else {
+            // OWNER, ACCOUNT_ADMIN
+            allowedSupplierIds = await prisma.supplier.findMany({
+                where: { accountId: user.accountId },
+                select: { id: true },
+            }).then(list => list.map(s => s.id));
+        }
+
+        if (allowedSupplierIds.length === 0) {
+            res.json([]);
+            return;
+        }
     }
+
+    // 2. Apply Filters
+    const rawSupplierId = req.query.supplierId;
+    const requestedSupplierId = (rawSupplierId && rawSupplierId !== 'undefined' && rawSupplierId !== 'null') 
+        ? String(rawSupplierId) 
+        : null;
+
+    console.log(`📦 [GetProducts] UserRole: ${authUser?.role}, RawQuery: ${rawSupplierId}, Parsed: ${requestedSupplierId}`);
+
+    if (requestedSupplierId) {
+        if (isSystemAdmin) {
+            // FORCE Filter for System Admin
+            where.suppliers = { some: { supplierId: requestedSupplierId } };
+        } else {
+            // For others, validate access
+            if (allowedSupplierIds.includes(requestedSupplierId)) {
+                where.suppliers = { some: { supplierId: requestedSupplierId } };
+            } else {
+                // Not allowed -> Return Empty
+                where.suppliers = { some: { supplierId: '00000000-0000-0000-0000-000000000000' } };
+            }
+        }
+    } else {
+        // No specific filter requested
+        if (!isSystemAdmin) {
+            // If not admin and no filter, restrict to allowed list
+             where.suppliers = { some: { supplierId: { in: allowedSupplierIds } } };
+        }
+        // If System Admin and NO filter, we do NOT add where.suppliers, effectively showing ALL.
+    }
+
+    console.log(`📦 [GetProducts] Final Where:`, JSON.stringify(where));
 
     const products = await prisma.product.findMany({
       where,
@@ -95,15 +130,39 @@ export const createProduct = async (req: Request, res: Response) => {
 
   try {
     // 1. Prepare Supplier Data
-    const sPrice = Number(supplierPrice);
+    let targetSupplierId = supplierId;
+
+    // Se não for fornecido um supplierId, tentar achar o default da conta
+    if (!targetSupplierId) {
+        const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+        if (authUser?.userId) {
+            const user = await prisma.user.findUnique({ where: { id: authUser.userId }, select: { accountId: true } });
+            if (user?.accountId) {
+                const def = await prisma.supplier.findFirst({ where: { accountId: user.accountId, isDefault: true }, select: { id: true } });
+                if (def) targetSupplierId = def.id;
+            }
+        }
+    }
+
+    // Se ainda não tiver, pegar o primeiro fornecedor disponível no sistema (fallback radical)
+    if (!targetSupplierId) {
+        const first = await prisma.supplier.findFirst({ select: { id: true } });
+        if (first) targetSupplierId = first.id;
+    }
+
+    if (!targetSupplierId) {
+        res.status(400).json({ message: 'Um fornecedor é obrigatório para criar um produto.' });
+        return;
+    }
+
+    const sPrice = Number(supplierPrice || 0);
     const vStock = Number(virtualStock || 0);
     const sStock = Number(safetyStock || 0);
     const available = Math.max(0, vStock - sStock);
 
-    // 2. Calculate Final Price (Best price logic or just first supplier)
-    // For MVP, we assume the input comes with 1 supplier initially.
+    // 2. Calculate Final Price
     let finalPrice = sPrice;
-    const mValue = Number(marginValue);
+    const mValue = Number(marginValue || 0);
     
     if (marginType === 'FIXED') {
         finalPrice += mValue;
@@ -114,19 +173,19 @@ export const createProduct = async (req: Request, res: Response) => {
     const product = await prisma.product.create({
       data: {
         name, sku, description, imageUrl, 
-        stockAvailable: available, // Initial total stock
-        marginType, 
+        stockAvailable: available,
+        marginType: marginType || 'PERCENTAGE', 
         marginValue: mValue, 
         price: finalPrice,
         suppliers: {
             create: [
                 {
-                    supplierId,
+                    supplierId: targetSupplierId,
                     price: sPrice,
                     virtualStock: vStock,
                     stock: vStock,
                     safetyStock: sStock,
-                    externalId: 'MANUAL-' + Date.now() // Required field
+                    externalId: 'MANUAL-' + Date.now()
                 }
             ]
         },
