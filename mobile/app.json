@@ -13,7 +13,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.pms.ops"
+      "bundleIdentifier": "com.pms.ops",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,6 +22,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.pms.ops",
+      "versionCode": 1,
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
@@ -41,7 +43,7 @@
     ],
     "extra": {
       "apiUrl": "http://192.168.3.118:3000/api",
-      "env": "development",
+      "env": "production",
       "eas": {
         "projectId": "d6e41b45-705e-44d9-972e-4262e37f50ef"
       }

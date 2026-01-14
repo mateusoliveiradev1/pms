@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect, useContext, useRef } from 'r
 import * as SecureStore from 'expo-secure-store';
 import api from '../services/api';
 import { registerForPushNotificationsAsync } from '../services/PushNotificationService';
+import { Logger } from '../utils/logger';
 
 // Consolidated Auth State matching GET /me
 export interface AuthState {
@@ -60,7 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           return true;
       } catch (error: any) {
-          console.log('Failed to fetch /me:', error.message);
+          Logger.warn('Failed to fetch /me:', error.message);
           return false;
       }
   };
@@ -89,7 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           delete api.defaults.headers.common['Authorization'];
       } catch (error) {
-          console.log('SignOut Error:', error);
+          Logger.error('SignOut Error:', error);
       } finally {
           isLoggingOut.current = false;
       }
@@ -103,7 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (isLoggingOut.current) return Promise.reject(error);
 
         if (error.response?.status === 401) {
-            console.log('401 detected, signing out...');
+            Logger.warn('401 detected, signing out...');
             await signOut();
         }
         return Promise.reject(error);
@@ -120,13 +121,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (!success) {
                 await signOut();
             } else {
-                 registerForPushNotificationsAsync().catch(e => console.log('Push reg error:', e));
+                 registerForPushNotificationsAsync().catch(e => Logger.error('Push reg error:', e));
             }
         } else {
             setAuth(prev => ({ ...prev, loading: false }));
         }
       } catch (e) {
-        console.log('Error loading storage data:', e);
+        Logger.error('Error loading storage data:', e);
         setAuth(prev => ({ ...prev, loading: false }));
       }
     }
@@ -175,7 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 throw new Error('Falha ao obter perfil após cadastro');
             }
 
-            registerForPushNotificationsAsync().catch(e => console.log('Push reg error:', e));
+            registerForPushNotificationsAsync().catch(e => Logger.error('Push reg error:', e));
         } else {
              throw new Error('Cadastro realizado, mas falha no login automático.');
         }

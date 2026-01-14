@@ -2,6 +2,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Alert } from 'react-native';
 import { ENV } from '../config/env';
+import { Logger } from '../utils/logger';
 
 const API_URL = ENV.API_URL;
 
@@ -28,10 +29,14 @@ api.interceptors.response.use(
     // Logs limpos - Apenas erros reais (não 401/403 que são tratados no AuthContext)
     if (error.response) {
         if (error.response.status !== 401 && error.response.status !== 403) {
-            console.log(`API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, error.response.status);
+            Logger.error(`API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`, error.response.status);
         }
     } else {
-        console.log(`API Connection Error: ${error.message}`);
+        Logger.error(`API Connection Error: ${error.message}`);
+        Alert.alert(
+            "Sem Conexão",
+            "Não foi possível conectar ao servidor. Verifique sua internet."
+        );
     }
 
     return Promise.reject(error);

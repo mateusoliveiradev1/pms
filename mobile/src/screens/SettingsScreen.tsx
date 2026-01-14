@@ -4,9 +4,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
+import Constants from 'expo-constants';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useAuthRole } from '../hooks/useAuthRole';
+import { ENV } from '../config/env';
 
 import Header from '../ui/components/Header';
 import Input from '../ui/components/Input';
@@ -194,6 +196,15 @@ const SettingsScreen = () => {
                 <Ionicons name="log-out-outline" size={20} color="#dc3545" style={{marginRight: 8}} />
                 <Text style={styles.logoutText}>Sair do App</Text>
             </TouchableOpacity>
+        </View>
+
+        <View style={{ alignItems: 'center', padding: 24, paddingBottom: 40 }}>
+            <Text style={{ color: '#aaa', fontSize: 12 }}>
+                Version: {Constants.expoConfig?.version} (Build {Constants.expoConfig?.android?.versionCode || '1'})
+            </Text>
+            <Text style={{ color: '#aaa', fontSize: 12, marginTop: 4 }}>
+                Env: {ENV.APP_ENV.toUpperCase()}
+            </Text>
         </View>
       </ScrollView>
     </SafeAreaView>

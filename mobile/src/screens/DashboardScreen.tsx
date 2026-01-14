@@ -21,6 +21,7 @@ import { useAuthRole } from '../hooks/useAuthRole';
 import { isPermissionError } from '../utils/authErrorUtils';
 import api from '../services/api';
 import { colors, shadow } from '../ui/theme';
+import { Logger } from '../utils/logger';
 
 interface Product {
   id: string;
@@ -77,8 +78,9 @@ const StatCard = ({ title, value, icon, color, onPress }: StatCardProps) => (
 );
 
 const DashboardScreen = () => {
-  const { user, role, activeAccountId, activeSupplierId, loading: authLoading, signOut } = useAuth();
-  const { isAccountAdmin, isSupplierAdmin, isSystemAdmin } = useAuthRole();
+  const { user, activeAccountId, loading: authLoading, signOut } = useAuth();
+  const { isAccountAdmin, isSupplierAdmin, isSystemAdmin, role } = useAuthRole();
+  const isSupplierUser = role === 'SUPPLIER_USER';
   const isFocused = useIsFocused();
   const navigation = useNavigation<any>();
   
@@ -107,7 +109,7 @@ const DashboardScreen = () => {
           const response = await api.get('/suppliers');
           setSuppliers(response.data);
       } catch (error) {
-          console.log('Error loading suppliers', error);
+          Logger.error('Error loading suppliers', error);
       }
   };
 
@@ -130,7 +132,7 @@ const DashboardScreen = () => {
       const fetchProducts = api.get<Product[]>(`/products${queryParams}`)
         .catch(err => {
           if (err.response?.status !== 403) {
-            console.log('Dashboard: Failed to fetch products', err.message);
+            Logger.warn('Dashboard: Failed to fetch products', err.message);
           }
           return { data: [] as Product[] };
       });
@@ -142,7 +144,7 @@ const DashboardScreen = () => {
         ? api.get<SalesStatsResponse>(`/reports/sales${queryParams}`)
             .catch(err => {
                 if (err.response?.status !== 403) {
-                   console.log('Dashboard: Failed to fetch sales', err.message);
+                   Logger.warn('Dashboard: Failed to fetch sales', err.message);
                 }
                 return { data: null };
           })
@@ -188,7 +190,7 @@ const DashboardScreen = () => {
       if (isPermissionError(error)) {
         return;
       } else {
-        console.log('Error loading dashboard data', error);
+        Logger.error('Error loading dashboard data', error);
       }
     } finally {
       setLoading(false);
@@ -338,19 +340,21 @@ const DashboardScreen = () => {
             color={colors.success} 
             onPress={() => navigation.navigate('Relatórios' as never)}
           />
-          <StatCard 
-            title="Financeiro" 
-            value={role === 'SYSTEM_ADMIN' ? 'Plataforma' : 'Carteira'}
-            icon="wallet-outline" 
-            color={colors.info} 
-            onPress={() => {
-              if (role === 'SYSTEM_ADMIN') {
-                navigation.navigate('AdminFinancial' as never);
-              } else {
-                navigation.navigate('Financial' as never);
-              }
-            }}
-          />
+          {!isSupplierUser && (
+            <StatCard 
+              title="Financeiro" 
+              value={role === 'SYSTEM_ADMIN' ? 'Plataforma' : 'Carteira'}
+              icon="wallet-outline" 
+              color={colors.info} 
+              onPress={() => {
+                if (role === 'SYSTEM_ADMIN') {
+                  navigation.navigate('AdminFinancial' as never);
+                } else {
+                  navigation.navigate('Financial' as never);
+                }
+              }}
+            />
+          )}
         </View>
 
         <TouchableOpacity style={styles.chartContainer} onPress={() => navigation.navigate('Relatórios' as never)}>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -139,7 +139,10 @@ const FinancialScreen = () => {
   const [limits, setLimits] = useState<{ min: number; limitCount: number; usedCount: number; remaining: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [errorState, setErrorState] = useState(false);
   const [paying, setPaying] = useState(false);
+  
+  const dataLoadedRef = useRef(false);
 
   // Modal States
   const [statementModalVisible, setStatementModalVisible] = useState(false);
@@ -258,7 +261,7 @@ Este é um comprovante digital gerado pelo sistema PMS.
     }
 
     try {
-      if (!refreshing) setLoading(true);
+      if (!refreshing && !dataLoadedRef.current) setLoading(true);
 
       // Use activeSupplierId directly from context (SSOT)
       const financialRes = await api.get(`/financial/supplier/${activeSupplierId}`);
@@ -266,10 +269,13 @@ Este é um comprovante digital gerado pelo sistema PMS.
       setLedger(financialRes.data.ledger);
       setSubscription(financialRes.data.subscription || null);
       setLimits(financialRes.data.withdrawalLimits || null);
+      
+      setErrorState(false);
+      dataLoadedRef.current = true;
 
     } catch (error) {
       console.log('Error loading financial data', error);
-      Alert.alert('Erro', 'Não foi possível carregar os dados financeiros.');
+      setErrorState(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -420,10 +426,10 @@ Este é um comprovante digital gerado pelo sistema PMS.
     loadData();
   }, [loadData]);
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
     loadData();
-  };
+  }, [loadData]);
 
   const handlePaySubscription = async () => {
     if (!supplier || !supplier.plan) return;
@@ -580,6 +586,101 @@ Este é um comprovante digital gerado pelo sistema PMS.
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
+  }
+
+  if (errorState || (!loading && !supplier)) {
+      return (
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    <Ionicons name="arrow-back" size={24} color={colors.text} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Financeiro</Text>
+                <View style={{ width: 24 }} />
+            </View>
+            <View style={[styles.content, styles.center]}>
+                <Ionicons name="wallet-outline" size={64} color={colors.textSecondary} />
+                <Text style={[styles.subtitle, { marginTop: 16, textAlign: 'center', fontSize: 18, fontWeight: 'bold' }]}>
+                    {errorState ? 'Erro ao carregar dados' : 'Comece a vender!'}
+                </Text>
+                <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 8, maxWidth: 300 }}>
+                    {errorState 
+                        ? 'Ocorreu um problema ao conectar com o servidor. Tente novamente.' 
+                        : 'Você ainda não possui um plano ativo ou histórico financeiro. Escolha um plano para começar.'}
+                </Text>
+                
+                {!errorState && (
+                    <TouchableOpacity 
+                        style={[styles.payButton, { marginTop: 24, width: '100%' }]}
+                        onPress={openPlanModal}
+                    >
+                        <Text style={styles.payButtonText}>Escolher Plano Agora</Text>
+                        <Ionicons name="arrow-forward" size={20} color="#FFF" style={{ marginLeft: 8 }} />
+                    </TouchableOpacity>
+                )}
+
+                <TouchableOpacity onPress={loadData} style={{ marginTop: 24 }}>
+                    <Text style={{ color: colors.primary, fontWeight: 'bold' }}>Tentar Novamente</Text>
+                </TouchableOpacity>
+            </View>
+
+             {/* Modal must be rendered here too for the button to work */}
+             <Modal
+                animationType="slide"
+                transparent={true}
+                visible={planModalVisible}
+                onRequestClose={() => setPlanModalVisible(false)}
+              >
+                <View style={styles.modalOverlay}>
+                  <View style={[styles.modalContent, { width: '85%' }]}>
+                    <View style={styles.modalHeader}>
+                      <Text style={styles.modalTitle}>Escolher Plano</Text>
+                      <TouchableOpacity onPress={() => setPlanModalVisible(false)}>
+                        <Ionicons name="close" size={24} color={colors.text} />
+                      </TouchableOpacity>
+                    </View>
+                    
+                    {loadingPlans ? (
+                      <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
+                    ) : (
+                      <>
+                        <ScrollView style={{ maxHeight: 300 }}>
+                          {plans.map(p => (
+                            <TouchableOpacity 
+                              key={p.id} 
+                              style={[styles.planRow, selectedPlanId === p.id ? styles.planRowSelected : null]}
+                              onPress={() => setSelectedPlanId(p.id)}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.planName}>{p.name}</Text>
+                                <Text style={styles.planCycle}>Ciclo: {p.cycleDays} dias • Comissão: {p.commissionPercent}%</Text>
+                                <Text style={styles.planCycle}>Limite Pedidos: {p.limitOrders} • Limite Produtos: {p.limitProducts}</Text>
+                                <Text style={styles.planCycle}>Prioridade: {p.priorityLevel}</Text>
+                              </View>
+                              <Text style={styles.planPrice}>R$ {p.monthlyPrice.toFixed(2)}</Text>
+                              <Ionicons 
+                                name={selectedPlanId === p.id ? 'radio-button-on' : 'radio-button-off'} 
+                                size={22} 
+                                color={selectedPlanId === p.id ? colors.primary : colors.muted} 
+                                style={{ marginLeft: 8 }}
+                              />
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                        <TouchableOpacity 
+                          style={[styles.saveButton, { marginTop: 12 }]} 
+                          onPress={confirmChangePlan}
+                          disabled={!selectedPlanId}
+                        >
+                          <Text style={styles.saveButtonText}>Confirmar Plano</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                </View>
+              </Modal>
+        </SafeAreaView>
+      );
   }
 
   return (
@@ -1378,6 +1479,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
+  },
+  center: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    flex: 1,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 2,
   },
   withdrawButton: {
       flexDirection: 'row',
