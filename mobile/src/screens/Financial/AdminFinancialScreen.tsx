@@ -137,7 +137,7 @@ const AdminFinancialScreen = () => {
       loadData();
       const interval = setInterval(() => {
         loadData(true);
-      }, 30000); // 30 seconds interval to avoid flickering
+      }, 5000);
       return () => clearInterval(interval);
     }, [loadData])
   );

@@ -10,5 +10,3 @@ Thumbs.db
 backend/prisma/dev.db
 backend/mobile/
 backend/dev.db
-.trae/
-validation/

@@ -17,7 +17,7 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_ENV": "production",
+        "APP_ENV": "development",
         "MOBILE_API_URL": "http://192.168.3.118:3000/api"
       }
     },

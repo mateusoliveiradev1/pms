@@ -25,14 +25,7 @@ export const useAdminDashboard = () => {
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
-    const fetchAlerts = useCallback(async (silent = false) => {
-        try {
-            const res = await api.get('/financial-admin/alerts');
-            setAlerts(res.data);
-        } catch (e: any) { if (!isPermissionError(e)) console.error('Error fetching alerts:', e); }
-    }, []);
-
-    const fetchDashboard = useCallback(async (startDate?: Date, endDate?: Date, supplierId?: string, silent = false) => {
+    const fetchDashboard = async (startDate?: Date, endDate?: Date, supplierId?: string, silent = false) => {
         try {
             if (!silent) setLoading(true);
             const params: any = {};
@@ -51,9 +44,16 @@ export const useAdminDashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, [fetchAlerts]);
+    };
 
-    const fetchReconciliation = useCallback(async (filters?: { startDate?: Date, endDate?: Date, supplierId?: string }, silent = false) => {
+    const fetchAlerts = async (silent = false) => {
+        try {
+            const res = await api.get('/financial-admin/alerts');
+            setAlerts(res.data);
+        } catch (e: any) { if (!isPermissionError(e)) console.error('Error fetching alerts:', e); }
+    };
+
+    const fetchReconciliation = async (filters?: { startDate?: Date, endDate?: Date, supplierId?: string }, silent = false) => {
         try {
             if (!silent) setLoading(true);
             const params: any = {};
@@ -68,9 +68,9 @@ export const useAdminDashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    };
 
-    const fetchWithdrawals = useCallback(async (status: string, filters?: { startDate?: Date, endDate?: Date, supplierId?: string }, silent = false) => {
+    const fetchWithdrawals = async (status: string, filters?: { startDate?: Date, endDate?: Date, supplierId?: string }, silent = false) => {
         try {
             if (!silent) setLoading(true);
             const params: any = { status };
@@ -85,9 +85,9 @@ export const useAdminDashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    };
 
-    const fetchSuppliers = useCallback(async (search: string, status: string, silent = false) => {
+    const fetchSuppliers = async (search: string, status: string, silent = false) => {
         try {
             if (!silent) setLoading(true);
             // Using NEW endpoint for consolidated view
@@ -100,9 +100,9 @@ export const useAdminDashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    };
 
-    const fetchSettings = useCallback(async (silent = false) => {
+    const fetchSettings = async (silent = false) => {
         try {
             if (!silent) setLoading(true);
             const res = await api.get('/financial/admin/settings');
@@ -117,9 +117,9 @@ export const useAdminDashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    };
 
-    const fetchAudit = useCallback(async (filters?: { action?: string, startDate?: Date, endDate?: Date }, silent = false) => {
+    const fetchAudit = async (filters?: { action?: string, startDate?: Date, endDate?: Date }, silent = false) => {
         try {
             if (!silent) setLoading(true);
             const params: any = {};
@@ -134,9 +134,9 @@ export const useAdminDashboard = () => {
         } finally {
             setLoading(false);
         }
-    }, []);
+    };
 
-    const approveWithdrawal = useCallback(async (requestId: string) => {
+    const approveWithdrawal = async (requestId: string) => {
         try {
             await api.post(`/financial/admin/withdrawals/${requestId}/approve`);
             Alert.alert('Sucesso', 'Saque aprovado e processado.');
@@ -148,9 +148,9 @@ export const useAdminDashboard = () => {
             Alert.alert('Erro', 'Falha ao aprovar saque.');
             return false;
         }
-    }, []);
+    };
 
-    const rejectWithdrawal = useCallback(async (requestId: string, reason: string) => {
+    const rejectWithdrawal = async (requestId: string, reason: string) => {
         try {
             await api.post(`/financial/admin/withdrawals/${requestId}/reject`, { reason });
             Alert.alert('Sucesso', 'Saque rejeitado.');
@@ -162,9 +162,9 @@ export const useAdminDashboard = () => {
             Alert.alert('Erro', 'Falha ao rejeitar saque.');
             return false;
         }
-    }, []);
+    };
 
-    const updateSettings = useCallback(async (newSettings: FinancialSettings) => {
+    const updateSettings = async (newSettings: FinancialSettings) => {
         try {
             await api.put('/financial/admin/settings', newSettings);
             Alert.alert('Sucesso', 'Configurações atualizadas.');
@@ -177,7 +177,7 @@ export const useAdminDashboard = () => {
             Alert.alert('Erro', 'Falha ao salvar configurações.');
             return false;
         }
-    }, []);
+    };
 
     return {
         stats,
