@@ -53,14 +53,17 @@ app.use(helmet());
 
 // CORS Configuration
 const corsOptions = {
-    origin: env.APP_ENV === 'production' 
-        ? (env.CORS_ORIGIN ? env.CORS_ORIGIN.split(',') : false) 
-        : '*',
+    origin: '*', // Allow all origins for mobile app compatibility
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 };
 app.use(cors(corsOptions));
+
+// Health Check Endpoint (Public)
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', env: env.APP_ENV, timestamp: new Date().toISOString() });
+});
 
 // Rate Limiters
 const authLimiter = rateLimit({
