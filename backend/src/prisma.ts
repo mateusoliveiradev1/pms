@@ -9,6 +9,16 @@ const getDatabaseUrl = () => {
   // If using the alias host which resolves to IPv6 only
   if (url.includes('db.dimvlcrgaqeqarohpszl.supabase.co')) {
     console.warn('[Prisma] Replacing Supabase Alias with Regional IPv4 Pooler Host');
+    
+    // Extract Tenant ID from the hostname (e.g., db.TENANT_ID.supabase.co)
+    const tenantId = 'dimvlcrgaqeqarohpszl'; // Extracted from db.dimvlcrgaqeqarohpszl.supabase.co
+    
+    // Update User to include Tenant ID (required for Regional Pooler)
+    // Example: postgres -> postgres.dimvlcrgaqeqarohpszl
+    if (url.includes('postgres:')) {
+        url = url.replace('postgres:', `postgres.${tenantId}:`);
+    }
+
     // Replace with SA East 1 Pooler (IPv4 compatible)
     url = url.replace('db.dimvlcrgaqeqarohpszl.supabase.co', 'aws-0-sa-east-1.pooler.supabase.com');
     
