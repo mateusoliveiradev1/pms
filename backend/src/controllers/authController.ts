@@ -199,6 +199,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 export const login = async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
+  console.log(`[Auth] Login attempt for: ${email}`);
+
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -206,50 +208,118 @@ export const login = async (req: Request, res: Response) => {
     });
 
     if (error) {
+        console.warn(`[Auth] Supabase Login Failed for ${email}: ${error.message}`);
         res.status(401).json({ message: error.message });
         return;
     }
 
-    const dbUser = await prisma.user.findUnique({
-      where: { id: data.user?.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        account: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            planId: true,
-            onboardingStatus: true,
-          },
-        },
-      },
+    if (!data.user) {
+        console.error(`[Auth] No user data returned for ${email}`);
+        res.status(500).json({ message: 'Authentication failed internally' });
+        return;
+    }
+
+    console.log(`[Auth] Supabase Login Success. User ID: ${data.user.id}. Checking Database...`);
+
+    let dbUser = await prisma.user.findUnique({
+      where: { id: data.user.id },
+      include: {
+        account: true,
+      }
     });
 
-    const account = dbUser?.account ?? null;
-    const supplier =
-      account?.id
+    // AUTO-SYNC LOGIC: If user exists in Auth but not in DB, create it.
+    if (!dbUser) {
+        console.log(`[Auth] User ${email} (ID: ${data.user.id}) not found in DB. Initiating Auto-Sync...`);
+        
+        try {
+            dbUser = await prisma.$transaction(async (tx) => {
+                const name = data.user!.user_metadata?.name || email.split('@')[0];
+                const role = data.user!.user_metadata?.role || 'SUPPLIER_ADMIN'; // Default to Supplier Admin if undefined
+                const accountType = 'INDIVIDUAL'; 
+                const planId = 'basic';
+
+                // Create Account
+                const account = await tx.account.create({
+                    data: {
+                        name: name,
+                        email: email,
+                        type: accountType,
+                        planId: planId,
+                        onboardingStatus: 'COMPLETO' // Auto-synced users are assumed ready or will fix later
+                    }
+                });
+
+                // Create User
+                const newUser = await tx.user.create({
+                    data: {
+                        id: data.user!.id,
+                        email: email,
+                        name: name,
+                        role: role,
+                        status: 'ACTIVE',
+                        accountId: account.id
+                    },
+                    include: { account: true }
+                });
+
+                // Create Default Supplier if needed
+                if (role === 'SUPPLIER_ADMIN' || role === 'SUPPLIER_USER') {
+                    await tx.supplier.create({
+                        data: {
+                            name: name,
+                            type: 'INDIVIDUAL',
+                            integrationType: 'MANUAL',
+                            status: 'ACTIVE',
+                            active: true,
+                            financialStatus: 'ACTIVE',
+                            verificationStatus: 'PENDING',
+                            userId: newUser.id,
+                            accountId: account.id,
+                            isDefault: true,
+                            planId: planId
+                        }
+                    });
+                }
+
+                return newUser;
+            });
+            console.log(`[Auth] Auto-Sync Completed for ${email}`);
+        } catch (syncError: any) {
+            console.error(`[Auth] Auto-Sync Failed: ${syncError.message}`);
+            // Fallback: don't block login, but return limited data? 
+            // Better to fail securely or let the partial login happen if logic allows.
+            // But if we fail here, the frontend might crash expecting 'account'.
+            throw new Error(`Database sync failed: ${syncError.message}`);
+        }
+    }
+
+    // Refresh DB User (in case it was just created or we need fresh relations)
+    // Actually dbUser is already populated or returned from transaction.
+    
+    // Fetch Supplier
+    const supplier = dbUser.account?.id
         ? await prisma.supplier.findFirst({
-            where: { accountId: account.id, isDefault: true },
+            where: { accountId: dbUser.account.id, isDefault: true },
             select: { id: true, name: true, type: true, status: true },
           })
         : null;
 
+    console.log(`[Auth] Login Successful for ${email}. Returning token.`);
+
     res.json({ 
         token: data.session?.access_token, 
         user: { 
-            id: data.user?.id, 
-            email: data.user?.email, 
-            role: dbUser?.role || data.user?.user_metadata?.role,
-            name: dbUser?.name || data.user?.user_metadata?.name || 'Usuário'
+            id: dbUser.id, 
+            email: dbUser.email, 
+            role: dbUser.role,
+            name: dbUser.name
         },
-        account,
+        account: dbUser.account,
         supplier
     });
   } catch (error: any) {
+    console.error(`[Auth] Login Exception: ${error.message}`);
     res.status(500).json({ message: 'Login failed', error: error.message });
   }
 };
