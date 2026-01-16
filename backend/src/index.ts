@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v9-version-fix-final' // Fixed Prisma Version Mismatch (v5 vs v7)
+        patch: 'v10-fix-downgrade-prisma-v6' // Reverted to Stable V6.16.0 for Adapter Compatibility
     });
 });
 

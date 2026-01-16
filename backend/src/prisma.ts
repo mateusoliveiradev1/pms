@@ -56,7 +56,7 @@ const adapter = new PrismaPg(pool);
 
 // Initialize Client
 const prisma = new PrismaClient({ 
-    adapter: adapter as any,
+    adapter,
     log: ['error'] // Keep logs clean in production
 });
 
