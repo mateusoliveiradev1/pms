@@ -42,10 +42,10 @@
       ]
     ],
     "extra": {
-      "apiUrl": "http://192.168.3.118:3000/api",
+      "apiUrl": "https://pms-ops-backend.onrender.com/api",
       "env": "production",
       "eas": {
-        "projectId": "d6e41b45-705e-44d9-972e-4262e37f50ef"
+        "projectId": "90151316-fcf8-4af1-a451-73375b597e69"
       }
     }
   }

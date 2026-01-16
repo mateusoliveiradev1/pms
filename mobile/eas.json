@@ -17,8 +17,8 @@
         "buildType": "apk"
       },
       "env": {
-        "APP_ENV": "development",
-        "MOBILE_API_URL": "http://192.168.3.118:3000/api"
+        "APP_ENV": "production",
+        "MOBILE_API_URL": "https://pms-ops-backend.onrender.com/api"
       }
     },
     "production": {

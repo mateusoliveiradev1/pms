@@ -10,3 +10,5 @@ Thumbs.db
 backend/prisma/dev.db
 backend/mobile/
 backend/dev.db
+render.env
+backend/render.env
