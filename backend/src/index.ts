@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v4.3-dns-patch-robustness' // Fix undefined IP error
+        patch: 'v5-sni-fix' // Replaced DNS patch with Native PG SNI config
     });
 });
 
