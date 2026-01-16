@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import api from '../services/api';
 import { registerForPushNotificationsAsync } from '../services/PushNotificationService';
@@ -43,7 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isLoggingOut = useRef(false);
 
-  const fetchMe = async () => {
+  const fetchMe = useCallback(async () => {
       try {
           const response = await api.get('/auth/me');
           const { id, email, name, role, onboardingStatus, activeAccountId, activeSupplierId, accountType } = response.data;
@@ -64,9 +64,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           Logger.warn('Failed to fetch /me:', error.message);
           return false;
       }
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
       if (isLoggingOut.current) return;
       isLoggingOut.current = true;
       
@@ -94,7 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } finally {
           isLoggingOut.current = false;
       }
-  };
+  }, []);
 
   useEffect(() => {
     // Interceptor for 401
@@ -137,9 +137,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       api.interceptors.response.eject(interceptorId);
     };
-  }, []);
+  }, [fetchMe, signOut]);
 
-  async function signIn(email: string, pass: string) {
+  const signIn = useCallback(async (email: string, pass: string) => {
     try {
         const response = await api.post('/auth/login', { email, password: pass });
         const { token } = response.data;
@@ -160,9 +160,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
         throw error;
     }
-  }
+  }, [fetchMe]);
 
-  async function signUp(data: any) {
+  const signUp = useCallback(async (data: any) => {
     try {
         const response = await api.post('/auth/register', data);
         const { token } = response.data;
@@ -183,22 +183,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
         throw error;
     }
-  }
+  }, [fetchMe]);
   
-  const refetchUser = async () => {
+  const refetchUser = useCallback(async () => {
       await fetchMe();
-  }
+  }, [fetchMe]);
+
+  const contextData = React.useMemo(() => ({
+    ...auth,
+    signIn,
+    signUp,
+    signOut,
+    refetchUser
+  }), [auth, signIn, signUp, signOut, refetchUser]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        ...auth,
-        signIn,
-        signUp,
-        signOut,
-        refetchUser
-      }}
-    >
+    <AuthContext.Provider value={contextData}>
       {children}
     </AuthContext.Provider>
   );

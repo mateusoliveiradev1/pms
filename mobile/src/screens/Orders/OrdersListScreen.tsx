@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, ScrollView, Modal, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../../services/api';
@@ -26,6 +26,38 @@ interface Supplier {
     fantasyName?: string;
 }
 
+const STATUS_OPTIONS = [
+    { label: 'Todos', value: null as string | null, icon: 'list' as const },
+    { label: 'Novo', value: 'NEW' as const, icon: 'sparkles' as const },
+    { label: 'Pendente', value: 'PENDING' as const, icon: 'time' as const },
+    { label: 'Enviado', value: 'SENT_TO_SUPPLIER' as const, icon: 'paper-plane' as const },
+    { label: 'Transporte', value: 'SHIPPING' as const, icon: 'bus' as const },
+    { label: 'Entregue', value: 'DELIVERED' as const, icon: 'checkmark-circle' as const },
+    { label: 'Cancelado', value: 'CANCELLED' as const, icon: 'close-circle' as const },
+];
+
+const getStatusColor = (status: string) => {
+    switch (status) {
+        case 'NEW': return colors.primary;
+        case 'SENT_TO_SUPPLIER': return '#fd7e14';
+        case 'SHIPPING': return '#17a2b8';
+        case 'DELIVERED': return colors.success;
+        case 'CANCELLED': return colors.error;
+        default: return colors.muted;
+    }
+};
+
+const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'NEW': return 'Novo';
+      case 'SENT_TO_SUPPLIER': return 'Enviado';
+      case 'SHIPPING': return 'Transporte';
+      case 'DELIVERED': return 'Entregue';
+      case 'CANCELLED': return 'Cancelado';
+      default: return status;
+    }
+};
+
 const OrdersListScreen = () => {
   const { activeAccountId } = useAuth();
   const { isSystemAdmin } = useAuthRole();
@@ -43,6 +75,11 @@ const OrdersListScreen = () => {
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const ordersRef = useRef(orders);
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
+
   const navigation = useNavigation();
   // @ts-ignore
   const { initialSupplier } = (useRoute().params as { initialSupplier?: Supplier }) || {};
@@ -53,26 +90,16 @@ const OrdersListScreen = () => {
     }
   }, [initialSupplier]);
 
-  const STATUS_OPTIONS = [
-    { label: 'Todos', value: null as string | null, icon: 'list' as const },
-    { label: 'Novo', value: 'NEW' as const, icon: 'sparkles' as const },
-    { label: 'Pendente', value: 'PENDING' as const, icon: 'time' as const },
-    { label: 'Enviado', value: 'SENT_TO_SUPPLIER' as const, icon: 'paper-plane' as const },
-    { label: 'Transporte', value: 'SHIPPING' as const, icon: 'bus' as const },
-    { label: 'Entregue', value: 'DELIVERED' as const, icon: 'checkmark-circle' as const },
-    { label: 'Cancelado', value: 'CANCELLED' as const, icon: 'close-circle' as const },
-  ];
-
-  const loadSuppliers = async () => {
+  const loadSuppliers = useCallback(async () => {
       try {
           const response = await api.get('/suppliers');
           setSuppliers(response.data);
       } catch (error) {
           console.log('Error loading suppliers', error);
       }
-  };
+  }, []);
 
-  const loadOrders = async (silent = false) => {
+  const loadOrders = useCallback(async (silent = false) => {
     // If NOT admin and NO account, block.
     if (!isSystemAdmin && !activeAccountId) {
         setLoading(false);
@@ -100,9 +127,9 @@ const OrdersListScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [isSystemAdmin, activeAccountId, selectedStatus, selectedSupplier]);
 
-  const loadCounts = async () => {
+  const loadCounts = useCallback(async () => {
     if (!isSystemAdmin && !activeAccountId) return;
 
     try {
@@ -111,8 +138,8 @@ const OrdersListScreen = () => {
     } catch (err) {
       // Fallback: Calculate from current list if API fails
       try {
-        const local: Record<string, number> = { ALL: orders.length, NEW: 0, SENT_TO_SUPPLIER: 0, SHIPPING: 0, DELIVERED: 0, CANCELLED: 0 };
-        for (const o of orders) {
+        const local: Record<string, number> = { ALL: ordersRef.current.length, NEW: 0, SENT_TO_SUPPLIER: 0, SHIPPING: 0, DELIVERED: 0, CANCELLED: 0 };
+        for (const o of ordersRef.current) {
           const key = o.status;
           if (local[key] !== undefined) {
             local[key] += 1;
@@ -123,7 +150,7 @@ const OrdersListScreen = () => {
         setCounts({});
       }
     }
-  };
+  }, [isSystemAdmin, activeAccountId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -139,7 +166,7 @@ const OrdersListScreen = () => {
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [activeAccountId, selectedStatus, selectedSupplier, isSystemAdmin])
+    }, [isSystemAdmin, loadSuppliers, loadOrders, loadCounts])
   );
 
   const visibleOrders = useMemo(() => {
@@ -167,36 +194,14 @@ const OrdersListScreen = () => {
       );
   }
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(() => {
       setRefreshing(true);
       setAnimateTick(t => t + 1);
       loadOrders();
       loadCounts();
-  };
+  }, [loadOrders, loadCounts]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-        case 'NEW': return colors.primary;
-        case 'SENT_TO_SUPPLIER': return '#fd7e14';
-        case 'SHIPPING': return '#17a2b8';
-        case 'DELIVERED': return colors.success;
-        case 'CANCELLED': return colors.error;
-        default: return colors.muted;
-    }
-  };
-  
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'NEW': return 'Novo';
-      case 'SENT_TO_SUPPLIER': return 'Enviado';
-      case 'SHIPPING': return 'Transporte';
-      case 'DELIVERED': return 'Entregue';
-      case 'CANCELLED': return 'Cancelado';
-      default: return status;
-    }
-  };
-
-  const renderItem = ({ item }: { item: Order }) => (
+  const renderItem = useCallback(({ item }: { item: Order }) => (
     <TouchableOpacity 
         style={styles.card} 
         onPress={() => (navigation as any).navigate('OrderDetails', { order: item })}
@@ -242,7 +247,7 @@ const OrdersListScreen = () => {
         </View>
       )}
     </TouchableOpacity>
-  );
+  ), [navigation]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

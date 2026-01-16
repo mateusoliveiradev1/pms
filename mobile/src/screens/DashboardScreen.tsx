@@ -65,7 +65,7 @@ interface StatCardProps {
   onPress?: () => void;
 }
 
-const StatCard = ({ title, value, icon, color, onPress }: StatCardProps) => (
+const StatCard = React.memo(({ title, value, icon, color, onPress }: StatCardProps) => (
   <TouchableOpacity style={styles.statCard} onPress={onPress}>
     <View style={[styles.iconBox, { backgroundColor: color + '20' }]}>
       <Ionicons name={icon} size={24} color={color} />
@@ -75,7 +75,7 @@ const StatCard = ({ title, value, icon, color, onPress }: StatCardProps) => (
       <Text style={styles.statTitle}>{title}</Text>
     </View>
   </TouchableOpacity>
-);
+));
 
 const DashboardScreen = () => {
   const { user, activeAccountId, loading: authLoading, signOut } = useAuth();
@@ -224,6 +224,41 @@ const DashboardScreen = () => {
     if (hour < 18) return 'Boa tarde';
     return 'Boa noite';
   };
+
+  const chartData = React.useMemo(() => ({
+    labels: weeklyLabels,
+    datasets: [
+        {
+        data: weeklyChartData,
+        color: (opacity = 1) => colors.primary,
+        strokeWidth: 3
+        }
+    ]
+  }), [weeklyLabels, weeklyChartData]);
+
+  const chartConfig = React.useMemo(() => ({
+    backgroundColor: "#fff",
+    backgroundGradientFrom: "#fff",
+    backgroundGradientTo: "#fff",
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`,
+    labelColor: (opacity = 1) => `#999`,
+    fillShadowGradientFrom: colors.primary,
+    fillShadowGradientTo: "#fff",
+    fillShadowGradientOpacity: 0.3,
+    style: {
+        borderRadius: 16
+    },
+    propsForDots: {
+        r: "4",
+        strokeWidth: "2",
+        stroke: "#fff"
+    },
+    propsForBackgroundLines: {
+        strokeDasharray: "",
+        stroke: "#f5f5f5"
+    }
+  }), []);
 
   // Rendering States Hierarchy
   if (authLoading) {
@@ -377,16 +412,7 @@ const DashboardScreen = () => {
              </View>
           ) : (
             <LineChart
-                data={{
-                labels: weeklyLabels,
-                datasets: [
-                    {
-                    data: weeklyChartData,
-                    color: (opacity = 1) => colors.primary,
-                    strokeWidth: 3
-                    }
-                ]
-                }}
+                data={chartData}
                 width={Dimensions.get("window").width - 48} // Adjusted width for padding
                 height={200}
                 withDots={true}
@@ -397,29 +423,7 @@ const DashboardScreen = () => {
                 yAxisLabel="R$"
                 yAxisSuffix=""
                 yAxisInterval={1}
-                chartConfig={{
-                backgroundColor: "#fff",
-                backgroundGradientFrom: "#fff",
-                backgroundGradientTo: "#fff",
-                decimalPlaces: 0,
-                color: (opacity = 1) => `rgba(0, 122, 255, ${opacity})`, // Primary Blue
-                labelColor: (opacity = 1) => `#999`,
-                fillShadowGradientFrom: colors.primary,
-                fillShadowGradientTo: "#fff",
-                fillShadowGradientOpacity: 0.3,
-                style: {
-                    borderRadius: 16
-                },
-                propsForDots: {
-                    r: "4",
-                    strokeWidth: "2",
-                    stroke: "#fff"
-                },
-                propsForBackgroundLines: {
-                    strokeDasharray: "", // Solid lines
-                    stroke: "#f5f5f5"
-                }
-                }}
+                chartConfig={chartConfig}
                 bezier
                 style={{
                 marginVertical: 8,
