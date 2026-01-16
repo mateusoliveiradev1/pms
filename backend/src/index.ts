@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v7-dns-patch-final-adapter-all-options' // Correct handling of all:true
+        patch: 'v8-runtime-fix-prestart-generate' // Regenerate client on start
     });
 });
 
