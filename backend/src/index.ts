@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v6-dns-patch-robust' // Back to DNS Patch but robust
+        patch: 'v7-dns-patch-final-adapter-all-options' // Correct handling of all:true
     });
 });
 

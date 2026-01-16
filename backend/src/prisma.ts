@@ -8,7 +8,6 @@ const originalLookup = dns.lookup;
 const SUPABASE_HOST = 'db.dimvlcrgaqeqarohpszl.supabase.co';
 const REGIONAL_IPV4 = '52.67.1.88'; // aws-0-sa-east-1.pooler.supabase.com
 
-// Robust DNS Patch that handles all argument permutations
 (dns as any).lookup = (hostname: string, options: any, callback: any) => {
     let cb = callback;
     let opts = options;
@@ -21,10 +20,17 @@ const REGIONAL_IPV4 = '52.67.1.88'; // aws-0-sa-east-1.pooler.supabase.com
 
     if (hostname === SUPABASE_HOST) {
         console.log(`[DNS Patch] Intercepting lookup for ${hostname} -> ${REGIONAL_IPV4}`);
-        // Return IPv4 address immediately
-        if (cb) {
-             return cb(null, REGIONAL_IPV4, 4);
+        
+        const address = REGIONAL_IPV4;
+        const family = 4;
+
+        // CRITICAL FIX: Handle 'all: true' option which expects an array of objects
+        // The pg driver might be using this, causing 'Invalid IP address' if we return a string
+        if (opts && opts.all) {
+            return cb(null, [{ address, family }]);
         }
+        
+        return cb(null, address, family);
     }
     
     return originalLookup(hostname, opts, cb);
@@ -33,6 +39,7 @@ const REGIONAL_IPV4 = '52.67.1.88'; // aws-0-sa-east-1.pooler.supabase.com
 // Use pg driver (which uses Node's DNS/net) instead of Rust Engine
 const connectionString = process.env.DATABASE_URL;
 
+// Ensure we only use adapter if URL is available
 const adapter = connectionString ? new PrismaPg(new Pool({ 
     connectionString,
     connectionTimeoutMillis: 10000,
