@@ -1,49 +1,26 @@
 import { PrismaClient } from '@prisma/client';
+import dns from 'dns';
 
-// Runtime Fix for Render/Supabase IPv6 issues
-// Force usage of Regional IPv4 Pooler Hostname
-const getDatabaseUrl = () => {
-  let url = process.env.DATABASE_URL;
-  if (!url) return undefined;
+// DNS Patch: Force IPv4 for Supabase Alias to bypass Render IPv6 issues
+// This keeps the original hostname in the connection string (important for SNI/Auth)
+// but resolves it to the IPv4 address of the regional pooler.
+const originalLookup = dns.lookup;
+const SUPABASE_HOST = 'db.dimvlcrgaqeqarohpszl.supabase.co';
+const REGIONAL_IPV4 = '52.67.1.88'; // aws-0-sa-east-1.pooler.supabase.com
 
-  // If using the alias host which resolves to IPv6 only
-  if (url.includes('db.dimvlcrgaqeqarohpszl.supabase.co')) {
-    console.warn('[Prisma] Replacing Supabase Alias with Regional IPv4 Pooler Host');
-    
-    // Extract Tenant ID from the hostname (e.g., db.TENANT_ID.supabase.co)
-    const tenantId = 'dimvlcrgaqeqarohpszl'; // Extracted from db.dimvlcrgaqeqarohpszl.supabase.co
-    
-    // Update User to include Tenant ID (required for Regional Pooler)
-    // Example: postgres -> postgres.dimvlcrgaqeqarohpszl
-    if (url.includes('postgres:')) {
-        url = url.replace('postgres:', `postgres.${tenantId}:`);
+(dns as any).lookup = (hostname: string, options: any, callback: any) => {
+    if (hostname === SUPABASE_HOST) {
+        console.log(`[DNS Patch] Intercepting lookup for ${hostname} -> ${REGIONAL_IPV4}`);
+        if (typeof options === 'function') {
+            callback = options;
+            options = {};
+        }
+        // Return IPv4 address
+        return callback(null, REGIONAL_IPV4, 4);
     }
-
-    // Replace with SA East 1 Pooler (IPv4 compatible)
-    url = url.replace('db.dimvlcrgaqeqarohpszl.supabase.co', 'aws-0-sa-east-1.pooler.supabase.com');
-    
-    // Ensure port is 6543 (Pooler) and pgbouncer is enabled
-    if (!url.includes(':6543')) {
-        url = url.replace(':5432', ':6543');
-    }
-    if (!url.includes('pgbouncer=true')) {
-        const separator = url.includes('?') ? '&' : '?';
-        url += `${separator}pgbouncer=true`;
-    }
-    // Remove connection_limit if present to let pooler handle it, or keep it small
-    if (!url.includes('connection_limit')) {
-         url += '&connection_limit=1';
-    }
-  }
-  return url;
+    return originalLookup(hostname, options, callback);
 };
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: getDatabaseUrl(),
-    },
-  },
-});
+const prisma = new PrismaClient();
 
 export default prisma;
