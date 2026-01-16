@@ -1,9 +1,9 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import dns from 'dns';
 
 // DNS Patch: Force IPv4 for Supabase Alias to bypass Render IPv6 issues
-// This keeps the original hostname in the connection string (important for SNI/Auth)
-// but resolves it to the IPv4 address of the regional pooler.
 const originalLookup = dns.lookup;
 const SUPABASE_HOST = 'db.dimvlcrgaqeqarohpszl.supabase.co';
 const REGIONAL_IPV4 = '52.67.1.88'; // aws-0-sa-east-1.pooler.supabase.com
@@ -15,12 +15,26 @@ const REGIONAL_IPV4 = '52.67.1.88'; // aws-0-sa-east-1.pooler.supabase.com
             callback = options;
             options = {};
         }
-        // Return IPv4 address
         return callback(null, REGIONAL_IPV4, 4);
     }
     return originalLookup(hostname, options, callback);
 };
 
-const prisma = new PrismaClient();
+// Use pg driver (which uses Node's DNS/net) instead of Rust Engine
+// This ensures our DNS patch is respected
+const connectionString = process.env.DATABASE_URL;
+
+// Ensure we only use adapter if URL is available
+const adapter = connectionString ? new PrismaPg(new Pool({ 
+    connectionString,
+    // Increase timeouts for pooler
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000
+})) : undefined;
+
+const prisma = new PrismaClient({
+    adapter,
+    log: ['error']
+});
 
 export default prisma;

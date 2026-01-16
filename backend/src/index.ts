@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v2-ipv4-dns-fix-tenant-id' // Version tag to verify deploy
+        patch: 'v3-driver-adapter-ipv4-fix' // Final Fix for DNS/IPv6
     });
 });
 
