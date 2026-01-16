@@ -62,7 +62,12 @@ app.use(cors(corsOptions));
 
 // Health Check Endpoint (Public)
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', env: env.APP_ENV, timestamp: new Date().toISOString() });
+    res.json({ 
+        status: 'ok', 
+        env: env.APP_ENV, 
+        timestamp: new Date().toISOString(),
+        patch: 'v2-ipv4-dns-fix-tenant-id' // Version tag to verify deploy
+    });
 });
 
 // Rate Limiters
