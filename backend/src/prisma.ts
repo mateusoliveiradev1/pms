@@ -1,46 +1,43 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
+import dns from 'dns';
 
-// Configuration for Supabase IPv4 Bypass
+// DNS Patch: Force IPv4 for Supabase Alias to bypass Render IPv6 issues
+const originalLookup = dns.lookup;
 const SUPABASE_HOST = 'db.dimvlcrgaqeqarohpszl.supabase.co';
 const REGIONAL_IPV4 = '52.67.1.88'; // aws-0-sa-east-1.pooler.supabase.com
 
+// Robust DNS Patch that handles all argument permutations
+(dns as any).lookup = (hostname: string, options: any, callback: any) => {
+    let cb = callback;
+    let opts = options;
+
+    // Handle optional options argument
+    if (typeof options === 'function') {
+        cb = options;
+        opts = {};
+    }
+
+    if (hostname === SUPABASE_HOST) {
+        console.log(`[DNS Patch] Intercepting lookup for ${hostname} -> ${REGIONAL_IPV4}`);
+        // Return IPv4 address immediately
+        if (cb) {
+             return cb(null, REGIONAL_IPV4, 4);
+        }
+    }
+    
+    return originalLookup(hostname, opts, cb);
+};
+
+// Use pg driver (which uses Node's DNS/net) instead of Rust Engine
 const connectionString = process.env.DATABASE_URL;
 
-let adapter: PrismaPg | null = null;
-
-if (connectionString) {
-    // If we are on Render (or production) and using the problematic Supabase Host
-    if (connectionString.includes(SUPABASE_HOST)) {
-        console.log('[Prisma] Configuring SNI Bypass for Render/Supabase IPv6 issue');
-        
-        // Construct a modified connection string that points to the IP directly
-        // but keeps user/pass/db intact.
-        // NOTE: We replace the HOSTNAME with the IP in the string passed to Pool
-        // But we MUST enforce SNI in the ssl config below.
-        const ipConnectionString = connectionString.replace(SUPABASE_HOST, REGIONAL_IPV4);
-
-        const pool = new Pool({ 
-            connectionString: ipConnectionString,
-            ssl: {
-                servername: SUPABASE_HOST, // CRITICAL: This tells Supavisor which project we want
-                rejectUnauthorized: false // Supabase cert matches the alias, not the IP
-            },
-            connectionTimeoutMillis: 10000,
-            idleTimeoutMillis: 30000
-        });
-        
-        adapter = new PrismaPg(pool);
-    } else {
-        // Standard connection for local dev or other databases
-        adapter = new PrismaPg(new Pool({ 
-            connectionString,
-            connectionTimeoutMillis: 10000,
-            idleTimeoutMillis: 30000
-        }));
-    }
-}
+const adapter = connectionString ? new PrismaPg(new Pool({ 
+    connectionString,
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000
+})) : null;
 
 const prismaOptions: any = {
     log: ['error']
