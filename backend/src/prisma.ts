@@ -9,14 +9,23 @@ const SUPABASE_HOST = 'db.dimvlcrgaqeqarohpszl.supabase.co';
 const REGIONAL_IPV4 = '52.67.1.88'; // aws-0-sa-east-1.pooler.supabase.com
 
 (dns as any).lookup = (hostname: string, options: any, callback: any) => {
+    // Normalize arguments (Node.js style)
+    let cb = callback;
+    let opts = options;
+    
+    if (typeof options === 'function') {
+        cb = options;
+        opts = {};
+    }
+
     if (hostname === SUPABASE_HOST) {
         console.log(`[DNS Patch] Intercepting lookup for ${hostname} -> ${REGIONAL_IPV4}`);
-        if (typeof options === 'function') {
-            callback = options;
-            options = {};
+        // Return IPv4 address immediately
+        if (cb) {
+             return cb(null, REGIONAL_IPV4, 4);
         }
-        return callback(null, REGIONAL_IPV4, 4);
     }
+    
     return originalLookup(hostname, options, callback);
 };
 

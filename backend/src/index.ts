@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v4.2-generate-fix' // Build Script Fix
+        patch: 'v4.3-dns-patch-robustness' // Fix undefined IP error
     });
 });
 
