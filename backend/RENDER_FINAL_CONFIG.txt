@@ -1,0 +1,19 @@
+# CONFIGURAÇÃO FINAL DE INFRA (SUPABASE POOLER)
+
+Para garantir estabilidade em Cold Starts e evitar timeouts, use esta configuração EXATA no Render.
+Ela utiliza o Transaction Pooler (Porta 6543) com limite de conexão restrito, ideal para o plano Free/Starter.
+
+-----------------------------------------------------------------------------------------
+DATABASE_URL=postgresql://postgres:46257688884%40Mateus@db.dimvlcrgaqeqarohpszl.supabase.co:6543/postgres?pgbouncer=true&connection_limit=1&pool_timeout=20
+-----------------------------------------------------------------------------------------
+
+Por que esta URL?
+1. Porta 6543: Usa o PgBouncer do Supabase (gerencia milhares de conexões).
+2. pgbouncer=true: Instrui o Prisma a não usar Prepared Statements (incompatíveis com Transaction Mode).
+3. connection_limit=1: Garante que cada instância do backend use apenas 1 conexão, evitando estourar o banco.
+4. pool_timeout=20: Falha rápido se não conseguir conexão, evitando hang.
+
+AÇÃO:
+1. Copie a URL acima.
+2. Cole na variável DATABASE_URL no Render.
+3. Salve (o serviço irá reiniciar).

@@ -1,0 +1,16 @@
+# ATUALIZAÇÃO CRÍTICA DE VARIÁVEIS (RENDER)
+
+O erro "Can't reach database server" indica timeout ou bloqueio na conexão com o banco.
+Adicionamos parâmetros para aumentar a tolerância de conexão.
+
+Copie e substitua a variável `DATABASE_URL` no Render por esta versão otimizada (Porta 5432 + Timeouts):
+
+DATABASE_URL=postgresql://postgres:46257688884%40Mateus@db.dimvlcrgaqeqarohpszl.supabase.co:5432/postgres?connect_timeout=30&pool_timeout=30
+
+---
+Outras variáveis permanecem iguais:
+APP_ENV=production
+NODE_VERSION=20.11.0
+PORT=10000
+SUPABASE_URL=https://dimvlcrgaqeqarohpszl.supabase.co
+# ... (restante das chaves já configuradas)

@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v8-runtime-fix-prestart-generate' // Regenerate client on start
+        patch: 'v9-version-fix-final' // Fixed Prisma Version Mismatch (v5 vs v7)
     });
 });
 
