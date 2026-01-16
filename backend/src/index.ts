@@ -26,6 +26,9 @@ import logger from './lib/logger';
 const app = express();
 const PORT = env.PORT;
 
+// Trust Proxy (Required for Rate Limiting behind Render/Load Balancers)
+app.set('trust proxy', 1);
+
 // Debug: Catch unhandled errors
 process.on('uncaughtException', (err) => {
   logger.critical({
