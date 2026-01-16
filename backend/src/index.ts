@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v4-downgrade-stable-adapter-ipv4' // Final Stable Version
+        patch: 'v4.1-build-fix' // Final Stable Version with Build Fix
     });
 });
 

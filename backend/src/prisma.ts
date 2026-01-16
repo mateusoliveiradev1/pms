@@ -30,11 +30,16 @@ const adapter = connectionString ? new PrismaPg(new Pool({
     // Increase timeouts for pooler
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000
-})) : undefined;
+})) : null;
 
-const prisma = new PrismaClient({
-    adapter,
+const prismaOptions: any = {
     log: ['error']
-});
+};
+
+if (adapter) {
+    prismaOptions.adapter = adapter;
+}
+
+const prisma = new PrismaClient(prismaOptions);
 
 export default prisma;
