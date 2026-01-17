@@ -24,6 +24,16 @@ async function verifyConnection() {
     console.log(`✅ Project Ref '${expectedProject}' found in URL.`);
   }
 
+  // Check for Transaction Pooler (Port 6543)
+  if (dbUrl.includes(':6543')) {
+    console.log('✅ Port 6543 detected (Transaction Pooler Mode).');
+    if (!dbUrl.includes('pgbouncer=true')) {
+       console.warn('⚠️ WARNING: Port 6543 used but ?pgbouncer=true is missing!');
+    }
+  } else {
+    console.log('ℹ️ Port 6543 NOT detected. Ensure you are using the correct port for production.');
+  }
+
   try {
     console.log('⏳ Connecting...');
     await prisma.$connect();
