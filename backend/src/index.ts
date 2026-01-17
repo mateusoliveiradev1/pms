@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v12-username-fix' // Added dynamic username rewrite (postgres -> postgres.[ref])
+        patch: 'v13-region-fix' // Corrected Pooler Region to us-east-1 (N. Virginia)
     });
 });
 

@@ -7,7 +7,11 @@ import dns from 'dns';
 // This forces Node.js to use the IPv4 address for the Supabase hostname.
 // However, CRITICALLY, the 'pg' driver MUST send the original hostname in the SSL SNI header.
 const SUPABASE_HOST = 'db.dimvlcrgaqeqarohpszl.supabase.co';
-const REGIONAL_IPV4 = '52.67.1.88'; // AWS sa-east-1 Load Balancer
+
+// CORRECTED REGION: us-east-1 (N. Virginia) - derived from IPv6 resolution and nslookup
+// Old (Wrong): 52.67.1.88 (sa-east-1)
+const REGIONAL_IPV4 = '44.208.221.186'; // aws-0-us-east-1.pooler.supabase.com
+
 const PROJECT_REF = 'dimvlcrgaqeqarohpszl'; // Extracted from hostname
 
 const originalLookup = dns.lookup;
