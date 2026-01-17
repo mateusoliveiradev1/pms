@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v10-fix-downgrade-prisma-v6' // Reverted to Stable V6.16.0 for Adapter Compatibility
+        patch: 'v11-sni-fix' // Added explicit SNI to pg SSL config
     });
 });
 

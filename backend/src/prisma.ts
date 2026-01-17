@@ -4,10 +4,8 @@ import { Pool } from 'pg';
 import dns from 'dns';
 
 // --- DNS Monkey Patch for Render (IPv4) -> Supabase (IPv6) ---
-// This forces Node.js to use the IPv4 address for the Supabase hostname,
-// allowing the 'pg' driver to connect successfully from Render's IPv4-only environment
-// while still passing the correct hostname for SNI (Server Name Indication).
-
+// This forces Node.js to use the IPv4 address for the Supabase hostname.
+// However, CRITICALLY, the 'pg' driver MUST send the original hostname in the SSL SNI header.
 const SUPABASE_HOST = 'db.dimvlcrgaqeqarohpszl.supabase.co';
 const REGIONAL_IPV4 = '52.67.1.88'; // AWS sa-east-1 Load Balancer
 
@@ -17,22 +15,17 @@ const originalLookup = dns.lookup;
     let cb = callback;
     let opts = options;
 
-    // Handle optional options argument (Node.js signature)
     if (typeof options === 'function') {
         cb = options;
         opts = {};
     }
 
     if (hostname === SUPABASE_HOST) {
-        // console.log(`[DNS Patch] Intercepting lookup for ${hostname} -> ${REGIONAL_IPV4}`);
         const address = REGIONAL_IPV4;
         const family = 4;
-
-        // Handle 'all: true' option (returns array) - Critical for some pg versions
         if (opts && opts.all) {
             return cb(null, [{ address, family }]);
         }
-        
         return cb(null, address, family);
     }
     
@@ -43,21 +36,25 @@ const originalLookup = dns.lookup;
 
 const connectionString = process.env.DATABASE_URL;
 
-// Configure Connection Pool
+// Configure Connection Pool with Explicit SNI
+// This ensures that even though we connect to the IPv4 IP, 
+// the SSL handshake says "I want to talk to db.dimvlcrgaqeqarohpszl.supabase.co"
 const pool = new Pool({ 
     connectionString,
-    connectionTimeoutMillis: 10000, // 10s timeout
-    idleTimeoutMillis: 30000,       // 30s idle
-    max: 10                         // Max 10 connections
+    connectionTimeoutMillis: 10000, 
+    idleTimeoutMillis: 30000,       
+    max: 10,
+    ssl: {
+        rejectUnauthorized: false, // Supabase uses self-signed in some contexts or we trust the CA
+        servername: SUPABASE_HOST  // <--- THE CRITICAL FIX: Forces SNI to match the tenant host
+    }
 });
 
-// Initialize Adapter (Version 5.22.0 compatible)
 const adapter = new PrismaPg(pool);
 
-// Initialize Client
 const prisma = new PrismaClient({ 
     adapter,
-    log: ['error'] // Keep logs clean in production
+    log: ['error'] 
 });
 
 export default prisma;
