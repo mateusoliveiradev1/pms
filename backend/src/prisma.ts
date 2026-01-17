@@ -50,6 +50,13 @@ if (connectionString && connectionString.includes('postgres:')) {
         console.log('[Prisma] Patching username for Supabase Pooler compatibility...');
         connectionString = connectionString.replace('://postgres:', `://postgres.${PROJECT_REF}:`);
     }
+    
+    // FIX V14: Force Port 6543 (Transaction Mode) for Pooler
+    // Session mode (5432) often fails with "Tenant not found" on IPv4 poolers or has limit issues
+    if (connectionString.includes(':5432')) {
+        console.log('[Prisma] Switching to Transaction Mode (Port 6543)...');
+        connectionString = connectionString.replace(':5432', ':6543');
+    }
 }
 
 // Configure Connection Pool with Explicit SNI

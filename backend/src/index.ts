@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v13-region-fix' // Corrected Pooler Region to us-east-1 (N. Virginia)
+        patch: 'v14-port-fix' // Switched to Port 6543 (Transaction Mode) for Pooler Compatibility
     });
 });
 
