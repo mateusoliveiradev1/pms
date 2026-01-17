@@ -8,6 +8,7 @@ import dns from 'dns';
 // However, CRITICALLY, the 'pg' driver MUST send the original hostname in the SSL SNI header.
 const SUPABASE_HOST = 'db.dimvlcrgaqeqarohpszl.supabase.co';
 const REGIONAL_IPV4 = '52.67.1.88'; // AWS sa-east-1 Load Balancer
+const PROJECT_REF = 'dimvlcrgaqeqarohpszl'; // Extracted from hostname
 
 const originalLookup = dns.lookup;
 
@@ -34,7 +35,18 @@ const originalLookup = dns.lookup;
 
 // --- Prisma Initialization ---
 
-const connectionString = process.env.DATABASE_URL;
+let connectionString = process.env.DATABASE_URL;
+
+// FIX: Force username to be 'postgres.[PROJECT_REF]' if it's just 'postgres'
+// This is required when connecting via the Pooler/IPv4 Load Balancer
+if (connectionString && connectionString.includes('postgres:')) {
+    // Check if username is just 'postgres' and replace it
+    // Regex matches "postgres://" followed by "postgres" and a colon
+    if (connectionString.includes('://postgres:')) {
+        console.log('[Prisma] Patching username for Supabase Pooler compatibility...');
+        connectionString = connectionString.replace('://postgres:', `://postgres.${PROJECT_REF}:`);
+    }
+}
 
 // Configure Connection Pool with Explicit SNI
 // This ensures that even though we connect to the IPv4 IP, 

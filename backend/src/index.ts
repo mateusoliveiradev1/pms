@@ -66,7 +66,7 @@ app.get('/api/health', (req, res) => {
         status: 'ok', 
         env: env.APP_ENV, 
         timestamp: new Date().toISOString(),
-        patch: 'v11-sni-fix' // Added explicit SNI to pg SSL config
+        patch: 'v12-username-fix' // Added dynamic username rewrite (postgres -> postgres.[ref])
     });
 });
 
