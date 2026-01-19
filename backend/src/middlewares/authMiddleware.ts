@@ -1,9 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../lib/supabase';
 import prisma from '../prisma';
+import { Role } from '@prisma/client';
 
 export interface AuthRequest extends Request {
-  user?: any;
+  user?: {
+    userId: string;
+    email: string;
+    role: Role;
+  };
 }
 
 export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -11,7 +16,6 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token || token === 'undefined' || token === 'null') {
-    console.log('Auth Error: No token provided or invalid format');
     res.status(401).json({ message: 'Token não fornecido ou inválido' });
     return; 
   }
@@ -21,7 +25,6 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       const { data: { user: supabaseUser }, error } = await supabase.auth.getUser(token);
 
       if (error || !supabaseUser) {
-          console.error('Auth Token Validation Error:', error?.message);
           res.status(403).json({ message: 'Sessão inválida ou expirada', error: error?.message });
           return;
       }
@@ -32,19 +35,14 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
           select: { role: true, email: true }
       });
 
-      if (!dbUser) {
-          // If user exists in Supabase but not in our DB, it might be a sync issue.
-          // However, spamming logs for this is noisy if we are handling it by falling back.
-          // Only log if strictly necessary or change level to warn/info if it's expected during dev.
-          // For now, let's silence it or make it a warning unless we want to auto-create.
-          console.warn(`[Auth Warning] User ${supabaseUser.id} authenticated via Supabase but not found in local DB. Falling back to SUPPLIER role.`);
-      }
+      // Strict Role Fallback
+      const role = dbUser?.role || Role.SELLER;
 
       // Map Supabase User to App User Structure
       req.user = {
           userId: supabaseUser.id,
-          email: supabaseUser.email,
-          role: dbUser?.role || 'SUPPLIER' 
+          email: supabaseUser.email || '',
+          role: role 
       };
 
       next();
@@ -54,29 +52,26 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
   }
 };
 
-export const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-  if (req.user?.role !== 'SYSTEM_ADMIN' && req.user?.role !== 'ADMIN') { // Keep ADMIN for backward compatibility until full migration
-    res.status(403).json({ message: 'Acesso negado. Apenas administradores.' });
-    return;
-  }
-  next();
-};
-
-export const requireRole = (allowedRoles: string[]) => {
+export const requireRole = (allowedRoles: Role[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
-      res.sendStatus(401);
+      console.log(`[RBAC] Denied: No User`);
+      res.status(401).json({ message: 'Unauthorized' });
       return;
     }
+    
     if (!allowedRoles.includes(req.user.role)) {
-      res.sendStatus(403);
+      console.log(`[RBAC] Endpoint=${req.path} Role=${req.user.role} -> DENIED`);
+      res.status(403).json({ message: 'Forbidden' });
       return;
     }
+
+    console.log(`[RBAC] Endpoint=${req.path} Role=${req.user.role} -> ALLOWED`);
     next();
   };
 };
 
-export const requireSystemAdmin = requireRole(['SYSTEM_ADMIN']);
-export const requireAccountAdmin = requireRole(['SYSTEM_ADMIN', 'ACCOUNT_ADMIN']);
-export const requireSupplierAccess = requireRole(['SYSTEM_ADMIN', 'ACCOUNT_ADMIN', 'SUPPLIER_ADMIN', 'SUPPLIER_USER']);
+export const requireSystemAdmin = requireRole([Role.SYSTEM_ADMIN]);
+export const requireAccountAdmin = requireRole([Role.SYSTEM_ADMIN, Role.ACCOUNT_ADMIN]);
+export const requireSeller = requireRole([Role.SYSTEM_ADMIN, Role.ACCOUNT_ADMIN, Role.SELLER]);
 

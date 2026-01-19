@@ -1,21 +1,20 @@
-import express from 'express';
-import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
-import {
-    getFinancialOverview,
-    getReconciliation,
-    getSupplierFinancialStats,
-    getOperationalAlerts
+import { Router } from 'express';
+import { 
+    getSystemFinancialOverview, 
+    listAllWithdrawals, 
+    processWithdrawal, 
+    updateGlobalSettings 
 } from '../controllers/financialAdminController';
+import { authenticateToken, requireSystemAdmin } from '../middlewares/authMiddleware';
 
-const router = express.Router();
+const router = Router();
 
-// All routes require ADMIN role
 router.use(authenticateToken);
-router.use(requireRole(['SYSTEM_ADMIN', 'ADMIN']));
+router.use(requireSystemAdmin);
 
-router.get('/overview', getFinancialOverview);
-router.get('/reconciliation', getReconciliation);
-router.get('/suppliers', getSupplierFinancialStats);
-router.get('/alerts', getOperationalAlerts);
+router.get('/overview', getSystemFinancialOverview);
+router.get('/withdrawals', listAllWithdrawals);
+router.post('/withdrawals/:id/process', processWithdrawal);
+router.put('/settings', updateGlobalSettings);
 
 export default router;

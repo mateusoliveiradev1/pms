@@ -1,10 +1,11 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
+import { Role } from '@prisma/client';
 
 export const getProducts = async (req: Request, res: Response) => {
   try {
     const { query } = req.query as { query?: string };
-    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    const authUser = (req as any).user as { userId?: string; role?: Role } | undefined;
 
     const where: any = {};
     
@@ -17,7 +18,7 @@ export const getProducts = async (req: Request, res: Response) => {
 
     // 1. Determine Allowed Scope and Filter
     let allowedSupplierIds: string[] = [];
-    const isSystemAdmin = authUser?.role === 'SYSTEM_ADMIN' || authUser?.role === 'ADMIN';
+    const isSystemAdmin = authUser?.role === Role.SYSTEM_ADMIN;
 
     if (isSystemAdmin) {
         // System Admin: see everything
@@ -37,7 +38,7 @@ export const getProducts = async (req: Request, res: Response) => {
             return;
         }
 
-        if (user.role === 'SUPPLIER' || user.role === 'SUPPLIER_USER') {
+        if (user.role === Role.SELLER) {
             allowedSupplierIds = await prisma.supplier.findMany({
                 where: { userId: authUser.userId },
                 select: { id: true },

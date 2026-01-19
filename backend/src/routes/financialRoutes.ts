@@ -18,20 +18,21 @@ import {
     getAccountMetrics,
     getSupplierMetrics
 } from '../controllers/financialController';
-import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
+import { authenticateToken, requireRole, requireSystemAdmin, requireAccountAdmin } from '../middlewares/authMiddleware';
+import { Role } from '@prisma/client';
 
 const router = Router();
 
 // Admin Routes
-router.get('/admin/dashboard', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), getAdminDashboard);
-router.get('/admin/suppliers', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), getAdminSupplierFinancials);
-router.get('/admin/audit', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), getAdminAuditLogs);
-router.get('/admin/withdrawals', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), listWithdrawalRequests);
-router.post('/admin/withdrawals/:id/approve', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), approveWithdraw);
-router.post('/admin/withdrawals/:id/reject', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), rejectWithdraw);
-router.get('/admin/settings', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), getFinancialSettings);
-router.put('/admin/settings', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN']), updateFinancialSettings);
-router.get('/admin/metrics', authenticateToken, requireRole(['SYSTEM_ADMIN', 'ADMIN', 'ACCOUNT_ADMIN']), getAccountMetrics);
+router.get('/admin/dashboard', authenticateToken, requireSystemAdmin, getAdminDashboard);
+router.get('/admin/suppliers', authenticateToken, requireSystemAdmin, getAdminSupplierFinancials);
+router.get('/admin/audit', authenticateToken, requireSystemAdmin, getAdminAuditLogs);
+router.get('/admin/withdrawals', authenticateToken, requireSystemAdmin, listWithdrawalRequests);
+router.post('/admin/withdrawals/:id/approve', authenticateToken, requireSystemAdmin, approveWithdraw);
+router.post('/admin/withdrawals/:id/reject', authenticateToken, requireSystemAdmin, rejectWithdraw);
+router.get('/admin/settings', authenticateToken, requireSystemAdmin, getFinancialSettings);
+router.put('/admin/settings', authenticateToken, requireSystemAdmin, updateFinancialSettings);
+router.get('/admin/metrics', authenticateToken, requireRole([Role.SYSTEM_ADMIN, Role.ACCOUNT_ADMIN]), getAccountMetrics);
 
 // Public / Supplier Routes
 router.post('/cron/check-overdue', checkOverdue);

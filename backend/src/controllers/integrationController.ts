@@ -4,6 +4,16 @@ import { ExportService } from '../services/exportService';
 import { notificationService } from '../services/notificationService';
 import { InternalWebhookService } from '../services/internalWebhookService';
 
+export const getIntegrations = async (req: Request, res: Response) => {
+    // Placeholder
+    res.json([]);
+};
+
+export const getMercadoLivreAuthUrl = async (req: Request, res: Response) => {
+    // Placeholder
+    res.json({ url: 'https://auth.mercadolivre.com.br' });
+};
+
 // Health & Metrics
 export const getFinancialHealth = async (req: Request, res: Response) => {
   const today = new Date();

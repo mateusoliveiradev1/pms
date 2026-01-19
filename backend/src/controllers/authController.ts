@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
 import { supabase } from '../lib/supabase';
+import { Role, AccountType } from '@prisma/client';
 
 export const getMe = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -30,37 +31,16 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
     let accountType = user.account?.type;
 
     // Determine Context & ID based on Role
-    if (user.role === 'SUPPLIER_ADMIN' || user.role === 'SUPPLIER_USER') {
-       // Find the supplier linked to this user
-       const supplier = await prisma.supplier.findFirst({
-           where: { userId: user.id },
-           include: { account: true }
-       });
-       
-       if (supplier) {
-           activeSupplierId = supplier.id;
-           // If user has no explicit accountId, use the supplier's account
-           if (!activeAccountId) {
-               activeAccountId = supplier.accountId;
-               if (supplier.account) {
-                   accountStatus = supplier.account.onboardingStatus;
-                   accountType = supplier.account.type;
-               }
-           }
-       }
-    }
-
+    // SELLER can be linked to a supplier if that legacy structure persists, 
+    // but in new model, they are just users in an account.
+    // For now, keeping logic if schema supports it, but Role is strict.
+    
     // Normalize Onboarding Status
-    if (user.role === 'SYSTEM_ADMIN') {
+    if (user.role === Role.SYSTEM_ADMIN) {
         onboardingStatus = 'COMPLETED';
     } else if (accountStatus === 'COMPLETO') {
         onboardingStatus = 'COMPLETED';
-    } else if (accountStatus === 'REQUIRES_SUPPLIER' && activeSupplierId) {
-        // If waiting for supplier but we have one (maybe edge case), consider complete? 
-        // Or keep pending? Let's stick to account status mapping.
-        // Actually, if account says REQUIRES_SUPPLIER, it is PENDING.
-        onboardingStatus = 'PENDING';
-    }
+    } 
 
     res.json({
        id: user.id,
@@ -79,8 +59,8 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-export const register = async (req: Request, res: Response): Promise<void> => {
-  const { name, email, password, accountName, accountType } = req.body;
+export const registerIndividual = async (req: Request, res: Response): Promise<void> => {
+  const { name, email, password } = req.body;
 
   try {
     // 1. Create User in Supabase Auth
@@ -90,7 +70,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       options: {
         data: {
           name,
-          role: 'ACCOUNT_ADMIN', // CORRECT ROLE
+          role: Role.SELLER, // STRICT ROLE
         }
       }
     });
@@ -105,21 +85,19 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         return;
     }
 
-    // 2. Transaction: Create Account, User e, se necessário, Supplier
+    // 2. Transaction: Create Account, User
     try {
-      const accountTypeValue = accountType === 'COMPANY' ? 'COMPANY' : 'INDIVIDUAL';
-
       const result = await prisma.$transaction(async (tx) => {
         const planId = 'basic';
-        const finalAccountName = accountName || name || 'Minha Conta';
+        const finalAccountName = name || 'Minha Conta';
 
         const account = await tx.account.create({
           data: {
             name: finalAccountName,
             email: email,
-            type: accountTypeValue,
+            type: AccountType.INDIVIDUAL,
             planId,
-            onboardingStatus: accountTypeValue === 'INDIVIDUAL' ? 'COMPLETO' : 'REQUIRES_SUPPLIER',
+            onboardingStatus: 'COMPLETO',
           },
         });
 
@@ -128,14 +106,14 @@ export const register = async (req: Request, res: Response): Promise<void> => {
           update: {
             name,
             email,
-            role: 'ACCOUNT_ADMIN', // CORRECT ROLE
+            role: Role.SELLER, // STRICT ROLE
             accountId: account.id,
           },
           create: {
             id: data.user!.id,
             email,
             name,
-            role: 'ACCOUNT_ADMIN', // CORRECT ROLE
+            role: Role.SELLER, // STRICT ROLE
             status: 'ACTIVE',
             accountId: account.id,
           },
@@ -148,25 +126,104 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         });
 
         let supplier = null;
+        
+        return { account, user, supplier };
+      });
 
-        if (accountTypeValue === 'INDIVIDUAL') {
-          supplier = await tx.supplier.create({
-            data: {
-              name: finalAccountName,
-              type: 'INDIVIDUAL',
-              integrationType: 'MANUAL',
-              status: 'ACTIVE',
-              active: true,
-              financialStatus: 'ACTIVE',
-              verificationStatus: 'PENDING',
-              userId: data.user!.id,
-              accountId: account.id,
-              isDefault: true,
-              planId,
-            },
-          });
+      res.status(201).json({
+        message: 'Account created successfully',
+        token: data.session?.access_token,
+        account: {
+          id: result.account.id,
+          name: result.account.name,
+          type: result.account.type,
+          planId: result.account.planId,
+          onboardingStatus: result.account.onboardingStatus,
+        },
+        user: result.user,
+        supplier: result.supplier,
+      });
+      return;
+    } catch (dbError: any) {
+      console.error('Failed to create account/user structure:', dbError);
+      res.status(500).json({ message: 'Database creation failed', error: dbError.message });
+      return;
+    }
+
+  } catch (error: any) {
+    console.error('Registration error:', error);
+    res.status(500).json({ message: 'Error registering user', error: error.message });
+  }
+};
+
+export const registerBusiness = async (req: Request, res: Response): Promise<void> => {
+  const { name, email, password, accountName } = req.body;
+
+  try {
+    // 1. Create User in Supabase Auth
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+          role: Role.ACCOUNT_ADMIN, // STRICT ROLE
         }
+      }
+    });
 
+    if (error) {
+       res.status(400).json({ message: error.message });
+       return;
+    }
+
+    if (!data.user) {
+        res.status(400).json({ message: 'Registration failed. Check email confirmation settings.' });
+        return;
+    }
+
+    // 2. Transaction: Create Account, User
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const planId = 'basic';
+        const finalAccountName = accountName || name || 'Minha Empresa';
+
+        const account = await tx.account.create({
+          data: {
+            name: finalAccountName,
+            email: email,
+            type: AccountType.BUSINESS,
+            planId,
+            onboardingStatus: 'COMPLETO',
+          },
+        });
+
+        const user = await tx.user.upsert({
+          where: { id: data.user!.id },
+          update: {
+            name,
+            email,
+            role: Role.ACCOUNT_ADMIN, // STRICT ROLE
+            accountId: account.id,
+          },
+          create: {
+            id: data.user!.id,
+            email,
+            name,
+            role: Role.ACCOUNT_ADMIN, // STRICT ROLE
+            status: 'ACTIVE',
+            accountId: account.id,
+          },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+          },
+        });
+
+        let supplier = null;
+        
         return { account, user, supplier };
       });
 
@@ -235,8 +292,8 @@ export const login = async (req: Request, res: Response) => {
         try {
             dbUser = await prisma.$transaction(async (tx) => {
                 const name = data.user!.user_metadata?.name || email.split('@')[0];
-                const role = data.user!.user_metadata?.role || 'SUPPLIER_ADMIN'; // Default to Supplier Admin if undefined
-                const accountType = 'INDIVIDUAL'; 
+                const role = Role.SELLER; // STRICT: Auto-sync users are always SELLERS
+                const accountType = AccountType.INDIVIDUAL; 
                 const planId = 'basic';
 
                 // Create Account
@@ -254,33 +311,14 @@ export const login = async (req: Request, res: Response) => {
                 const newUser = await tx.user.create({
                     data: {
                         id: data.user!.id,
-                        email: email,
-                        name: name,
-                        role: role,
+                        email,
+                        name,
+                        role,
                         status: 'ACTIVE',
                         accountId: account.id
                     },
                     include: { account: true }
                 });
-
-                // Create Default Supplier if needed
-                if (role === 'SUPPLIER_ADMIN' || role === 'SUPPLIER_USER') {
-                    await tx.supplier.create({
-                        data: {
-                            name: name,
-                            type: 'INDIVIDUAL',
-                            integrationType: 'MANUAL',
-                            status: 'ACTIVE',
-                            active: true,
-                            financialStatus: 'ACTIVE',
-                            verificationStatus: 'PENDING',
-                            userId: newUser.id,
-                            accountId: account.id,
-                            isDefault: true,
-                            planId: planId
-                        }
-                    });
-                }
 
                 return newUser;
             });
@@ -343,7 +381,7 @@ export const updateProfile = async (req: Request, res: Response) => {
                 id: userId,
                 email: userEmail || '', // Should come from token
                 name: name,
-                role: 'SUPPLIER', // Default fallback
+                role: Role.SELLER, // STRICT: Default to SELLER for safety
                 status: 'ACTIVE'
             },
             select: { id: true, name: true, email: true, role: true }

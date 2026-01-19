@@ -18,7 +18,7 @@
       },
       "env": {
         "APP_ENV": "production",
-        "MOBILE_API_URL": "https://pms-ops-backend.onrender.com/api"
+        "MOBILE_API_URL": "https://pms-backend-qalb.onrender.com/api"
       }
     },
     "production": {

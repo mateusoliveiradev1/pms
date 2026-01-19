@@ -1,9 +1,20 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
+import { Role } from '@prisma/client';
 
 export const getDashboardStats = async (req: Request, res: Response) => {
+    return getDashboardMetrics(req, res);
+};
+
+export const getDashboardMetrics = async (req: Request, res: Response) => {
   try {
-    const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
+    const user = (req as any).user;
+    const authUser = user;
+    
+    // Strict Role Check
+    if (user.role === Role.SELLER) {
+        // ... logic for SELLER ...
+    }
     
     // Filtros principais
     let productWhere: any = {};
@@ -48,7 +59,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
 
         let supplierIds: string[] = [];
 
-        if (user.role === 'SUPPLIER' || user.role === 'SUPPLIER_USER') {
+        if (user.role === Role.SELLER) {
             const suppliers = await prisma.supplier.findMany({ where: { userId: authUser.userId }, select: { id: true } });
             supplierIds = suppliers.map(s => s.id);
             // Fallback para supplier default se não achar

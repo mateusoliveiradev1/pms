@@ -1,6 +1,33 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
 
+export const getSystemFinancialOverview = async (req: Request, res: Response) => {
+    return getFinancialOverview(req, res);
+};
+
+export const listAllWithdrawals = async (req: Request, res: Response) => {
+    // Placeholder - implement actual logic if needed, or reuse financialController logic
+    try {
+        const withdrawals = await prisma.withdrawalRequest.findMany({
+            include: { supplier: true },
+            orderBy: { requestedAt: 'desc' }
+        });
+        res.json(withdrawals);
+    } catch (error) {
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+export const processWithdrawal = async (req: Request, res: Response) => {
+    // Placeholder
+    res.status(501).json({ message: 'Not Implemented' });
+};
+
+export const updateGlobalSettings = async (req: Request, res: Response) => {
+    // Placeholder
+    res.status(501).json({ message: 'Not Implemented' });
+};
+
 // 1. Visão Geral Financeira (Overview)
 export const getFinancialOverview = async (req: Request, res: Response) => {
   try {

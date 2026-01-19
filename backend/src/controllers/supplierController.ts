@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../prisma';
+import { Role, AccountType } from '@prisma/client';
 
 export const getSuppliers = async (req: Request, res: Response) => {
   try {
@@ -8,7 +9,7 @@ export const getSuppliers = async (req: Request, res: Response) => {
     let where: any = {};
 
     // RBAC Scope Enforcement
-    if (user.role === 'SYSTEM_ADMIN') {
+    if (user.role === Role.SYSTEM_ADMIN) {  
         // Can see all, but filter if query param provided
         if (req.query.accountId) where.accountId = req.query.accountId;
     } else if (user.role === 'ACCOUNT_ADMIN') {
@@ -179,7 +180,7 @@ export const createSupplier = async (req: Request, res: Response) => {
     }
 
     // Verify User Permission (Must be Account Admin or System Admin)
-    if (user.role !== 'ACCOUNT_ADMIN' && user.role !== 'SYSTEM_ADMIN' && user.role !== 'ADMIN') {
+    if (user.role !== Role.ACCOUNT_ADMIN && user.role !== Role.SYSTEM_ADMIN) {
          res.status(403).json({ message: 'Only Account Admins can create suppliers.' });
          return;
     }
@@ -240,7 +241,7 @@ export const createSupplier = async (req: Request, res: Response) => {
       });
 
       // Update Account Status if it's the first supplier for a Company
-      if (account.type === 'COMPANY' && totalSuppliersCount === 0) {
+      if (account.type === AccountType.BUSINESS && totalSuppliersCount === 0) {
           await tx.account.update({
               where: { id: account.id },
               data: { onboardingStatus: 'COMPLETO' }
@@ -301,7 +302,7 @@ export const updateSupplier = async (req: Request, res: Response) => {
         return;
       }
 
-      if (user.role === 'SUPPLIER' && existingSupplier.userId !== authUser.userId) {
+      if (user.role === Role.SELLER && existingSupplier.userId !== authUser.userId) {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
