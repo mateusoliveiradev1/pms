@@ -17,11 +17,21 @@ enum SupplierType {
   EXTERNAL
 }
 
+enum Role {
+  SYSTEM_ADMIN
+  ADMIN
+  ACCOUNT_ADMIN
+  SUPPLIER_ADMIN
+  SUPPLIER_USER
+  SUPPLIER
+  USER
+}
+
 model User {
   id        String   @id @db.Uuid // Linked to auth.users.id
   name      String?
   email     String   @unique
-  role      String   @default("SUPPLIER")
+  role      Role     @default(SUPPLIER)
   status    String   @default("ACTIVE")
   expoPushToken String?
   

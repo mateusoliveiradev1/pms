@@ -125,8 +125,11 @@ app.get('/', (req, res) => {
 
 app.use(globalErrorHandler);
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server is running on port ${PORT} in ${env.APP_ENV} mode`);
+  
+  // Seed Admin on Start
+  await ensureAdminUser();
 });
 
 // Keep-alive to prevent premature exit in dev environment
