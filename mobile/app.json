@@ -42,7 +42,7 @@
       ]
     ],
     "extra": {
-      "apiUrl": "https://pms-ops-backend.onrender.com/api",
+      "apiUrl": "https://pms-backend-qalb.onrender.com/api",
       "env": "production",
       "eas": {
         "projectId": "90151316-fcf8-4af1-a451-73375b597e69"
