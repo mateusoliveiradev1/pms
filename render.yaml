@@ -3,8 +3,8 @@ services:
     name: pms-backend
     env: node
     plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
     envVars:
       - key: NODE_VERSION
         value: 20.11.0
