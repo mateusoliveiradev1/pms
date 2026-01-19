@@ -11,5 +11,15 @@ services:
       - key: APP_ENV
         value: production
       - key: PORT
-        value: 10000
+        value: 3001
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_9HxSwGDY1CKi@ep-flat-bread-acpk83eg-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require
+      - key: DIRECT_URL
+        value: postgresql://neondb_owner:npg_9HxSwGDY1CKi@ep-flat-bread-acpk83eg-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require
+      - key: SUPABASE_URL
+        value: https://dimvlcrgaqeqarohpszl.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpbXZsY3JnYXFlcWFyb2hwc3psIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgwOTE4MjYsImV4cCI6MjA4MzY2NzgyNn0.FQRqTSwYUIp8s9KUe7zB1rYGWAcEUcsGfqH_TAEeQuc
+      - key: SUPABASE_SERVICE_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpbXZsY3JnYXFlcWFyb2hwc3psIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2ODA5MTgyNiwiZXhwIjoyMDgzNjY3ODI2fQ.9dlpgtxJ2ReOYgLQnOAHxr3ESwQK3SM-skmybB4gdd4
     autoDeploy: false
