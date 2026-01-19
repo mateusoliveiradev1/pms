@@ -22,6 +22,7 @@ import integrationRoutes from './routes/integrationRoutes';
 import systemRoutes from './routes/systemRoutes';
 import { globalErrorHandler } from './middlewares/errorMiddleware';
 import logger from './lib/logger';
+import { ensureAdminUser } from './utils/seedAdmin';
 
 const app = express();
 const PORT = env.PORT;

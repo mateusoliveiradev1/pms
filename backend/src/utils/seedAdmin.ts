@@ -8,13 +8,21 @@ export const ensureAdminUser = async () => {
   const ADMIN_PASSWORD = 'AdminPassword123!';
   const ADMIN_ROLE = Role.SYSTEM_ADMIN;
 
-  logger.info('[AdminSeed] Checking for System Admin user...');
+  logger.info({
+    service: 'backend',
+    action: 'SEED_ADMIN',
+    message: '[AdminSeed] Checking for System Admin user...'
+  });
 
   try {
     // 0. Ensure Basic Plans exist (Fixes foreign key issues)
     const plansCount = await prisma.plan.count();
     if (plansCount === 0) {
-        logger.info('[AdminSeed] No plans found. Seeding default plans...');
+        logger.info({
+            service: 'backend',
+            action: 'SEED_ADMIN',
+            message: '[AdminSeed] No plans found. Seeding default plans...'
+        });
         await prisma.plan.createMany({
             data: [
                 { id: 'basic', name: 'Plano Básico', monthlyPrice: 49.90, commissionPercent: 12.0 },
@@ -34,11 +42,19 @@ export const ensureAdminUser = async () => {
     });
 
     if (signInData.user) {
-        logger.info('[AdminSeed] User already exists in Supabase.');
+        logger.info({
+            service: 'backend',
+            action: 'SEED_ADMIN',
+            message: '[AdminSeed] User already exists in Supabase.'
+        });
         userId = signInData.user.id;
     } else {
         // If login failed, try to register
-        logger.info('[AdminSeed] User not found or login failed. Attempting to create...');
+        logger.info({
+            service: 'backend',
+            action: 'SEED_ADMIN',
+            message: '[AdminSeed] User not found or login failed. Attempting to create...'
+        });
         
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
             email: ADMIN_EMAIL,
@@ -53,14 +69,26 @@ export const ensureAdminUser = async () => {
 
         if (signUpError) {
             if (signUpError.message.includes('already registered')) {
-                logger.warn('[AdminSeed] User already registered in Supabase but login failed (possibly wrong password).');
+                logger.warn({
+                    service: 'backend',
+                    action: 'SEED_ADMIN',
+                    message: '[AdminSeed] User already registered in Supabase but login failed (possibly wrong password).'
+                });
                 // Fallback: search in Prisma by email to get ID
             } else {
-                logger.error('[AdminSeed] Failed to create Supabase user:', signUpError.message);
+                logger.error({
+                    service: 'backend',
+                    action: 'SEED_ADMIN_ERROR',
+                    message: '[AdminSeed] Failed to create Supabase user: ' + signUpError.message
+                });
                 return;
             }
         } else if (signUpData.user) {
-            logger.info('[AdminSeed] Supabase user created successfully.');
+            logger.info({
+                service: 'backend',
+                action: 'SEED_ADMIN',
+                message: '[AdminSeed] Supabase user created successfully.'
+            });
             userId = signUpData.user.id;
         }
     }
@@ -69,9 +97,17 @@ export const ensureAdminUser = async () => {
         const existingPrismaUser = await prisma.user.findUnique({ where: { email: ADMIN_EMAIL } });
         if (existingPrismaUser) {
             userId = existingPrismaUser.id;
-            logger.info('[AdminSeed] Found existing user in Prisma by email. Using that ID.');
+            logger.info({
+                service: 'backend',
+                action: 'SEED_ADMIN',
+                message: '[AdminSeed] Found existing user in Prisma by email. Using that ID.'
+            });
         } else {
-             logger.error('[AdminSeed] Could not obtain User ID. Aborting.');
+             logger.error({
+                service: 'backend',
+                action: 'SEED_ADMIN_ERROR',
+                message: '[AdminSeed] Could not obtain User ID. Aborting.'
+             });
              return;
         }
     }
@@ -82,9 +118,17 @@ export const ensureAdminUser = async () => {
     });
 
     if (dbUser) {
-        logger.info('[AdminSeed] User exists in Prisma. Skipping update.');
+        logger.info({
+            service: 'backend',
+            action: 'SEED_ADMIN',
+            message: '[AdminSeed] User exists in Prisma. Skipping update.'
+        });
     } else {
-        logger.info('[AdminSeed] User missing in Prisma. Creating...');
+        logger.info({
+            service: 'backend',
+            action: 'SEED_ADMIN',
+            message: '[AdminSeed] User missing in Prisma. Creating...'
+        });
         
         const account = await prisma.account.create({
             data: {
@@ -107,10 +151,18 @@ export const ensureAdminUser = async () => {
             }
         });
         
-        logger.info('[AdminSeed] System Admin seeded successfully in Prisma.');
+        logger.info({
+            service: 'backend',
+            action: 'SEED_ADMIN',
+            message: '[AdminSeed] System Admin seeded successfully in Prisma.'
+        });
     }
 
   } catch (error: any) {
-    logger.error('[AdminSeed] Unexpected error:', error.message);
+    logger.error({
+        service: 'backend',
+        action: 'SEED_ADMIN_ERROR',
+        message: '[AdminSeed] Unexpected error: ' + error.message
+    });
   }
 };

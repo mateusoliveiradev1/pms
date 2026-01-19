@@ -31,7 +31,7 @@ export const getOrders = async (req: Request, res: Response) => {
         res.json([]);
         return;
       }
-      if (user.role === 'ACCOUNT_ADMIN' || user.role === 'OWNER') {
+      if (user.role === 'ACCOUNT_ADMIN') {
         const supplierIds = await prisma.supplier.findMany({
           where: { accountId: user.accountId },
           select: { id: true }
@@ -82,7 +82,7 @@ export const getOrderStatusStats = async (req: Request, res: Response) => {
             return;
         }
 
-        if (user.role === 'ACCOUNT_ADMIN' || user.role === 'OWNER') {
+        if (user.role === 'ACCOUNT_ADMIN') {
              const supplierIds = await prisma.supplier.findMany({
                  where: { accountId: user.accountId },
                  select: { id: true }

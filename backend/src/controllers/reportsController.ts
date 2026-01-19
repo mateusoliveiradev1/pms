@@ -32,7 +32,7 @@ export const getSalesStats = async (req: Request, res: Response) => {
              return;
         }
 
-        if (user.role === 'ACCOUNT_ADMIN' || user.role === 'OWNER') {
+        if (user.role === 'ACCOUNT_ADMIN') {
              allowedSupplierIds = await prisma.supplier.findMany({
                  where: { accountId: user.accountId },
                  select: { id: true }
@@ -155,7 +155,7 @@ export const getTopProducts = async (req: Request, res: Response) => {
         const user = await prisma.user.findUnique({ where: { id: authUser.userId }, select: { accountId: true, role: true } });
         let allowedSupplierIds: string[] = [];
 
-        if (user?.role === 'ACCOUNT_ADMIN' || user?.role === 'OWNER') {
+        if (user?.role === 'ACCOUNT_ADMIN') {
              allowedSupplierIds = await prisma.supplier.findMany({ where: { accountId: user?.accountId || '' }, select: { id: true } }).then(l => l.map(s => s.id));
         } else {
              allowedSupplierIds = await prisma.supplier.findMany({ where: { userId: authUser.userId }, select: { id: true } }).then(l => l.map(s => s.id));
@@ -236,7 +236,7 @@ export const getOrdersByStatus = async (req: Request, res: Response) => {
         const user = await prisma.user.findUnique({ where: { id: authUser.userId }, select: { accountId: true, role: true } });
         let allowedSupplierIds: string[] = [];
 
-        if (user?.role === 'ACCOUNT_ADMIN' || user?.role === 'OWNER') {
+        if (user?.role === 'ACCOUNT_ADMIN') {
              allowedSupplierIds = await prisma.supplier.findMany({ where: { accountId: user?.accountId || '' }, select: { id: true } }).then(l => l.map(s => s.id));
         } else {
              allowedSupplierIds = await prisma.supplier.findMany({ where: { userId: authUser.userId }, select: { id: true } }).then(l => l.map(s => s.id));
