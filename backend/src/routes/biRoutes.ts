@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { BiFinancialController } from '../controllers/biFinancialController';
-import { authenticateToken, requireSystemAdmin } from '../middlewares/authMiddleware';
+import { authenticateToken, requireRole } from '../middlewares/authMiddleware';
 
 const router = Router();
 
 // Middleware de proteção (Admin Only)
 router.use(authenticateToken);
-router.use(requireSystemAdmin);
+router.use(requireRole(['SYSTEM_ADMIN', 'ADMIN']));
 
 router.get('/overview', BiFinancialController.getOverview);
 router.get('/daily-revenue', BiFinancialController.getDailyRevenue);

@@ -1,6 +1,5 @@
 import { Expo } from 'expo-server-sdk';
 import prisma from '../prisma';
-import { Role } from '@prisma/client';
 
 const expo = new Expo();
 
@@ -8,7 +7,7 @@ export const sendPushToAdmins = async (title: string, body: string, data: any = 
   try {
     // 1. Get tokens from Admins
     const admins = await prisma.user.findMany({
-        where: { role: Role.SYSTEM_ADMIN, expoPushToken: { not: null } }
+        where: { role: 'ADMIN', expoPushToken: { not: null } }
     });
 
     const messages: any[] = [];

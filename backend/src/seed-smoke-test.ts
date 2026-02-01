@@ -1,4 +1,4 @@
-import { PrismaClient, Role, AccountType } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -7,24 +7,20 @@ async function main() {
   console.log('🗑️  Cleaning database...');
 
   // Delete in order to avoid foreign key constraints
-  try {
-      await prisma.financialLedger.deleteMany({});
-      await prisma.withdrawalRequest.deleteMany({});
-      await prisma.supplierCommission.deleteMany({});
-      await prisma.notification.deleteMany({});
-      await prisma.inventoryLog.deleteMany({});
-      await prisma.orderItem.deleteMany({});
-      await prisma.order.deleteMany({});
-      await prisma.productSupplier.deleteMany({});
-      await prisma.product.deleteMany({});
-      await prisma.subscription.deleteMany({});
-      await prisma.supplier.deleteMany({});
-      await prisma.user.deleteMany({});
-      await prisma.account.deleteMany({});
-      await prisma.plan.deleteMany({});
-  } catch (e) {
-      console.log('Clean up warning (tables might not exist):', e);
-  }
+  await prisma.financialLedger.deleteMany({}); // Added this
+  await prisma.withdrawalRequest.deleteMany({}); // Added this
+  await prisma.supplierCommission.deleteMany({}); // Added this
+  await prisma.notification.deleteMany({});
+  await prisma.inventoryLog.deleteMany({});
+  await prisma.orderItem.deleteMany({});
+  await prisma.order.deleteMany({});
+  await prisma.productSupplier.deleteMany({});
+  await prisma.product.deleteMany({});
+  await prisma.subscription.deleteMany({});
+  await prisma.supplier.deleteMany({});
+  await prisma.user.deleteMany({});
+  await prisma.account.deleteMany({});
+  await prisma.plan.deleteMany({});
 
   console.log('✅ Database cleaned.');
 
@@ -45,7 +41,7 @@ async function main() {
   const accountA_real = await prisma.account.create({
     data: {
       name: 'Minha Loja Principal (Conta A)',
-      type: AccountType.BUSINESS,
+      type: 'COMPANY',
       planId: plan.id
     }
   });
@@ -53,7 +49,7 @@ async function main() {
   const accountB_real = await prisma.account.create({
     data: {
       name: 'Loja Concorrente (Conta B)',
-      type: AccountType.BUSINESS,
+      type: 'COMPANY',
       planId: plan.id
     }
   });
@@ -67,7 +63,7 @@ async function main() {
       id: uuidv4(),
       name: 'Admin Mateus',
       email: 'admin@pms.com',
-      role: Role.SYSTEM_ADMIN,
+      role: 'SYSTEM_ADMIN',
       accountId: accountA_real.id
     }
   });
