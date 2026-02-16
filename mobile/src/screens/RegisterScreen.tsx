@@ -296,121 +296,125 @@ const RegisterScreen = () => {
 
       {/* Terms Modal */}
       <Modal visible={termsModalVisible} animationType="slide" presentationStyle="pageSheet">
-          <View style={styles.modalContainer}>
-              <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Termos de Uso</Text>
-                  <TouchableOpacity onPress={() => setTermsModalVisible(false)}>
-                      <Ionicons name="close" size={24} color={colors.text} />
-                  </TouchableOpacity>
-              </View>
-              <ScrollView contentContainerStyle={styles.modalContent}>
-                  <Text style={styles.legalTitle}>TERMOS E CONDIÇÕES GERAIS DE USO</Text>
-                  
-                  <Text style={styles.legalSection}>1. ACEITAÇÃO DOS TERMOS</Text>
-                  <Text style={styles.legalText}>
-                      Ao criar uma conta e utilizar a plataforma PMS ("Plataforma"), você concorda expressamente com estes Termos de Uso. Se você não concordar com qualquer disposição, não deverá utilizar a Plataforma.
-                  </Text>
+          <SafeAreaView style={styles.modalSafeArea} edges={['top']}>
+            <View style={styles.modalContainer}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Termos de Uso</Text>
+                    <TouchableOpacity onPress={() => setTermsModalVisible(false)} style={styles.closeButton}>
+                        <Ionicons name="close" size={24} color={colors.text} />
+                    </TouchableOpacity>
+                </View>
+                <ScrollView contentContainerStyle={styles.modalContent}>
+                    <Text style={styles.legalTitle}>TERMOS E CONDIÇÕES GERAIS DE USO</Text>
+                    {/* ... content ... */}
+                    <Text style={styles.legalSection}>1. ACEITAÇÃO DOS TERMOS</Text>
+                    <Text style={styles.legalText}>
+                        Ao criar uma conta e utilizar a plataforma PMS ("Plataforma"), você concorda expressamente com estes Termos de Uso. Se você não concordar com qualquer disposição, não deverá utilizar a Plataforma.
+                    </Text>
 
-                  <Text style={styles.legalSection}>2. O SERVIÇO</Text>
-                  <Text style={styles.legalText}>
-                      A PMS é uma plataforma de gestão de vendas e intermediação de negócios que conecta vendedores ("Vendedores") a fornecedores de produtos ("Fornecedores"). A Plataforma oferece ferramentas para gestão de pedidos, controle financeiro e processamento de pagamentos.
-                  </Text>
+                    <Text style={styles.legalSection}>2. O SERVIÇO</Text>
+                    <Text style={styles.legalText}>
+                        A PMS é uma plataforma de gestão de vendas e intermediação de negócios que conecta vendedores ("Vendedores") a fornecedores de produtos ("Fornecedores"). A Plataforma oferece ferramentas para gestão de pedidos, controle financeiro e processamento de pagamentos.
+                    </Text>
 
-                  <Text style={styles.legalSection}>3. CADASTRO E CONTAS</Text>
-                  <Text style={styles.legalText}>
-                      3.1. Para utilizar os serviços, você deve fornecer informações verdadeiras, completas e atualizadas. A PMS não se responsabiliza por dados incorretos inseridos pelos usuários.{'\n'}
-                      3.2. Você é o único responsável pela segurança de sua senha e por qualquer atividade realizada em sua conta.{'\n'}
-                      3.3. Contas de "Empresa" ou "Fornecedor" exigem CNPJ válido e regular. Contas "Individuais" podem operar com CPF, sujeitas aos limites legais de faturamento.
-                  </Text>
+                    <Text style={styles.legalSection}>3. CADASTRO E CONTAS</Text>
+                    <Text style={styles.legalText}>
+                        3.1. Para utilizar os serviços, você deve fornecer informações verdadeiras, completas e atualizadas. A PMS não se responsabiliza por dados incorretos inseridos pelos usuários.{'\n'}
+                        3.2. Você é o único responsável pela segurança de sua senha e por qualquer atividade realizada em sua conta.{'\n'}
+                        3.3. Contas de "Empresa" ou "Fornecedor" exigem CNPJ válido e regular. Contas "Individuais" podem operar com CPF, sujeitas aos limites legais de faturamento.
+                    </Text>
 
-                  <Text style={styles.legalSection}>4. TAXAS E PAGAMENTOS</Text>
-                  <Text style={styles.legalText}>
-                      4.1. O uso da Plataforma está sujeito ao pagamento de mensalidades (conforme plano escolhido) e taxas sobre transações (comissões).{'\n'}
-                      4.2. A PMS retém automaticamente as comissões sobre as vendas realizadas através da Plataforma.{'\n'}
-                      4.3. Os saques de saldo estão sujeitos a prazos de liberação (D+14 ou D+30) e limites mensais conforme o nível da conta.{'\n'}
-                      4.4. Em caso de chargeback (contestação de compra pelo cliente final), o valor será descontado do saldo do Vendedor/Fornecedor responsável.
-                  </Text>
+                    <Text style={styles.legalSection}>4. TAXAS E PAGAMENTOS</Text>
+                    <Text style={styles.legalText}>
+                        4.1. O uso da Plataforma está sujeito ao pagamento de mensalidades (conforme plano escolhido) e taxas sobre transações (comissões).{'\n'}
+                        4.2. A PMS retém automaticamente as comissões sobre as vendas realizadas através da Plataforma.{'\n'}
+                        4.3. Os saques de saldo estão sujeitos a prazos de liberação (D+14 ou D+30) e limites mensais conforme o nível da conta.{'\n'}
+                        4.4. Em caso de chargeback (contestação de compra pelo cliente final), o valor será descontado do saldo do Vendedor/Fornecedor responsável.
+                    </Text>
 
-                  <Text style={styles.legalSection}>5. RESPONSABILIDADES</Text>
-                  <Text style={styles.legalText}>
-                      5.1. A PMS atua como intermediadora tecnológica e não é proprietária dos produtos ofertados pelos Fornecedores, nem se responsabiliza pela qualidade, entrega ou garantia dos mesmos, salvo disposição legal em contrário.{'\n'}
-                      5.2. O Vendedor é responsável pelo atendimento ao cliente final e pela emissão de nota fiscal quando obrigatório.{'\n'}
-                      5.3. É proibida a venda de produtos ilegais, falsificados ou que violem direitos de terceiros.
-                  </Text>
+                    <Text style={styles.legalSection}>5. RESPONSABILIDADES</Text>
+                    <Text style={styles.legalText}>
+                        5.1. A PMS atua como intermediadora tecnológica e não é proprietária dos produtos ofertados pelos Fornecedores, nem se responsabiliza pela qualidade, entrega ou garantia dos mesmos, salvo disposição legal em contrário.{'\n'}
+                        5.2. O Vendedor é responsável pelo atendimento ao cliente final e pela emissão de nota fiscal quando obrigatório.{'\n'}
+                        5.3. É proibida a venda de produtos ilegais, falsificados ou que violem direitos de terceiros.
+                    </Text>
 
-                  <Text style={styles.legalSection}>6. CANCELAMENTO E SUSPENSÃO</Text>
-                  <Text style={styles.legalText}>
-                      A PMS reserva-se o direito de suspender ou cancelar contas que violem estes Termos, apresentem alto índice de reclamações, ou suspeita de fraude, sem aviso prévio.
-                  </Text>
+                    <Text style={styles.legalSection}>6. CANCELAMENTO E SUSPENSÃO</Text>
+                    <Text style={styles.legalText}>
+                        A PMS reserva-se o direito de suspender ou cancelar contas que violem estes Termos, apresentem alto índice de reclamações, ou suspeita de fraude, sem aviso prévio.
+                    </Text>
 
-                  <View style={{ height: 40 }} />
-              </ScrollView>
-          </View>
+                    <View style={{ height: 40 }} />
+                </ScrollView>
+            </View>
+          </SafeAreaView>
       </Modal>
 
       {/* Privacy Modal */}
       <Modal visible={privacyModalVisible} animationType="slide" presentationStyle="pageSheet">
-          <View style={styles.modalContainer}>
-              <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Política de Privacidade</Text>
-                  <TouchableOpacity onPress={() => setPrivacyModalVisible(false)}>
-                      <Ionicons name="close" size={24} color={colors.text} />
-                  </TouchableOpacity>
-              </View>
-              <ScrollView contentContainerStyle={styles.modalContent}>
-                  <Text style={styles.legalTitle}>POLÍTICA DE PRIVACIDADE</Text>
-                  
-                  <Text style={styles.legalText}>
-                      A sua privacidade é importante para nós. Esta Política de Privacidade descreve como a PMS coleta, usa e protege suas informações pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018).
-                  </Text>
+          <SafeAreaView style={styles.modalSafeArea} edges={['top']}>
+            <View style={styles.modalContainer}>
+                <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Política de Privacidade</Text>
+                    <TouchableOpacity onPress={() => setPrivacyModalVisible(false)} style={styles.closeButton}>
+                        <Ionicons name="close" size={24} color={colors.text} />
+                    </TouchableOpacity>
+                </View>
+                <ScrollView contentContainerStyle={styles.modalContent}>
+                    <Text style={styles.legalTitle}>POLÍTICA DE PRIVACIDADE</Text>
+                    {/* ... content ... */}
+                    <Text style={styles.legalText}>
+                        A sua privacidade é importante para nós. Esta Política de Privacidade descreve como a PMS coleta, usa e protege suas informações pessoais, em conformidade com a Lei Geral de Proteção de Dados (LGPD - Lei nº 13.709/2018).
+                    </Text>
 
-                  <Text style={styles.legalSection}>1. DADOS COLETADOS</Text>
-                  <Text style={styles.legalText}>
-                      Coletamos os seguintes tipos de informações:{'\n'}
-                      • Dados de Identificação: Nome, CPF/CNPJ, endereço, telefone, e-mail.{'\n'}
-                      • Dados Financeiros: Dados bancários, histórico de transações, chaves PIX.{'\n'}
-                      • Dados de Uso: Logs de acesso, endereço IP, tipo de dispositivo e navegador.
-                  </Text>
+                    <Text style={styles.legalSection}>1. DADOS COLETADOS</Text>
+                    <Text style={styles.legalText}>
+                        Coletamos os seguintes tipos de informações:{'\n'}
+                        • Dados de Identificação: Nome, CPF/CNPJ, endereço, telefone, e-mail.{'\n'}
+                        • Dados Financeiros: Dados bancários, histórico de transações, chaves PIX.{'\n'}
+                        • Dados de Uso: Logs de acesso, endereço IP, tipo de dispositivo e navegador.
+                    </Text>
 
-                  <Text style={styles.legalSection}>2. FINALIDADE DO USO DOS DADOS</Text>
-                  <Text style={styles.legalText}>
-                      Seus dados são utilizados para:{'\n'}
-                      • Processar pagamentos e repasses financeiros.{'\n'}
-                      • Verificar sua identidade e prevenir fraudes.{'\n'}
-                      • Emitir notas fiscais de serviço (quando aplicável).{'\n'}
-                      • Melhorar a experiência de uso da Plataforma e oferecer suporte técnico.
-                  </Text>
+                    <Text style={styles.legalSection}>2. FINALIDADE DO USO DOS DADOS</Text>
+                    <Text style={styles.legalText}>
+                        Seus dados são utilizados para:{'\n'}
+                        • Processar pagamentos e repasses financeiros.{'\n'}
+                        • Verificar sua identidade e prevenir fraudes.{'\n'}
+                        • Emitir notas fiscais de serviço (quando aplicável).{'\n'}
+                        • Melhorar a experiência de uso da Plataforma e oferecer suporte técnico.
+                    </Text>
 
-                  <Text style={styles.legalSection}>3. COMPARTILHAMENTO DE DADOS</Text>
-                  <Text style={styles.legalText}>
-                      Não vendemos seus dados pessoais. Podemos compartilhar informações com:{'\n'}
-                      • Processadores de Pagamento (ex: Stripe, Mercado Pago) para efetuar transações.{'\n'}
-                      • Autoridades governamentais, quando exigido por lei ou ordem judicial.{'\n'}
-                      • Parceiros logísticos, estritamente para fins de entrega de produtos.
-                  </Text>
+                    <Text style={styles.legalSection}>3. COMPARTILHAMENTO DE DADOS</Text>
+                    <Text style={styles.legalText}>
+                        Não vendemos seus dados pessoais. Podemos compartilhar informações com:{'\n'}
+                        • Processadores de Pagamento (ex: Stripe, Mercado Pago) para efetuar transações.{'\n'}
+                        • Autoridades governamentais, quando exigido por lei ou ordem judicial.{'\n'}
+                        • Parceiros logísticos, estritamente para fins de entrega de produtos.
+                    </Text>
 
-                  <Text style={styles.legalSection}>4. SEGURANÇA</Text>
-                  <Text style={styles.legalText}>
-                      Adotamos medidas técnicas e administrativas de segurança para proteger seus dados contra acessos não autorizados, perdas ou alterações. Utilizamos criptografia em transações financeiras e armazenamento seguro de senhas.
-                  </Text>
+                    <Text style={styles.legalSection}>4. SEGURANÇA</Text>
+                    <Text style={styles.legalText}>
+                        Adotamos medidas técnicas e administrativas de segurança para proteger seus dados contra acessos não autorizados, perdas ou alterações. Utilizamos criptografia em transações financeiras e armazenamento seguro de senhas.
+                    </Text>
 
-                  <Text style={styles.legalSection}>5. SEUS DIREITOS</Text>
-                  <Text style={styles.legalText}>
-                      Você tem direito a:{'\n'}
-                      • Acessar seus dados pessoais.{'\n'}
-                      • Corrigir dados incompletos ou inexatos.{'\n'}
-                      • Solicitar a exclusão de seus dados (ressalvada a guarda obrigatória por lei).{'\n'}
-                      • Revogar o consentimento para uso de dados.
-                  </Text>
+                    <Text style={styles.legalSection}>5. SEUS DIREITOS</Text>
+                    <Text style={styles.legalText}>
+                        Você tem direito a:{'\n'}
+                        • Acessar seus dados pessoais.{'\n'}
+                        • Corrigir dados incompletos ou inexatos.{'\n'}
+                        • Solicitar a exclusão de seus dados (ressalvada a guarda obrigatória por lei).{'\n'}
+                        • Revogar o consentimento para uso de dados.
+                    </Text>
 
-                  <Text style={styles.legalSection}>6. CONTATO</Text>
-                  <Text style={styles.legalText}>
-                      Para exercer seus direitos ou tirar dúvidas sobre esta política, entre em contato através do canal de suporte no aplicativo.
-                  </Text>
+                    <Text style={styles.legalSection}>6. CONTATO</Text>
+                    <Text style={styles.legalText}>
+                        Para exercer seus direitos ou tirar dúvidas sobre esta política, entre em contato através do canal de suporte no aplicativo.
+                    </Text>
 
-                  <View style={{ height: 40 }} />
-              </ScrollView>
-          </View>
+                    <View style={{ height: 40 }} />
+                </ScrollView>
+            </View>
+          </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
@@ -556,6 +560,10 @@ const styles = StyleSheet.create({
       fontWeight: '600',
       textDecorationLine: 'underline',
   },
+  modalSafeArea: {
+    flex: 1,
+    backgroundColor: '#FFF',
+  },
   modalContainer: {
       flex: 1,
       backgroundColor: '#FFF',
@@ -567,6 +575,11 @@ const styles = StyleSheet.create({
       padding: 16,
       borderBottomWidth: 1,
       borderBottomColor: '#F0F0F0',
+  },
+  closeButton: {
+      padding: 8,
+      backgroundColor: '#F3F4F6',
+      borderRadius: 20,
   },
   modalTitle: {
       fontSize: 18,

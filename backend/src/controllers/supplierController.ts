@@ -262,17 +262,70 @@ export const createSupplier = async (req: Request, res: Response) => {
 export const deleteSupplier = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    // Optional: detach relations (ProductSupplier) before deleting
-    await prisma.productSupplier.deleteMany({
-      where: { supplierId: id }
+    const authUser = (req as any).user;
+    if (!authUser?.userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
+
+    // 1. Check if Supplier exists and User has permission
+    const supplier = await prisma.supplier.findUnique({ where: { id } });
+    if (!supplier) {
+        res.status(404).json({ message: 'Supplier not found' });
+        return;
+    }
+
+    // Permission Check: Only Account Admin or System Admin can delete
+    // AND if Account Admin, must own the supplier account
+    if (authUser.role !== 'SYSTEM_ADMIN' && authUser.role !== 'ADMIN') {
+        const user = await prisma.user.findUnique({ where: { id: authUser.userId } });
+        if (!user || user.accountId !== supplier.accountId || user.role !== 'ACCOUNT_ADMIN') {
+             res.status(403).json({ message: 'Forbidden' });
+             return;
+        }
+    }
+
+    // 2. Check for Active Orders (Integrity Check)
+    const pendingOrders = await prisma.order.count({
+        where: {
+            supplierId: id,
+            status: { notIn: ['DELIVERED', 'CANCELLED'] } // Only allow delete if all orders are closed
+        }
     });
 
-    await prisma.supplier.delete({
-      where: { id }
+    if (pendingOrders > 0) {
+        res.status(400).json({ message: 'Cannot delete supplier with pending orders. Finish or cancel them first.' });
+        return;
+    }
+
+    // 3. Safe Delete
+    await prisma.$transaction(async (tx) => {
+        // Delete Product Relations first
+        await tx.productSupplier.deleteMany({
+            where: { supplierId: id }
+        });
+        
+        // Delete Supplier
+        await tx.supplier.delete({
+            where: { id }
+        });
+
+        // Audit Log
+        await tx.adminLog.create({
+            data: {
+                adminId: authUser.userId,
+                adminName: 'User',
+                action: 'DELETE_SUPPLIER',
+                targetId: id,
+                details: JSON.stringify({ name: supplier.name }),
+                reason: 'User Request'
+            }
+        });
     });
+
     res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ message: 'Error deleting supplier', error });
+  } catch (error: any) {
+    res.status(500).json({ message: 'Error deleting supplier', error: error.message });
   }
 };
 

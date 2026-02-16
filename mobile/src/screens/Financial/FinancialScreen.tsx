@@ -358,6 +358,32 @@ Este é um comprovante digital gerado pelo sistema PMS.
     }
   };
 
+  const [checkoutStep, setCheckoutStep] = useState<"PLAN" | "SUMMARY" | "PAYMENT">("PLAN");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null);
+
+  // ... inside openPlanModal ...
+  // setCheckoutStep("PLAN");
+
+  // ...
+
+  const handleSelectPlan = (planId: string) => {
+      setSelectedPlanId(planId);
+      // If plan is paid, go to summary/payment. If free, maybe direct confirm?
+      // For now, let's assume all upgrades are significant enough for a summary.
+      setCheckoutStep("SUMMARY");
+  };
+
+  const handleConfirmSummary = () => {
+      // Check for cards
+      if (cards.length > 0) {
+          setSelectedPaymentMethod(cards[0].token); // Default to first
+          setCheckoutStep("PAYMENT");
+      } else {
+          // No cards, show Add Card form in Payment step
+          setCheckoutStep("PAYMENT");
+      }
+  };
+
   const confirmChangePlan = async () => {
     if (!selectedPlanId) {
       Alert.alert("Erro", "Selecione um plano.");
@@ -372,11 +398,53 @@ Este é um comprovante digital gerado pelo sistema PMS.
       return;
     }
 
+    const plan = plans.find(p => p.id === selectedPlanId);
+    if (!plan) return;
+
+    // Payment Validation for Paid Plans
+    let paymentMethodId = selectedPaymentMethod;
+    
+    // If paid plan and no payment method selected (and not using balance), require card
+    if (plan.monthlyPrice > 0) {
+        if (!paymentMethodId && !cardDetails?.complete) {
+             Alert.alert("Pagamento", "Adicione um cartão para finalizar a assinatura.");
+             return;
+        }
+        
+        // If entering new card
+        if (!paymentMethodId && cardDetails?.complete) {
+             try {
+                 setLoadingChangePlan(true);
+                 const { paymentMethod, error } = await createPaymentMethod({
+                    paymentMethodType: "Card",
+                    paymentMethodData: {
+                        billingDetails: { name: newCardName || supplier.name },
+                    },
+                 });
+                 
+                 if (error) {
+                     Alert.alert("Erro no Cartão", error.message);
+                     setLoadingChangePlan(false);
+                     return;
+                 }
+                 
+                 if (paymentMethod) {
+                     paymentMethodId = paymentMethod.id;
+                 }
+             } catch (e) {
+                 setLoadingChangePlan(false);
+                 return;
+             }
+        }
+    }
+
     setLoadingChangePlan(true);
     try {
       const res = await api.post("/financial/subscription/change-plan", {
         supplierId: supplier.id,
         planId: selectedPlanId,
+        paymentMethodId, // Send token
+        paymentType: 'CARD' // Or BALANCE if implemented
       });
 
       if (res.data.supplier) {
@@ -384,37 +452,14 @@ Este é um comprovante digital gerado pelo sistema PMS.
       }
 
       setPlanModalVisible(false);
-      Alert.alert("Plano alterado", "Seu plano foi atualizado com sucesso.");
+      Alert.alert("Sucesso", `Plano alterado para ${plan.name}!`);
+      setCheckoutStep("PLAN"); // Reset
+      setNewCardName("");
+      setCardDetails(null);
     } catch (e: any) {
       console.log("Error changing plan:", e);
       const msg = e.response?.data?.message || e.message || "Erro desconhecido";
-
-      // fallback: update local only if it's a specific "mock" scenario or connectivity issue
-      // But better to show error if we want real behavior.
-      // Keeping fallback for now but adding alert.
-
-      const chosen = plans.find((p) => p.id === selectedPlanId);
-      if (chosen) {
-        setSupplier((prev) =>
-          prev
-            ? {
-                ...prev,
-                plan: {
-                  id: chosen.id,
-                  name: chosen.name,
-                  monthlyPrice: chosen.monthlyPrice,
-                },
-              }
-            : null,
-        );
-        setPlanModalVisible(false);
-        Alert.alert(
-          "Aviso",
-          `Houve um erro na comunicação (${msg}), mas atualizamos visualmente.`,
-        );
-      } else {
-        Alert.alert("Erro", `Falha ao alterar plano: ${msg}`);
-      }
+      Alert.alert("Erro", `Falha ao assinar plano: ${msg}`);
     } finally {
       setLoadingChangePlan(false);
     }
@@ -828,7 +873,7 @@ Este é um comprovante digital gerado pelo sistema PMS.
                   color={colors.primary}
                   style={{ marginVertical: 20 }}
                 />
-              ) : (
+              ) : checkoutStep === "PLAN" ? (
                 <>
                   <ScrollView style={{ maxHeight: 300 }}>
                     {plans.map((p) => (
@@ -882,16 +927,117 @@ Este é um comprovante digital gerado pelo sistema PMS.
                       { marginTop: 12 },
                       loadingChangePlan && styles.saveButtonDisabled,
                     ]}
-                    onPress={confirmChangePlan}
+                    onPress={() => handleSelectPlan(selectedPlanId!)}
                     disabled={!selectedPlanId || loadingChangePlan}
                   >
-                    {loadingChangePlan ? (
-                      <ActivityIndicator color="#FFF" />
-                    ) : (
-                      <Text style={styles.saveButtonText}>Confirmar Plano</Text>
-                    )}
+                      <Text style={styles.saveButtonText}>Continuar</Text>
                   </TouchableOpacity>
                 </>
+              ) : checkoutStep === "SUMMARY" ? (
+                  <View>
+                      <Text style={[styles.sectionTitle, { fontSize: 16 }]}>Resumo do Plano</Text>
+                      {(() => {
+                          const p = plans.find(plan => plan.id === selectedPlanId);
+                          if (!p) return null;
+                          return (
+                              <View style={styles.card}>
+                                  <Text style={styles.planName}>{p.name}</Text>
+                                  <Text style={[styles.planPrice, { fontSize: 24, marginVertical: 8 }]}>R$ {p.monthlyPrice.toFixed(2)}<Text style={{fontSize: 14, color: colors.muted}}>/mês</Text></Text>
+                                  <Text style={styles.planCycle}>Cobrança recorrente a cada {p.cycleDays} dias</Text>
+                              </View>
+                          );
+                      })()}
+                      
+                      <TouchableOpacity
+                        style={[styles.saveButton, { marginTop: 12 }]}
+                        onPress={handleConfirmSummary}
+                      >
+                        <Text style={styles.saveButtonText}>Ir para Pagamento</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.cancelButton, { marginTop: 8 }]}
+                        onPress={() => setCheckoutStep("PLAN")}
+                      >
+                        <Text style={styles.cancelButtonText}>Voltar</Text>
+                      </TouchableOpacity>
+                  </View>
+              ) : (
+                  <ScrollView>
+                      <Text style={[styles.sectionTitle, { fontSize: 16 }]}>Pagamento</Text>
+                      
+                      {cards.length > 0 ? (
+                          <View>
+                              <Text style={styles.withdrawLabel}>Cartão Selecionado</Text>
+                              {cards.map(card => (
+                                  <TouchableOpacity 
+                                    key={card.id} 
+                                    style={[styles.cardRow, selectedPaymentMethod === card.token && { backgroundColor: '#F0F7FF', borderColor: colors.primary, borderWidth: 1, borderRadius: 8 }]}
+                                    onPress={() => setSelectedPaymentMethod(card.token)}
+                                  >
+                                      <Ionicons name="card" size={24} color={colors.primary} />
+                                      <View style={{ flex: 1, marginLeft: 12 }}>
+                                          <Text style={styles.cardBrand}>{card.brand.toUpperCase()} **** {card.last4}</Text>
+                                      </View>
+                                      {selectedPaymentMethod === card.token && (
+                                          <Ionicons name="checkmark-circle" size={24} color={colors.success} />
+                                      )}
+                                  </TouchableOpacity>
+                              ))}
+                              
+                              <TouchableOpacity onPress={() => { setCards([]); setSelectedPaymentMethod(null); }} style={{ marginTop: 12 }}>
+                                  <Text style={{ color: colors.primary, textAlign: 'center' }}>Usar outro cartão</Text>
+                              </TouchableOpacity>
+                          </View>
+                      ) : (
+                          <View>
+                              <Text style={styles.withdrawLabel}>Novo Cartão de Crédito</Text>
+                              <TextInput
+                                  placeholder="Nome impresso no cartão"
+                                  style={styles.input}
+                                  value={newCardName}
+                                  onChangeText={setNewCardName}
+                              />
+                              <CardField
+                                  postalCodeEnabled={false}
+                                  style={{
+                                      width: '100%',
+                                      height: 50,
+                                      marginVertical: 10,
+                                  }}
+                                  cardStyle={{
+                                      backgroundColor: '#FFFFFF',
+                                      textColor: '#000000',
+                                  }}
+                                  onCardChange={(cardDetails) => {
+                                      setCardDetails(cardDetails);
+                                  }}
+                              />
+                          </View>
+                      )}
+
+                      <TouchableOpacity
+                        style={[
+                          styles.saveButton,
+                          { marginTop: 20 },
+                          loadingChangePlan && styles.saveButtonDisabled,
+                        ]}
+                        onPress={confirmChangePlan}
+                        disabled={loadingChangePlan}
+                      >
+                        {loadingChangePlan ? (
+                          <ActivityIndicator color="#FFF" />
+                        ) : (
+                          <Text style={styles.saveButtonText}>Pagar e Assinar</Text>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.cancelButton, { marginTop: 8 }]}
+                        onPress={() => setCheckoutStep("SUMMARY")}
+                        disabled={loadingChangePlan}
+                      >
+                        <Text style={styles.cancelButtonText}>Voltar</Text>
+                      </TouchableOpacity>
+                  </ScrollView>
               )}
             </View>
           </View>

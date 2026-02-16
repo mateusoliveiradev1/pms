@@ -1,0 +1,4 @@
+- [x] Modais de Termos e Política têm UI profissional e botão "X" funcional.
+- [x] Troca de plano para pago exige pagamento via cartão.
+- [x] Backend processa pagamento antes de atualizar plano.
+- [x] Alteração de plano é isolada por conta.

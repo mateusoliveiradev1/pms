@@ -10,12 +10,35 @@ import {
 } from '../services/mercadoLivreService';
 
 export const getAuthUrl = (req: Request, res: Response) => {
-  const url = getServiceAuthUrl();
+  const isMobile = req.query.mobile === 'true';
+  
+  let redirectUri = process.env.ML_REDIRECT_URI;
+  
+  if (isMobile) {
+      // Construct the mobile-redirect endpoint URL
+      // Assuming the backend is hosted and reachable via req.get('host')
+      // If behind a proxy (like Render), protocol might be http but we need https.
+      // Safer to use process.env.API_URL if available, or construct carefully.
+      const protocol = req.protocol === 'http' && req.get('host')?.includes('localhost') ? 'http' : 'https';
+      const host = req.get('host');
+      redirectUri = `${protocol}://${host}/api/mercadolivre/mobile-redirect`;
+  }
+
+  const url = getServiceAuthUrl(redirectUri);
   res.json({ url });
 };
 
+export const handleMobileRedirect = (req: Request, res: Response) => {
+    const { code } = req.query;
+    if (!code) {
+        return res.status(400).send('Code is required');
+    }
+    // Redirect to the mobile app custom scheme
+    res.redirect(`pmsops://ml-auth?code=${code}`);
+};
+
 export const handleCallback = async (req: Request, res: Response) => {
-  const { code } = req.body;
+  const { code, isMobile } = req.body; // Expect isMobile flag from frontend
 
   if (!code) {
     res.status(400).json({ message: 'Code is required' });
@@ -23,26 +46,60 @@ export const handleCallback = async (req: Request, res: Response) => {
   }
 
   try {
-    const data = await exchangeToken(code as string);
+    let redirectUri = process.env.ML_REDIRECT_URI;
+    if (isMobile) {
+        const protocol = req.protocol === 'http' && req.get('host')?.includes('localhost') ? 'http' : 'https';
+        const host = req.get('host');
+        redirectUri = `${protocol}://${host}/api/mercadolivre/mobile-redirect`;
+    }
+
+    const data = await exchangeToken(code as string, redirectUri);
     const { access_token, refresh_token, expires_in, user_id } = data;
 
-    // Save or update integration
-    await prisma.integration.upsert({
-      where: { provider: 'MERCADOLIVRE' },
-      update: {
-        accessToken: access_token,
-        refreshToken: refresh_token,
-        expiresIn: expires_in,
-        userId: String(user_id),
-      },
-      create: {
-        provider: 'MERCADOLIVRE',
-        accessToken: access_token,
-        refreshToken: refresh_token,
-        expiresIn: expires_in,
-        userId: String(user_id),
-      },
+    const authUser = (req as any).user;
+    if (!authUser?.userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
+
+    // Save or update integration PER USER
+    // Assuming schema has @@unique([provider, userId]) or similar logic
+    // We must find by provider AND userId.
+    // If schema only has 'provider' as unique, we are in trouble.
+    // Let's assume we can query by userId.
+    
+    // Check if integration exists for this user
+    // We use provider as a composite key: 'MERCADOLIVRE:<system_user_id>'
+    // because 'provider' is unique in the schema.
+    // The 'userId' field in Integration table will store the External ML User ID.
+    
+    const providerKey = `MERCADOLIVRE:${authUser.userId}`;
+
+    const existing = await prisma.integration.findUnique({
+        where: { provider: providerKey }
     });
+
+    if (existing) {
+        await prisma.integration.update({
+            where: { id: existing.id },
+            data: {
+                accessToken: access_token,
+                refreshToken: refresh_token,
+                expiresIn: expires_in,
+                userId: String(user_id) // Store ML User ID here
+            }
+        });
+    } else {
+        await prisma.integration.create({
+            data: {
+                provider: providerKey,
+                accessToken: access_token,
+                refreshToken: refresh_token,
+                expiresIn: expires_in,
+                userId: String(user_id) // Store ML User ID here
+            }
+        });
+    }
 
     res.json({ message: 'Mercado Livre connected successfully' });
   } catch (error) {
@@ -53,8 +110,15 @@ export const handleCallback = async (req: Request, res: Response) => {
 
 export const checkConnection = async (req: Request, res: Response) => {
   try {
+    const authUser = (req as any).user;
+    if (!authUser?.userId) {
+        res.json({ connected: false });
+        return;
+    }
+
+    const providerKey = `MERCADOLIVRE:${authUser.userId}`;
     const integration = await prisma.integration.findUnique({
-      where: { provider: 'MERCADOLIVRE' },
+      where: { provider: providerKey },
     });
 
     if (!integration) {
@@ -72,8 +136,15 @@ export const checkConnection = async (req: Request, res: Response) => {
 
 export const syncProducts = async (req: Request, res: Response) => {
   try {
+    const authUser = (req as any).user;
+    if (!authUser?.userId) {
+        res.status(401).json({ message: 'Unauthorized' });
+        return;
+    }
+
+    const providerKey = `MERCADOLIVRE:${authUser.userId}`;
     const integration = await prisma.integration.findUnique({
-      where: { provider: 'MERCADOLIVRE' },
+      where: { provider: providerKey },
     });
 
     if (!integration) {

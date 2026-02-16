@@ -1,0 +1,10 @@
+- [x] Produto só cria com `supplierId` válido (sem fallbacks aleatórios).
+- [x] Atualização de Produto respeita o fornecedor correto e preço de custo real.
+- [x] Pedido grava `costPrice` (custo fornecedor) e `sellingPrice` (venda) imutáveis.
+- [x] Taxa de Comissão é buscada do Plano do Fornecedor no momento da venda (seguro).
+- [x] Dashboard exibe Lucro Real (Venda - Custo - Taxa) baseado no histórico.
+- [x] Notificações são salvas e listadas corretamente.
+- [x] Integração Mercado Livre é isolada por usuário.
+- [x] Produto criado no PMS é publicado automaticamente no ML (se conectado).
+- [x] Estoque do PMS sincroniza com ML.
+- [x] Deleção de Fornecedor bloqueada se houver pedidos.

@@ -68,18 +68,38 @@ const SettingsScreen = () => {
   const handleConnectML = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/mercadolivre/auth-url');
+      const response = await api.get('/mercadolivre/auth-url?mobile=true');
       const { url } = response.data;
       
-      // Open the browser
-      await WebBrowser.openBrowserAsync(url);
-      
-      // After browser closes (or user returns), check connection again
-      // We might need a "Check Again" button if this returns immediately
-      // But let's try checking after a small delay or just wait for user action
-      setTimeout(checkConnection, 2000); 
+      // Use AuthSession to handle the redirect automatically
+      const result = await WebBrowser.openAuthSessionAsync(
+        url,
+        'pmsops://ml-auth' // This must match the redirect in backend
+      );
+
+      if (result.type === 'success' && result.url) {
+          // Parse code from URL
+          // url looks like pmsops://ml-auth?code=...
+          const codeMatch = result.url.match(/code=([^&]*)/);
+          if (codeMatch && codeMatch[1]) {
+              const code = codeMatch[1];
+              
+              // Exchange code for token
+              await api.post('/mercadolivre/callback', { code, isMobile: true });
+              
+              Alert.alert('Sucesso', 'Mercado Livre conectado!');
+              checkConnection();
+          } else {
+              Alert.alert('Erro', 'Código de autorização não encontrado.');
+          }
+      } else if (result.type === 'cancel') {
+          // User cancelled
+      } else {
+          Alert.alert('Erro', 'Falha na autenticação.');
+      }
     } catch (error) {
-      Alert.alert('Erro', 'Não foi possível iniciar a conexão com Mercado Livre.');
+      console.log('ML Auth Error:', error);
+      Alert.alert('Erro', 'Não foi possível conectar ao Mercado Livre.');
     } finally {
       setLoading(false);
     }

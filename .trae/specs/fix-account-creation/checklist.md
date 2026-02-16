@@ -1,0 +1,4 @@
+- [x] Modais de Termos e Privacidade têm aparência profissional e legível.
+- [x] Endpoint `/me` corrige automaticamente contas sem fornecedor (Self-Healing).
+- [x] Tela Financeira oferece opção de "Atualizar Cadastro" se dados estiverem faltando.
+- [x] Contas legadas conseguem acessar o financeiro após a correção automática.

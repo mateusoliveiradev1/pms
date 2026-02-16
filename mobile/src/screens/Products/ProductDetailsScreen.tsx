@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import * as WebBrowser from 'expo-web-browser';
 import api from '../../services/api';
 import Header from '../../ui/components/Header';
 import { colors, radius, shadow, spacing } from '../../ui/theme';
@@ -22,6 +23,8 @@ type Product = {
     description: string;
     stockAvailable: number;
     finalPrice: number;
+    mercadoLivreId?: string;
+    mercadoLivreStatus?: string;
 };
 
 const ProductDetailsScreen = () => {
@@ -125,7 +128,18 @@ const ProductDetailsScreen = () => {
                     <Text style={styles.productName}>{product.name}</Text>
                     <Text style={styles.productSku}>SKU: {product.sku}</Text>
                     <Text style={styles.productPrice}>R$ {product.finalPrice?.toFixed(2)}</Text>
-                </View>
+    
+    {product.mercadoLivreId && (
+        <TouchableOpacity 
+            style={styles.mlBadge} 
+            onPress={() => WebBrowser.openBrowserAsync(`https://produto.mercadolivre.com.br/MLB-${product.mercadoLivreId?.replace('MLB', '')}`)}
+        >
+            <Ionicons name="pricetag" size={16} color="#FFF" style={{marginRight: 4}} />
+            <Text style={styles.mlBadgeText}>ML: {product.mercadoLivreStatus || 'Sincronizado'}</Text>
+            <Ionicons name="open-outline" size={14} color="#FFF" style={{marginLeft: 4}} />
+        </TouchableOpacity>
+    )}
+</View>
 
                 {/* Stats Grid */}
                 <View style={styles.statsGrid}>
@@ -239,6 +253,23 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: 'bold',
         color: colors.primary,
+        marginBottom: 8,
+    },
+    mlBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#ffe600', // ML Yellow usually, or darker for contrast
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+    },
+    mlBadgeText: {
+        color: '#FFF',
+        fontWeight: 'bold',
+        fontSize: 12,
+        textShadowColor: 'rgba(0,0,0,0.2)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
     },
     statsGrid: {
         flexDirection: 'row',

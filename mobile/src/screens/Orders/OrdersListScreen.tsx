@@ -242,7 +242,7 @@ const OrdersListScreen = () => {
       
       {item.mercadoLivreId && (
         <View style={styles.mlTag}>
-           <Ionicons name="logo-yen" size={10} color="#333" />
+           <Ionicons name="pricetag" size={10} color="#333" />
            <Text style={styles.mlText}>ML</Text>
         </View>
       )}
@@ -541,7 +541,6 @@ const styles = StyleSheet.create({
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: 4,
-      display: 'none', 
   },
   mlText: {
       fontSize: 10,

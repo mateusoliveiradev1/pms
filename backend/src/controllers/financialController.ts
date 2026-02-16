@@ -231,7 +231,7 @@ export const withdrawFunds = async (req: Request, res: Response) => {
 };
 
 export const changePlan = async (req: Request, res: Response) => {
-  const { supplierId, planId } = req.body;
+  const { supplierId, planId, paymentMethodId, paymentType } = req.body;
   try {
     const authUser = (req as any).user as { userId?: string; role?: string } | undefined;
     if (!authUser?.userId) {
@@ -267,9 +267,54 @@ export const changePlan = async (req: Request, res: Response) => {
       }
     }
 
+    // Get Plan Details
+    const plan = await prisma.plan.findUnique({ where: { id: String(planId) } });
+    if (!plan) {
+        res.status(404).json({ message: 'Plan not found' });
+        return;
+    }
+
+    // If Plan is Paid, Process Payment
+    if (plan.monthlyPrice > 0) {
+        if (!paymentMethodId && !paymentType) {
+            res.status(400).json({ message: 'Payment method required for paid plans' });
+            return;
+        }
+
+        console.log(`[Financial] Processing payment for plan ${plan.name} - Supplier: ${supplierId}`);
+        
+        // Process Payment (Stripe or Balance)
+        // If Stripe, we expect paymentMethodId (token)
+        // If Balance, we expect paymentType = 'BALANCE'
+        
+        await FinancialService.processSubscriptionPayment(
+            String(supplierId),
+            plan.monthlyPrice,
+            paymentType === 'BALANCE' ? 'BALANCE' : 'CARD',
+            paymentMethodId
+        );
+        
+        console.log(`[Financial] Payment successful for plan ${plan.name}`);
+    }
+
     const supplier = await FinancialService.assignPlanToSupplier(String(supplierId), String(planId));
+    
+    // Log Audit
+    if (authUser.userId) {
+        const user = await prisma.user.findUnique({ where: { id: authUser.userId } });
+        await FinancialService.logAdminAction(
+            authUser.userId,
+            user?.name || 'User',
+            'CHANGE_PLAN',
+            String(supplierId),
+            `Plano alterado para ${plan.name}`,
+            JSON.stringify({ planId, price: plan.monthlyPrice })
+        );
+    }
+
     res.json({ message: 'Plan changed successfully', supplier });
   } catch (error: any) {
+    console.error(`[Financial] Error changing plan: ${error.message}`);
     res.status(500).json({ message: 'Error changing plan', error: error.message });
   }
 };

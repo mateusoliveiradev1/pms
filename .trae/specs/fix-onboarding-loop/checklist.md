@@ -1,0 +1,7 @@
+- [x] O usuário não fica mais preso na tela "Novo Fornecedor" após o cadastro.
+- [x] `SupplierFormScreen` redireciona para `AppTabs` imediatamente após o sucesso.
+- [x] `AuthContext` carrega `onboardingStatus` do `SecureStore` (sem travamento momentâneo).
+- [x] Botão "Escolher Plano" mostra indicador de carregamento e trata erros graciosamente.
+- [x] Botão "Confirmar Plano" mostra indicador de carregamento durante a requisição.
+- [x] Se a confirmação de plano falhar, um erro é exibido.
+- [x] O modal de planos abre corretamente (ou mostra alerta "Nenhum plano").

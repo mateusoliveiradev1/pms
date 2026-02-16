@@ -1,0 +1,6 @@
+- [x] `app.json` possui `scheme` configurado.
+- [x] Build Android de release está assinado corretamente (não debug).
+- [x] Fluxo de ML usa `AuthSession` e fecha o navegador automaticamente.
+- [x] Backend redireciona corretamente para o app (`pmsops://`).
+- [x] Dashboard exibe status da integração ML.
+- [x] Produtos e Pedidos mostram origem/destino ML.

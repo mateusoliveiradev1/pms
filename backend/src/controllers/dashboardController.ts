@@ -119,30 +119,39 @@ export const getDashboardMetrics = async (req: Request, res: Response) => {
     let totalProfit = 0;
 
     if (isSupplierFiltered) {
-        // Se filtrado por fornecedor, usamos o netValue (repasse)
-        const payoutAggregate = await prisma.order.aggregate({
-            _sum: { netValue: true },
-            where: { ...orderWhere, status: { not: 'CANCELLED' } }
-        });
-        totalProfit = payoutAggregate._sum.netValue || 0;
-    } else {
-        // Se Global (Admin), calculamos Receita - Custo
-        // Buscar pedidos com itens e produtos para calcular custo
+        // ... (existing logic)
         const ordersForProfit = await prisma.order.findMany({
             where: { ...orderWhere, status: { not: 'CANCELLED' } },
-            include: { items: { include: { product: { include: { suppliers: true } } } } }
+            include: { items: true }
+        });
+
+        for (const order of ordersForProfit) {
+            const revenue = Number(order.netValue || 0);
+            let totalCost = 0;
+            
+            for (const item of order.items) {
+                const cost = Number((item as any).costPrice || 0);
+                totalCost += cost * item.quantity;
+            }
+            
+            totalProfit += (revenue - totalCost);
+        }
+
+    } else {
+        // Se Global (Admin), calculamos Receita Bruta - Repasse Fornecedores
+        // Lucro da Plataforma = Comissões
+        
+        const profitAggregate = await prisma.order.aggregate({
+            _sum: { 
+                commissionValue: true
+            },
+            where: {
+                ...orderWhere,
+                status: { not: 'CANCELLED' }
+            }
         });
         
-        for (const order of ordersForProfit) {
-            for (const item of order.items) {
-                const product = item.product as any;
-                // Simplificação: Pega preço do primeiro fornecedor como custo
-                const primarySupplier = (product.suppliers || [])[0];
-                const cost = primarySupplier ? Number(primarySupplier.price) : 0;
-                const revenue = Number(item.unitPrice);
-                totalProfit += (revenue - cost) * Number(item.quantity);
-            }
-        }
+        totalProfit = (profitAggregate._sum.commissionValue || 0);
     }
 
     res.json({

@@ -106,6 +106,7 @@ const DashboardScreen = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [mlConnected, setMlConnected] = useState(false);
 
   const loadSuppliers = async () => {
       try {
@@ -113,6 +114,15 @@ const DashboardScreen = () => {
           setSuppliers(response.data);
       } catch (error) {
           Logger.error('Error loading suppliers', error);
+      }
+  };
+
+  const checkIntegrations = async () => {
+      try {
+          const res = await api.get('/mercadolivre/status');
+          setMlConnected(res.data.connected);
+      } catch (e) {
+          setMlConnected(false);
       }
   };
 
@@ -131,6 +141,7 @@ const DashboardScreen = () => {
       setIsCacheLoaded(true);
     };
     initCache();
+    checkIntegrations();
   }, []);
 
   const loadData = useCallback(async (manualRefresh = false) => {
@@ -139,6 +150,8 @@ const DashboardScreen = () => {
         setLoading(false);
         return;
     }
+    
+    checkIntegrations();
 
     try {
       if (manualRefresh) {
@@ -360,6 +373,23 @@ const DashboardScreen = () => {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Integration Status */}
+        <TouchableOpacity 
+            style={[styles.integrationCard, { backgroundColor: mlConnected ? '#E8F5E9' : '#FFF3E0', borderColor: mlConnected ? colors.success : colors.warning }]}
+            onPress={() => navigation.navigate('Settings' as never)}
+        >
+            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                <Ionicons name="pricetag" size={24} color={mlConnected ? colors.success : colors.warning} />
+                <View style={{marginLeft: 12}}>
+                    <Text style={{fontWeight: 'bold', color: '#333'}}>Mercado Livre</Text>
+                    <Text style={{fontSize: 12, color: '#666'}}>
+                        {mlConnected ? 'Conectado e Sincronizando' : 'Não conectado - Toque para configurar'}
+                    </Text>
+                </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#999" />
+        </TouchableOpacity>
 
         {isSystemAdmin && (
             <View style={styles.adminFilterBar}>
@@ -743,6 +773,16 @@ const styles = StyleSheet.create({
       color: colors.primary,
       fontWeight: '600',
       fontSize: 14,
+  },
+  integrationCard: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      marginBottom: 16,
+      ...shadow.small,
   },
   modalOverlay: {
       flex: 1,
