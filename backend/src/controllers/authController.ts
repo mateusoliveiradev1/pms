@@ -72,9 +72,9 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     // 1. Create User in Supabase Auth
     // Default role based on Account Type
-    let role = Role.SELLER;
-    if (accountType === "COMPANY" || accountType === "SUPPLIER") {
-      role = Role.ACCOUNT_ADMIN;
+    let role: Role = Role.SELLER;
+    if (accountType === 'COMPANY' || accountType === 'SUPPLIER') {
+        role = Role.ACCOUNT_ADMIN;
     }
 
     const { data, error } = await supabase.auth.signUp({
@@ -83,9 +83,9 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       options: {
         data: {
           name,
-          role,
-        },
-      },
+          role: role.toString(), // Convert to string if Supabase expects metadata string
+        }
+      }
     });
 
     if (error) {
@@ -106,7 +106,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     try {
       const result = await prisma.$transaction(async (tx) => {
         const planId = "basic"; // Default plan for everyone initially
-        let dbAccountType = AccountType.INDIVIDUAL;
+        let dbAccountType: AccountType = AccountType.INDIVIDUAL;
 
         // Map UI types to DB types
         if (accountType === "COMPANY" || accountType === "SUPPLIER") {
@@ -123,8 +123,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
             type: dbAccountType,
             planId,
             onboardingStatus: "COMPLETO",
-            document: document, // Store CNPJ/CPF if schema supports, else in Supplier?
-            // Schema might not have document on Account, checking Supplier...
+            // document removed as it's not in schema
           },
         });
 
@@ -419,5 +418,4 @@ export const updatePushToken = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to update token" });
   }
 };
-
-export const register = registerIndividual;
+// Removed duplicate register export
