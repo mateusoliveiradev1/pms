@@ -23,7 +23,7 @@ type SupplierParams = {
 const SupplierFormScreen = () => {
   const route = useRoute();
   const navigation = useNavigation();
-  const { activeAccountId } = useAuth();
+  const { activeAccountId, refetchUser } = useAuth();
   const { supplier, onboardingMode } = (route.params as SupplierParams) || {};
   const isEditing = !!supplier;
 
@@ -70,6 +70,10 @@ const SupplierFormScreen = () => {
       } else {
         const response = await api.post('/suppliers', payload);
         const { account } = response.data;
+        
+        // Update context to reflect new status
+        await refetchUser();
+
         if (onboardingMode && account?.onboardingStatus === 'COMPLETO') {
           (navigation as any).reset({
             index: 0,

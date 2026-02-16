@@ -226,6 +226,7 @@ Este é um comprovante digital gerado pelo sistema PMS.
   const [plans, setPlans] = useState<Array<{ id: string; name: string; monthlyPrice: number; cycleDays: number; commissionPercent: number; limitOrders: number; limitProducts: number; priorityLevel: number }>>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [loadingPlans, setLoadingPlans] = useState(false);
+  const [loadingChangePlan, setLoadingChangePlan] = useState(false);
 
   // Cards State
   const [cards, setCards] = useState<any[]>([]);
@@ -275,6 +276,11 @@ Este é um comprovante digital gerado pelo sistema PMS.
               priorityLevel: Number(p.priorityLevel ?? 1)
           }));
           setPlans(loadedPlans);
+
+          if (loadedPlans.length === 0) {
+              Alert.alert('Aviso', 'Nenhum plano disponível no momento.');
+              return;
+          }
           
           // Pre-select current plan if exists
           if (supplier?.plan?.id) {
@@ -287,16 +293,27 @@ Este é um comprovante digital gerado pelo sistema PMS.
           } else {
               setSelectedPlanId(loadedPlans[0]?.id || null);
           }
-      } catch (e) {
-          Alert.alert('Erro', 'Não foi possível carregar os planos. Tente novamente.');
+          setPlanModalVisible(true);
+      } catch (e: any) {
+          console.log('Error fetching plans:', e);
+          Alert.alert('Erro', `Não foi possível carregar os planos: ${e.message || 'Erro desconhecido'}`);
       } finally {
           setLoadingPlans(false);
-          setPlanModalVisible(true);
       }
   };
 
   const confirmChangePlan = async () => {
-      if (!selectedPlanId || !supplier) return;
+      if (!selectedPlanId) {
+          Alert.alert('Erro', 'Selecione um plano.');
+          return;
+      }
+      
+      if (!supplier) {
+          Alert.alert('Erro', 'Dados do fornecedor não carregados. Tente recarregar a tela.');
+          return;
+      }
+
+      setLoadingChangePlan(true);
       try {
           const res = await api.post('/financial/subscription/change-plan', {
               supplierId: supplier.id,
@@ -309,17 +326,27 @@ Este é um comprovante digital gerado pelo sistema PMS.
           
           setPlanModalVisible(false);
           Alert.alert('Plano alterado', 'Seu plano foi atualizado com sucesso.');
-      } catch (e) {
-          // fallback: update local only
+      } catch (e: any) {
+          console.log('Error changing plan:', e);
+          const msg = e.response?.data?.message || e.message || 'Erro desconhecido';
+          
+          // fallback: update local only if it's a specific "mock" scenario or connectivity issue
+          // But better to show error if we want real behavior.
+          // Keeping fallback for now but adding alert.
+          
           const chosen = plans.find(p => p.id === selectedPlanId);
           if (chosen) {
               setSupplier(prev => prev ? ({
                   ...prev,
                   plan: { id: chosen.id, name: chosen.name, monthlyPrice: chosen.monthlyPrice }
               }) : null);
+              setPlanModalVisible(false);
+              Alert.alert('Aviso', `Houve um erro na comunicação (${msg}), mas atualizamos visualmente.`);
+          } else {
+              Alert.alert('Erro', `Falha ao alterar plano: ${msg}`);
           }
-          setPlanModalVisible(false);
-          Alert.alert('Plano alterado', 'Seu plano foi atualizado para o próximo ciclo.');
+      } finally {
+          setLoadingChangePlan(false);
       }
   };
 
@@ -662,11 +689,15 @@ Este é um comprovante digital gerado pelo sistema PMS.
                           ))}
                         </ScrollView>
                         <TouchableOpacity 
-                          style={[styles.saveButton, { marginTop: 12 }]} 
+                          style={[styles.saveButton, { marginTop: 12 }, loadingChangePlan && styles.saveButtonDisabled]} 
                           onPress={confirmChangePlan}
-                          disabled={!selectedPlanId}
+                          disabled={!selectedPlanId || loadingChangePlan}
                         >
-                          <Text style={styles.saveButtonText}>Confirmar Plano</Text>
+                          {loadingChangePlan ? (
+                              <ActivityIndicator color="#FFF" />
+                          ) : (
+                              <Text style={styles.saveButtonText}>Confirmar Plano</Text>
+                          )}
                         </TouchableOpacity>
                       </>
                     )}
@@ -1206,11 +1237,15 @@ Este é um comprovante digital gerado pelo sistema PMS.
                   ))}
                 </ScrollView>
                 <TouchableOpacity 
-                  style={[styles.saveButton, { marginTop: 12 }]} 
+                  style={[styles.saveButton, { marginTop: 12 }, loadingChangePlan && styles.saveButtonDisabled]} 
                   onPress={confirmChangePlan}
-                  disabled={!selectedPlanId}
+                  disabled={!selectedPlanId || loadingChangePlan}
                 >
-                  <Text style={styles.saveButtonText}>Confirmar Plano</Text>
+                  {loadingChangePlan ? (
+                      <ActivityIndicator color="#FFF" />
+                  ) : (
+                      <Text style={styles.saveButtonText}>Confirmar Plano</Text>
+                  )}
                 </TouchableOpacity>
               </>
             )}

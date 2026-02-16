@@ -78,6 +78,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         await SecureStore.setItemAsync("user", JSON.stringify(user));
         if (role) await SecureStore.setItemAsync("role", role);
+        if (onboardingStatus) await SecureStore.setItemAsync("onboardingStatus", onboardingStatus);
         if (activeAccountId)
           await SecureStore.setItemAsync("activeAccountId", activeAccountId);
         if (activeSupplierId)
@@ -115,6 +116,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // Clear auth data
       await SecureStore.deleteItemAsync("user");
       await SecureStore.deleteItemAsync("role");
+      await SecureStore.deleteItemAsync("onboardingStatus");
       await SecureStore.deleteItemAsync("activeAccountId");
       await SecureStore.deleteItemAsync("activeSupplierId");
       await SecureStore.deleteItemAsync("accountType");
@@ -165,6 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
           let user = null;
           let role = null;
+          let onboardingStatus: any = "PENDING";
           let activeAccountId = null;
           let activeSupplierId = null;
           let accountType = null;
@@ -175,6 +178,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
               user = JSON.parse(userStr);
             }
             role = await SecureStore.getItemAsync("role");
+            const storedStatus = await SecureStore.getItemAsync("onboardingStatus");
+            if (storedStatus) onboardingStatus = storedStatus;
+
             activeAccountId = await SecureStore.getItemAsync("activeAccountId");
             activeSupplierId = await SecureStore.getItemAsync("activeSupplierId");
             accountType = await SecureStore.getItemAsync("accountType");
@@ -185,7 +191,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           setAuth({
             user,
             role: role as any,
-            onboardingStatus: "PENDING",
+            onboardingStatus,
             activeAccountId,
             activeSupplierId,
             accountType,

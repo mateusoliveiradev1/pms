@@ -209,7 +209,7 @@ export const createSupplier = async (req: Request, res: Response) => {
     const totalSuppliersCount = await prisma.supplier.count({ where: { accountId: account.id } });
 
     // 3. Create Supplier
-    const newSupplier = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const supplier = await tx.supplier.create({
         data: {
           name,
@@ -240,18 +240,20 @@ export const createSupplier = async (req: Request, res: Response) => {
         }
       });
 
-      // Update Account Status if it's the first supplier for a Company
-      if (account.type === AccountType.BUSINESS && totalSuppliersCount === 0) {
-          await tx.account.update({
+      // Update Account Status if it's the first supplier (regardless of type)
+      // This ensures any stuck user gets unblocked
+      let updatedAccount: any = account;
+      if (totalSuppliersCount === 0 || account.onboardingStatus !== 'COMPLETO') {
+          updatedAccount = await tx.account.update({
               where: { id: account.id },
               data: { onboardingStatus: 'COMPLETO' }
           });
       }
 
-      return supplier;
+      return { ...supplier, account: updatedAccount };
     });
 
-    res.status(201).json(newSupplier);
+    res.status(201).json(result);
   } catch (error) {
     res.status(500).json({ message: 'Error creating supplier', error });
   }
