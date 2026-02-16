@@ -19,6 +19,6 @@
   - [x] SubTarefa 4.2: `ProductDetailsScreen` - Exibir logo ML se o produto estiver sincronizado, com link externo.
   - [x] SubTarefa 4.3: `OrdersListScreen` - Destacar pedidos importados do ML com ícone e badge específicos.
 
-- [x] Tarefa 5: Validação Final (Manual)
-  - [x] SubTarefa 5.1: Gerar APK de release assinado.
-  - [x] SubTarefa 5.2: Testar fluxo de conexão ML no dispositivo real.
+- [ ] Tarefa 5: Validação Final (Manual)
+  - [x] SubTarefa 5.1: Gerar APK de release assinado (Via EAS Build para evitar erros locais de Java).
+  - [ ] SubTarefa 5.2: Testar fluxo de conexão ML no dispositivo real.

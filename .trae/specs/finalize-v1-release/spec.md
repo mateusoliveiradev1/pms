@@ -33,7 +33,12 @@ O usuário solicitou uma garantia de "100% de funcionamento" e status para lanç
 ### Requisito: Feedback de Automação
 Todas as telas relevantes (Produtos, Pedidos, Dashboard) DEVEM exibir indicadores visuais claros de que a integração com ML está ativa e funcionando.
 
-## Requisitos MODIFICADOS
-### Requisito: Fluxo de Conexão ML
-**Modificado**: `handleConnectML`
--   **Mudança**: Usar `AuthSession` e trocar o código via API POST após o redirecionamento.
+## ADDED Requirements
+### Requirement: Build via EAS
+The system SHALL use Expo Application Services (EAS) for Android builds to ensure a consistent environment and avoid local configuration issues (e.g., JDK versions).
+- **WHEN** developer runs build command
+- **THEN** it triggers a remote build using `eas build --platform android --profile preview`
+
+## MODIFIED Requirements
+### Requirement: Authentication Flow
+The Mercado Livre authentication flow is modified to use a custom scheme (`pmsops://`) instead of deep linking to a web page, ensuring the user is redirected back to the app after login.
