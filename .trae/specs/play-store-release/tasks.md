@@ -1,0 +1,24 @@
+# Tarefas de Implementação Real (Zero Mocks)
+
+- [ ] Tarefa 1: Implementar Gateway de Pagamento (Backend)
+  - [ ] SubTarefa 1.1: Instalar `stripe` no backend (`npm install stripe`).
+  - [ ] SubTarefa 1.2: Criar `src/services/stripeService.ts` com métodos `createCustomer` e `createPaymentIntent` / `chargeCard`.
+  - [ ] SubTarefa 1.3: Atualizar `processSubscriptionPayment` em `FinancialService.ts` para usar `StripeService`.
+  - [ ] SubTarefa 1.4: Remover validação mock (`tok_...`) e tratar erros reais do gateway.
+- [ ] Tarefa 2: Implementar Tokenização Segura (Mobile)
+  - [ ] SubTarefa 2.1: Instalar `@stripe/stripe-react-native` no mobile.
+  - [ ] SubTarefa 2.2: Configurar `StripeProvider` no `App.tsx` (ou raiz) com chave publicável.
+  - [ ] SubTarefa 2.3: Atualizar `FinancialScreen.tsx` para usar `CardField` ou `PaymentSheet` e gerar token real.
+  - [ ] SubTarefa 2.4: Integrar com backend e remover mocks locais de sucesso.
+- [ ] Tarefa 3: Implementar Ações Administrativas Reais (Backend)
+  - [ ] SubTarefa 3.1: Atualizar `systemAdminController.ts` - `suspendAccount` para realizar update no banco de dados.
+  - [ ] SubTarefa 3.2: Verificar e implementar outros métodos administrativos que possam estar mockados.
+- [ ] Tarefa 4: Implementar Exportação Excel Real (Mobile)
+  - [ ] SubTarefa 4.1: Instalar bibliotecas de Excel e Filesystem.
+  - [ ] SubTarefa 4.2: Implementar lógica de geração de planilha na tela `AdminIntegrationsScreen.tsx`.
+- [ ] Tarefa 5: Limpeza e Auditoria de Mocks
+  - [ ] SubTarefa 5.1: Buscar e remover qualquer uso de `Math.random()` para IDs ou tokens críticos.
+  - [ ] SubTarefa 5.2: Remover fallbacks de "sucesso falso" em `catch` blocks críticos (Financeiro/Pedidos).
+- [ ] Tarefa 6: Preparação Final para Loja (Mantido)
+  - [ ] SubTarefa 6.1: Configurar Assinatura e Manifesto.
+  - [ ] SubTarefa 6.2: Gerar Assets e Metadados.

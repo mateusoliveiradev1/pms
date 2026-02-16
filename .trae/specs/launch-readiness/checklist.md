@@ -1,0 +1,6 @@
+- [x] Mobile: App abre rápido usando cache (se disponível).
+- [x] Mobile: Se apagar dados do app, ele volta a funcionar como antes (fluxo normal de login).
+- [x] Mobile: Dashboard mostra dados antigos enquanto carrega novos.
+- [x] Mobile: Filtro de Admin é lembrado.
+- [x] Backend: Servidor inicia sem erros e sem travar.
+- [x] Build: APK novo gerado e testado (instalação funciona).

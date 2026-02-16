@@ -124,13 +124,56 @@ app.get('/', (req, res) => {
   res.send(`Dropshipping PMS API Running (${env.APP_ENV})`);
 });
 
+// Privacy Policy Endpoint for Play Store
+app.get('/privacy', (req, res) => {
+    res.send(`
+    <html>
+        <head>
+            <title>Termos e Privacidade - PMS Ops</title>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }
+                h1 { color: #333; }
+                h2 { color: #555; }
+            </style>
+        </head>
+        <body>
+            <h1>Política de Privacidade e Termos de Uso</h1>
+            <p><strong>Última atualização:</strong> 16 de Fevereiro de 2026</p>
+            
+            <p>O aplicativo <strong>PMS Ops</strong> foi desenvolvido como uma ferramenta comercial. Ao utilizar este serviço, você concorda com os termos descritos abaixo.</p>
+            
+            <h2>1. Termos de Uso</h2>
+            <p>O uso do aplicativo é permitido apenas para fins legais e comerciais legítimos. O usuário é responsável por manter a confidencialidade de sua conta e senha.</p>
+
+            <h2>2. Coleta e Uso de Informações</h2>
+            <p>Para uma melhor experiência e funcionamento do serviço (pagamentos, gestão de pedidos), coletamos:</p>
+            <ul>
+                <li>Nome e Email (para autenticação)</li>
+                <li>Dados Financeiros (para processamento de pagamentos via Stripe)</li>
+                <li>Imagens/Arquivos (para upload de comprovantes ou produtos)</li>
+            </ul>
+            
+            <h2>3. Dados de Log</h2>
+            <p>Em caso de erro no aplicativo, coletamos dados de Log para diagnóstico e melhoria do serviço.</p>
+            
+            <h2>4. Exclusão de Dados</h2>
+            <p>Você pode solicitar a exclusão da sua conta e dados a qualquer momento entrando em contato com o suporte ou através da opção "Excluir Conta" nas configurações do aplicativo.</p>
+
+            <h2>5. Contato</h2>
+            <p>Se você tiver dúvidas sobre nossa Política de Privacidade ou Termos de Uso, entre em contato conosco.</p>
+        </body>
+    </html>
+    `);
+});
+
 app.use(globalErrorHandler);
 
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT} in ${env.APP_ENV} mode`);
+  logger.info('Server started immediately, seeding in background...');
   
   // Seed Admin on Start
-  await ensureAdminUser();
+  ensureAdminUser().catch(err => logger.error('Admin seed failed', err));
 });
 
 // Keep-alive to prevent premature exit in dev environment

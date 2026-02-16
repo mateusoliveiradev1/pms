@@ -63,25 +63,47 @@ export const getGlobalMetrics = async (req: Request, res: Response) => {
 export const suspendAccount = async (req: Request, res: Response) => {
     const { accountId } = req.params;
     try {
-        // Implement logic to suspend account (e.g. set status to SUSPENDED in DB - needs schema update or use onboardingStatus hack)
-        // For now, let's just log it as a placeholder or use onboardingStatus='SUSPENDED' if permissible, 
-        // but strict typing might block it. Let's update onboardingStatus to a status that blocks access? 
-        // Or better, assume we will add a status field to Account later.
-        // For this task, we will just log.
-        
-        console.log(`Suspending account ${accountId}`);
-        
-        // MVP: Using onboardingStatus as a lock mechanism for now? 
-        // The prompt says "Suspender Account". 
-        // Let's assume we can update onboardingStatus to a blocked state or add a new field.
-        // Given constraints, I'll assume we can use a "SUSPENDED" status if I update schema, 
-        // but I should avoid schema changes if not requested?
-        // Prompt says "Implement multi-tenancy... System Admin... Suspender Account".
-        // Let's add 'status' to Account model in next step if needed. 
-        // For now, let's just return success to mock the action.
+        const result = await prisma.$transaction(async (tx) => {
+            // 1. Suspend Users linked to the account
+            const usersUpdate = await tx.user.updateMany({
+                where: { accountId },
+                data: { status: 'SUSPENDED' }
+            });
 
-        res.json({ message: 'Account suspended successfully (Mock)' });
+            // 2. Suspend Suppliers linked to the account
+            const suppliersUpdate = await tx.supplier.updateMany({
+                where: { accountId },
+                data: { 
+                    status: 'SUSPENDED',
+                    financialStatus: 'SUSPENDED'
+                }
+            });
+
+            // 3. Suspend the Account itself
+            const accountUpdate = await tx.account.update({
+                where: { id: accountId },
+                data: { onboardingStatus: 'SUSPENDED' }
+            });
+
+            return {
+                usersAffected: usersUpdate.count,
+                suppliersAffected: suppliersUpdate.count,
+                accountAffected: 1
+            };
+        });
+        
+        console.log(`Account ${accountId} suspended. Affected: ${result.usersAffected} users, ${result.suppliersAffected} suppliers.`);
+
+        res.json({ 
+            message: 'Conta suspensa com sucesso.',
+            details: {
+                usersSuspended: result.usersAffected,
+                suppliersSuspended: result.suppliersAffected,
+                accountStatus: 'SUSPENDED'
+            }
+        });
     } catch (error: any) {
-        res.status(500).json({ message: 'Error suspending account', error: error.message });
+        console.error(`Error suspending account ${accountId}:`, error);
+        res.status(500).json({ message: 'Erro ao suspender conta', error: error.message });
     }
 };

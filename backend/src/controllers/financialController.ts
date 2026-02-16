@@ -122,7 +122,7 @@ export const getLedger = async (req: Request, res: Response) => {
           ? await prisma.supplier.findMany({ where: { userId: authUser.userId }, select: { id: true } })
           : await prisma.supplier.findMany({ where: { accountId: user.accountId }, select: { id: true } });
 
-      where = { supplierId: { in: suppliers.map((s) => s.id) } };
+      where = { supplierId: { in: suppliers.map((s: any) => s.id) } };
     }
     
     const ledger = await prisma.financialLedger.findMany({
@@ -473,7 +473,7 @@ export const getAccountMetrics = async (req: Request, res: Response) => {
     const supplierIds = await prisma.supplier.findMany({
       where: { accountId: user.accountId },
       select: { id: true }
-    }).then(list => list.map(s => s.id));
+    }).then((list: any[]) => list.map((s: any) => s.id));
 
     const gmvAgg = await prisma.order.aggregate({
       where: { supplierId: { in: supplierIds }, status: { not: 'CANCELLED' } },
@@ -494,7 +494,7 @@ export const getAccountMetrics = async (req: Request, res: Response) => {
     res.json({
       gmvTotal: gmvAgg._sum.totalAmount || 0,
       receitaEmpresa: Math.abs(revenueAgg._sum.amount || 0),
-      receitaPorSupplier: perSupplier.map(r => ({ supplierId: r.supplierId, commissionTotal: Math.abs(r._sum.amount || 0) }))
+      receitaPorSupplier: perSupplier.map((r: any) => ({ supplierId: r.supplierId, commissionTotal: Math.abs(r._sum.amount || 0) }))
     });
   } catch (error: any) {
     res.status(500).json({ message: 'Error fetching account metrics', error: error.message });
@@ -516,7 +516,7 @@ export const getSupplierMetrics = async (req: Request, res: Response) => {
       res.json({ gmv: 0, comissao: 0, saldoDisponivel: 0 });
       return;
     }
-    const supplierIds = suppliers.map(s => s.id);
+    const supplierIds = suppliers.map((s: any) => s.id);
     const gmvAgg = await prisma.order.aggregate({
       where: { supplierId: { in: supplierIds }, status: { not: 'CANCELLED' } },
       _sum: { totalAmount: true }
@@ -525,7 +525,7 @@ export const getSupplierMetrics = async (req: Request, res: Response) => {
       where: { supplierId: { in: supplierIds }, type: 'PLATFORM_COMMISSION' },
       _sum: { amount: true }
     });
-    const saldo = suppliers.reduce((acc, s) => acc + s.walletBalance, 0);
+    const saldo = suppliers.reduce((acc: number, s: any) => acc + s.walletBalance, 0);
     res.json({
       gmv: gmvAgg._sum.totalAmount || 0,
       comissao: Math.abs(comAgg._sum.amount || 0),

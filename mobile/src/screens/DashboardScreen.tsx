@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import { useAuth } from '../context/AuthContext';
 import { useAuthRole } from '../hooks/useAuthRole';
+import { useDashboardCache } from '../hooks/useDashboardCache';
 import { isPermissionError } from '../utils/authErrorUtils';
 import api from '../services/api';
 import { colors, shadow } from '../ui/theme';
@@ -80,6 +81,7 @@ const StatCard = React.memo(({ title, value, icon, color, onPress }: StatCardPro
 const DashboardScreen = () => {
   const { user, activeAccountId, loading: authLoading, signOut } = useAuth();
   const { isAccountAdmin, isSupplierAdmin, isSystemAdmin, role } = useAuthRole();
+  const { saveDashboardData, loadDashboardData } = useDashboardCache();
   const isSupplierUser = role === 'SUPPLIER_USER';
   const isFocused = useIsFocused();
   const navigation = useNavigation<any>();
@@ -95,8 +97,9 @@ const DashboardScreen = () => {
   const [weeklyChartData, setWeeklyChartData] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
   const [weeklyLabels, setWeeklyLabels] = useState<string[]>(['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom']);
   
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isCacheLoaded, setIsCacheLoaded] = useState(false);
 
   // Admin Filters
   const [modalVisible, setModalVisible] = useState(false);
@@ -113,7 +116,24 @@ const DashboardScreen = () => {
       }
   };
 
-  const loadData = useCallback(async () => {
+  useEffect(() => {
+    const initCache = async () => {
+      const cache = await loadDashboardData();
+      if (cache) {
+        setStats(cache.stats);
+        setProducts(cache.products);
+        setWeeklyChartData(cache.chartData);
+        setWeeklyLabels(cache.chartLabels);
+        if (cache.selectedSupplier) {
+          setSelectedSupplier(cache.selectedSupplier);
+        }
+      }
+      setIsCacheLoaded(true);
+    };
+    initCache();
+  }, []);
+
+  const loadData = useCallback(async (manualRefresh = false) => {
     // 1. Context Guard
     if (!isSystemAdmin && !activeAccountId) {
         setLoading(false);
@@ -121,7 +141,11 @@ const DashboardScreen = () => {
     }
 
     try {
-      if (!refreshing) setLoading(true);
+      if (manualRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
       
       let queryParams = '';
       if (isSystemAdmin && selectedSupplier) {
@@ -178,12 +202,22 @@ const DashboardScreen = () => {
       setWeeklyChartData(chartValues);
       setWeeklyLabels(chartLabels);
 
-      setStats({
+      const newStats = {
         totalProducts: allProducts.length,
         totalOrders: realTotalOrders, 
         lowStockProducts: allProducts.filter((p) => p.stockAvailable < 5).length,
         pendingOrders: 0, 
         totalSales: realTotalSales
+      };
+
+      setStats(newStats);
+
+      saveDashboardData({
+        stats: newStats,
+        products: allProducts.slice(0, 5),
+        chartData: chartValues,
+        chartLabels: chartLabels,
+        selectedSupplier: selectedSupplier
       });
 
     } catch (error: any) {
@@ -196,25 +230,22 @@ const DashboardScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [refreshing, isAccountAdmin, isSupplierAdmin, isSystemAdmin, activeAccountId, selectedSupplier]);
+  }, [isAccountAdmin, isSupplierAdmin, isSystemAdmin, activeAccountId, selectedSupplier]);
 
   useEffect(() => {
     if (isFocused) {
         if (isSystemAdmin) loadSuppliers();
+    }
+  }, [isFocused, isSystemAdmin]);
+
+  useEffect(() => {
+    if (isFocused && isCacheLoaded) {
         loadData();
     }
-  }, [isFocused, loadData, isSystemAdmin]);
-
-  // Force reload when filter changes
-  useEffect(() => {
-      if (isSystemAdmin && isFocused) {
-          loadData();
-      }
-  }, [selectedSupplier]);
+  }, [isFocused, loadData, isCacheLoaded]);
 
   const onRefresh = () => {
-    setRefreshing(true);
-    loadData();
+    loadData(true);
   };
 
 
@@ -288,7 +319,7 @@ const DashboardScreen = () => {
                  <Text style={{ color: colors.textSecondary, textAlign: 'center', marginTop: 8 }}>
                      Entre em contato com o suporte ou aguarde a ativação.
                  </Text>
-                 <TouchableOpacity onPress={loadData} style={{ marginTop: 20 }}>
+                 <TouchableOpacity onPress={() => loadData(false)} style={{marginTop: 20}}>
                     <Ionicons name="reload-circle" size={48} color={colors.primary} />
                  </TouchableOpacity>
                  <TouchableOpacity onPress={signOut} style={{ marginTop: 20, flexDirection: 'row', alignItems: 'center' }}>
@@ -319,7 +350,7 @@ const DashboardScreen = () => {
                     </View>
                 </TouchableOpacity>
             )}
-            <TouchableOpacity onPress={loadData} style={{marginRight: 12}}>
+            <TouchableOpacity onPress={() => loadData(false)} style={{marginRight: 12}}>
                 <View style={{ backgroundColor: colors.primary, borderRadius: 20, padding: 4, width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}>
                     <Ionicons name="reload" size={20} color="#FFF" />
                 </View>

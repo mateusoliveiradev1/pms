@@ -107,16 +107,6 @@ export const getFinancialOverview = async (req: Request, res: Response) => {
 
     revenueEntries.forEach(entry => {
         const key = entry.createdAt.toISOString().split('T')[0];
-        // Commissions are negative in ledger (Debit from supplier), but positive Revenue for Platform.
-        // Subscription payments are positive (Credit to Platform? No, usually Supplier pays Platform).
-        // Let's check Ledger types.
-        // 'PLATFORM_COMMISSION': amount is negative (deducted from supplier). So Revenue = Math.abs(amount).
-        // 'SUBSCRIPTION_PAYMENT': usually negative (deducted from balance) OR positive if we record it as platform income?
-        // Let's assume 'SUBSCRIPTION_PAYMENT' is also deducted from supplier (negative).
-        // If it was paid by card, it might not be in ledger or might be just a record.
-        // FinancialService paySubscription doesn't show Ledger creation explicitly in the snippet I read.
-        // Assuming ABS value is correct for Revenue.
-        
         const val = Math.abs(entry.amount);
         revenueByDate[key] = (revenueByDate[key] || 0) + val;
     });
@@ -171,22 +161,6 @@ export const getReconciliation = async (req: Request, res: Response) => {
     const endOfDay = new Date(end);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // We need to identify anomalies.
-    // 1. Paid Order without Ledger
-    // 2. Ledger without Order (orphaned payment)
-    // 3. Cancelled/Refunded Order without Refund Ledger
-
-    // 1. Paid Orders without Ledger
-    // Note: We use Prisma.sql or just simple string concatenation if we are careful, 
-    // but here we will filter by date and supplier if provided.
-    // Since strict raw query dynamic composition is complex with Prisma.$queryRaw template tag,
-    // we will fetch the base anomalies and filter in memory (usually anomalies count is low).
-    // OR we can use simple WHERE additions if we ignore the template tag safety for a moment (NOT RECOMMENDED).
-    // Better approach: Use Prisma.sql to compose.
-    
-    // For simplicity and safety in this context:
-    // We will query anomalies with date range on the main table.
-    
     // Query 1: Paid Orders without Ledger
     let paidNoLedgerQuery = `
       SELECT o.id, o."orderNumber", o.status, o."paymentStatus", o."totalAmount", o."supplierId", 'PAID_NO_LEDGER' as issue, o."paidAt"
@@ -267,10 +241,6 @@ export const getSupplierFinancialStats = async (req: Request, res: Response) => 
             }
         });
 
-        // We also want total withdrawn and total commissions.
-        // Aggregating per supplier might be heavy if done one by one.
-        // Let's use groupBy
-        
         const withdrawals = await prisma.withdrawalRequest.groupBy({
             by: ['supplierId'],
             _sum: { amount: true },
@@ -280,7 +250,7 @@ export const getSupplierFinancialStats = async (req: Request, res: Response) => 
         const commissions = await prisma.financialLedger.groupBy({
             by: ['supplierId'],
             _sum: { amount: true },
-            where: { type: 'PLATFORM_COMMISSION' } // Corrected type from 'COMMISSION_DEBIT'
+            where: { type: 'PLATFORM_COMMISSION' } 
         });
 
         // Map results
@@ -297,7 +267,7 @@ export const getSupplierFinancialStats = async (req: Request, res: Response) => 
                 walletBalance: supplier.walletBalance,
                 pendingBalance: supplier.pendingBalance,
                 totalWithdrawn,
-                totalCommission: totalCommissions, // Map to singular to match frontend type
+                totalCommission: totalCommissions, 
                 totalOrders: supplier._count.orders
             };
         });
@@ -321,24 +291,6 @@ export const getOperationalAlerts = async (req: Request, res: Response) => {
             WHERE o."paymentStatus" = 'PAID' AND fl.id IS NULL
         `;
 
-        // b) Webhook blocked by idempotency (Just a count of events that already existed)
-        // Actually, the user wants "Webhook blocked by idempotency" as an alert.
-        // This implies we should track how many times this happened recently?
-        // Or maybe they just want to know if *processed* webhooks are high?
-        // Let's return the count of ProcessedWebhookEvent in the last 24h as a proxy for activity, 
-        // OR better: The user might want to know if there are *failures* or specific "blocked" events.
-        // Re-reading: "Webhook bloqueado por idempotência".
-        // If we silently return 200, we don't log "blocked" explicitly unless we log it somewhere.
-        // Assuming we just want to see total processed events for now or maybe duplicate attempts if we tracked them.
-        // Since we don't strictly track "duplicate attempts" in a separate table (we just check uniqueness),
-        // we might not have this metric unless we parse logs.
-        // I will return the count of ProcessedWebhookEvents (successful ones) for now, or 0 if I can't track duplicates.
-        // Wait, "Webhook blocked by idempotency" -> Maybe I should look for a way to track this.
-        // In the requirement: "Se violar UNIQUE -> retornar 200 OK silencioso".
-        // Without a log table for *attempts*, I can't show "blocked" count.
-        // I will stick to showing "Recent Webhook Events" count.
-        
-        // c) Saques pendentes há mais de X dias (e.g., 3 days)
         const threeDaysAgo = new Date();
         threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
         
@@ -369,6 +321,159 @@ export const getOperationalAlerts = async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error('Error getting alerts:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// 5. Listar Saques (Admin)
+export const listAllWithdrawals = async (req: Request, res: Response) => {
+    try {
+        const { status, supplierId } = req.query;
+        
+        const where: any = {};
+        if (status && status !== 'ALL') {
+            where.status = String(status);
+        }
+        if (supplierId) {
+            where.supplierId = String(supplierId);
+        }
+
+        const withdrawals = await prisma.withdrawalRequest.findMany({
+            where,
+            include: {
+                supplier: {
+                    select: { name: true, email: true } // Assuming email is on User, but here simpler
+                }
+            },
+            orderBy: { requestedAt: 'desc' }
+        });
+        
+        res.json(withdrawals);
+    } catch (error: any) {
+        console.error('Error listing withdrawals:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// 6. Processar Saque (Admin)
+export const processWithdrawal = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { action, reason, adminId } = req.body; // action: APPROVE, REJECT, MARK_PAID
+    
+    try {
+        const withdrawal = await prisma.withdrawalRequest.findUnique({ where: { id } });
+        if (!withdrawal) {
+            res.status(404).json({ error: 'Withdrawal request not found' });
+            return;
+        }
+
+        if (withdrawal.status !== 'PENDING' && action !== 'MARK_PAID') {
+             // Allow marking paid even if already approved? Usually PENDING -> APPROVED -> PAID
+             // Or PENDING -> PAID (skip approval step if simple)
+        }
+
+        await prisma.$transaction(async (tx) => {
+            if (action === 'REJECT') {
+                // Refund balance
+                await tx.supplier.update({
+                    where: { id: withdrawal.supplierId },
+                    data: {
+                        walletBalance: { increment: withdrawal.amount },
+                        blockedBalance: { decrement: withdrawal.amount }
+                    }
+                });
+                
+                await tx.withdrawalRequest.update({
+                    where: { id },
+                    data: { 
+                        status: 'REJECTED', 
+                        processedAt: new Date(),
+                        adminNote: reason 
+                    }
+                });
+
+                // Create Ledger entry for refund
+                await tx.financialLedger.create({
+                    data: {
+                        supplierId: withdrawal.supplierId,
+                        type: 'ADJUSTMENT',
+                        amount: withdrawal.amount,
+                        description: `Estorno de saque rejeitado: ${reason || 'Sem motivo'}`,
+                        referenceId: withdrawal.id
+                    }
+                });
+            } else if (action === 'APPROVE') {
+                // Just change status, money stays blocked until PAID
+                await tx.withdrawalRequest.update({
+                    where: { id },
+                    data: { 
+                        status: 'APPROVED', 
+                        processedAt: new Date(),
+                        adminNote: reason 
+                    }
+                });
+            } else if (action === 'MARK_PAID') {
+                // Remove from blocked balance (money leaves system)
+                await tx.supplier.update({
+                    where: { id: withdrawal.supplierId },
+                    data: {
+                        blockedBalance: { decrement: withdrawal.amount }
+                    }
+                });
+
+                await tx.withdrawalRequest.update({
+                    where: { id },
+                    data: { 
+                        status: 'PAID', 
+                        processedAt: new Date(),
+                        adminNote: reason 
+                    }
+                });
+                
+                // Ledger entry for Payout
+                await tx.financialLedger.create({
+                    data: {
+                        supplierId: withdrawal.supplierId,
+                        type: 'WITHDRAWAL',
+                        amount: -withdrawal.amount, // Negative as it leaves wallet
+                        description: 'Saque realizado',
+                        referenceId: withdrawal.id
+                    }
+                });
+            }
+        });
+
+        res.json({ success: true });
+
+    } catch (error: any) {
+        console.error('Error processing withdrawal:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// 7. Configurações Globais
+export const updateGlobalSettings = async (req: Request, res: Response) => {
+    const { defaultReleaseDays, defaultMinWithdrawal, defaultWithdrawalLimit } = req.body;
+    
+    try {
+        const settings = await prisma.financialSettings.upsert({
+            where: { id: 'global' },
+            update: {
+                defaultReleaseDays,
+                defaultMinWithdrawal,
+                defaultWithdrawalLimit
+            },
+            create: {
+                id: 'global',
+                defaultReleaseDays,
+                defaultMinWithdrawal,
+                defaultWithdrawalLimit
+            }
+        });
+        
+        res.json(settings);
+    } catch (error: any) {
+        console.error('Error updating settings:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };

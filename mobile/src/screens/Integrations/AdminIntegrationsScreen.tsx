@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as XLSX from 'xlsx';
 import api from '../../services/api';
 import Header from '../../ui/components/Header';
 import Button from '../../ui/components/Button';
@@ -213,7 +214,64 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
         }
     };
 
+    const handleExportExcel = async () => {
+        try {
+            const wb = XLSX.utils.book_new();
+
+            // 1. Health Stats Sheet
+            const statsData = stats ? [
+                { Metric: 'Eventos Processados Hoje', Value: stats.processedEventsToday },
+                { Metric: 'Falhas de Webhook', Value: stats.failedWebhooksToday },
+                { Metric: 'Anomalies', Value: stats.anomalies },
+                { Metric: 'Saques Travados', Value: stats.stuckWithdrawals },
+                { Metric: 'Fornecedores Suspensos', Value: stats.suspendedSuppliers },
+                { Metric: 'Data do Relatório', Value: new Date().toLocaleString() }
+            ] : [{ Metric: 'Status', Value: 'Sem dados disponíveis' }];
+
+            const wsStats = XLSX.utils.json_to_sheet(statsData);
+            XLSX.utils.book_append_sheet(wb, wsStats, "Saúde do Sistema");
+
+            // 2. Webhooks Sheet
+            const webhooksData = webhooks.map(wh => ({
+                ID: wh.id,
+                URL: wh.url,
+                Ativo: wh.isActive ? 'Sim' : 'Não',
+                Eventos: wh.subscribedEvents.join(', ')
+            }));
+            
+            if (webhooksData.length === 0) {
+                 webhooksData.push({ ID: 'Nenhum webhook', URL: '', Ativo: '', Eventos: '' });
+            }
+
+            const wsWebhooks = XLSX.utils.json_to_sheet(webhooksData);
+            XLSX.utils.book_append_sheet(wb, wsWebhooks, "Webhooks");
+
+            // 3. Generate file
+            const base64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+            const fileName = `relatorio_sistema_${new Date().getTime()}.xlsx`;
+            const fileUri = `${(FileSystem as any).documentDirectory}${fileName}`;
+            await FileSystem.writeAsStringAsync(fileUri, base64, {
+                encoding: (FileSystem as any).EncodingType.Base64
+            });
+
+            // 4. Share
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(fileUri);
+            } else {
+                Alert.alert('Sucesso', `Arquivo salvo em: ${fileUri}`);
+            }
+        } catch (error) {
+            console.error('Excel Export Error:', error);
+            Alert.alert('Erro', 'Falha ao gerar Excel');
+        }
+    };
+
     const handleExport = async (format: 'csv' | 'xlsx') => {
+        if (format === 'xlsx') {
+            await handleExportExcel();
+            return;
+        }
+
         try {
             const today = new Date();
             const lastMonth = new Date();
@@ -234,10 +292,7 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
             if (format === 'csv') {
                 // @ts-ignore
                 await FileSystem.writeAsStringAsync(fileUri, response.data, { encoding: FileSystem.EncodingType.UTF8 });
-            } else {
-                Alert.alert('Aviso', 'Exportação Excel via mobile requer configuração avançada. Use CSV por enquanto.');
-                return; 
-            }
+            } 
 
             if (await Sharing.isAvailableAsync()) {
                 await Sharing.shareAsync(fileUri);
@@ -338,6 +393,14 @@ export default function AdminIntegrationsScreen({ navigation }: any) {
                         title="Exportar CSV (30d)" 
                         subtitle="Relatório contábil completo"
                         onPress={() => handleExport('csv')}
+                        variant="secondary"
+                    />
+                    <View style={{ height: 16 }} />
+                    <ActionButton 
+                        icon="stats-chart" 
+                        title="Exportar Excel" 
+                        subtitle="Relatório gerencial (XLSX)"
+                        onPress={() => handleExport('xlsx')}
                         variant="secondary"
                     />
                 </View>

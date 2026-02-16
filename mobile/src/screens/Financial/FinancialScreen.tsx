@@ -95,34 +95,12 @@ const isCredit = (type: string) => {
     return type === 'SALE_REVENUE';
 };
 
-const luhnCheck = (value: string) => {
-    // Remove non-digits
-    let bEven = false;
-    const valueStr = value.replace(/\D/g, "");
-
-    if (/[^0-9-\s]+/.test(valueStr)) return false;
-
-    let nSum = 0;
-    
-    for (let n = valueStr.length - 1; n >= 0; n--) {
-        let cDigit = valueStr.charAt(n);
-        let nDigit = parseInt(cDigit, 10);
-
-        if (bEven) {
-            if ((nDigit *= 2) > 9) nDigit -= 9;
-        }
-
-        nSum += nDigit;
-        bEven = !bEven;
-    }
-
-    return (nSum % 10) == 0;
-};
-
 import { useAuthRole } from '../../hooks/useAuthRole';
+import { CardField, useStripe } from '@stripe/stripe-react-native';
 
 const FinancialScreen = () => {
   const navigation = useNavigation<any>();
+  const { createPaymentMethod } = useStripe();
   const { user, activeSupplierId, loading: authLoading } = useAuth();
   const { isAccountAdmin, isSystemAdmin } = useAuthRole();
 
@@ -236,10 +214,9 @@ Este é um comprovante digital gerado pelo sistema PMS.
   };
 
   // New Card Form State
-  const [newCardNumber, setNewCardNumber] = useState('');
   const [newCardName, setNewCardName] = useState('');
-  const [newCardExpiry, setNewCardExpiry] = useState('');
-  const [newCardCvv, setNewCardCvv] = useState('');
+  const [cardDetails, setCardDetails] = useState<any>(null); // For Stripe CardField
+
 
   // Withdraw State
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -387,39 +364,56 @@ Este é um comprovante digital gerado pelo sistema PMS.
       }
   };
 
-  const handleAddCard = () => {
-      const cleanNumber = newCardNumber.replace(/\D/g, '');
-      if (cleanNumber.length < 13 || !luhnCheck(cleanNumber)) {
-          Alert.alert('Cartão Inválido', 'O número do cartão digitado não é válido.');
-          return;
-      }
-      
-      if (newCardName.length < 3 || newCardExpiry.length < 5 || newCardCvv.length < 3) {
-          Alert.alert('Erro', 'Por favor, preencha todos os campos corretamente.');
+  const handleAddCard = async () => {
+      if (!cardDetails?.complete) {
+          Alert.alert('Cartão Incompleto', 'Por favor, preencha os dados do cartão.');
           return;
       }
 
-      // SECURITY MOCK: In a real app, this data would go to Stripe/MercadoPago directly.
-      // We generate a "token" here to simulate the process.
-      const mockToken = `tok_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      if (newCardName.length < 3) {
+          Alert.alert('Nome Inválido', 'Por favor, preencha o nome impresso no cartão.');
+          return;
+      }
 
-      const newCard = {
-          id: String(Date.now()),
-          brand: 'mastercard', // Simplified detection
-          last4: cleanNumber.slice(-4),
-          expiry: newCardExpiry,
-          token: mockToken, // Store ONLY the token
-          default: cards.length === 0 // First card is default
-      };
+      try {
+        setLoading(true);
+        // Create PaymentMethod using Stripe
+        const { paymentMethod, error } = await createPaymentMethod({
+          paymentMethodType: 'Card',
+          paymentMethodData: {
+            billingDetails: {
+              name: newCardName,
+            },
+          },
+        });
 
-      // NEVER store the full number or CVV
-      setCards([...cards, newCard]);
-      setAddCardMode(false);
-      setNewCardNumber('');
-      setNewCardName('');
-      setNewCardExpiry('');
-      setNewCardCvv('');
-      Alert.alert('Sucesso', 'Cartão adicionado e tokenizado com segurança!');
+        if (error) {
+          Alert.alert('Erro', error.message);
+          setLoading(false);
+          return;
+        }
+
+        if (paymentMethod) {
+            const newCard = {
+                id: paymentMethod.id, // Use Stripe PaymentMethod ID
+                brand: paymentMethod.Card?.brand || 'unknown',
+                last4: paymentMethod.Card?.last4 || '0000',
+                expiry: `${paymentMethod.Card?.expMonth}/${paymentMethod.Card?.expYear}`,
+                token: paymentMethod.id, // Send PaymentMethod ID as token
+                default: cards.length === 0
+            };
+
+            setCards([...cards, newCard]);
+            setAddCardMode(false);
+            setNewCardName('');
+            setCardDetails(null);
+            Alert.alert('Sucesso', 'Cartão adicionado e tokenizado com segurança!');
+        }
+      } catch (e) {
+        Alert.alert('Erro', 'Ocorreu um erro ao processar o cartão.');
+      } finally {
+        setLoading(false);
+      }
   };
 
   useEffect(() => {
@@ -1073,41 +1067,27 @@ Este é um comprovante digital gerado pelo sistema PMS.
                   {addCardMode ? (
                       <View>
                           <TextInput 
-                              placeholder="Número do Cartão (apenas números)"
-                              style={styles.input}
-                              keyboardType="numeric"
-                              maxLength={16}
-                              value={newCardNumber}
-                              onChangeText={setNewCardNumber}
-                              placeholderTextColor="#999"
-                          />
-                          <TextInput 
                               placeholder="Nome impresso no cartão"
                               style={styles.input}
                               value={newCardName}
                               onChangeText={setNewCardName}
                               placeholderTextColor="#999"
                           />
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                              <TextInput 
-                                  placeholder="MM/AA"
-                                  style={[styles.input, { width: '48%' }]}
-                                  maxLength={5}
-                                  value={newCardExpiry}
-                                  onChangeText={setNewCardExpiry}
-                                  placeholderTextColor="#999"
-                              />
-                              <TextInput 
-                                  placeholder="CVV"
-                                  style={[styles.input, { width: '48%' }]}
-                                  keyboardType="numeric"
-                                  maxLength={4}
-                                  secureTextEntry
-                                  value={newCardCvv}
-                                  onChangeText={setNewCardCvv}
-                                  placeholderTextColor="#999"
-                              />
-                          </View>
+                          <CardField
+                            postalCodeEnabled={false}
+                            style={{
+                              width: '100%',
+                              height: 50,
+                              marginVertical: 10,
+                            }}
+                            cardStyle={{
+                              backgroundColor: '#FFFFFF',
+                              textColor: '#000000',
+                            }}
+                            onCardChange={(cardDetails) => {
+                              setCardDetails(cardDetails);
+                            }}
+                          />
                           <TouchableOpacity style={styles.saveButton} onPress={handleAddCard}>
                               <Text style={styles.saveButtonText}>Salvar Cartão</Text>
                           </TouchableOpacity>

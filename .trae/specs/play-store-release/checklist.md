@@ -1,0 +1,10 @@
+- [x] Backend: Stripe instalado e `StripeService` implementado
+- [x] Backend: `processSubscriptionPayment` processa cobranças reais (sem `tok_` check)
+- [x] Backend: `suspendAccount` atualiza banco de dados
+- [x] Mobile: `@stripe/stripe-react-native` instalado e configurado
+- [x] Mobile: Tela Financeira coleta cartão via SDK e envia token real
+- [x] Mobile: Exportação Excel funcionando
+- [x] Todos os mocks de "sucesso falso" removidos (Mobile e Backend)
+- [ ] Configuração de Assinatura (Keystore) validada (Requires manual action)
+- [ ] Assets da Play Store gerados (Requires manual action)
+- [ ] Build de Release testado em dispositivo real com pagamento real (Requires manual action)

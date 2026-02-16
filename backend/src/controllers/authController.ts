@@ -414,3 +414,5 @@ export const updatePushToken = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Failed to update token' });
     }
 };
+
+export const register = registerIndividual;

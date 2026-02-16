@@ -22,7 +22,7 @@ export const getOrders = async (req: Request, res: Response) => {
         const supplierIds = await prisma.supplier.findMany({
           where: { accountId: String(req.query.accountId) },
           select: { id: true }
-        }).then(list => list.map(s => s.id));
+        }).then((list: any[]) => list.map((s: any) => s.id));
         where.supplierId = { in: supplierIds };
       }
     } else {
@@ -35,13 +35,13 @@ export const getOrders = async (req: Request, res: Response) => {
         const supplierIds = await prisma.supplier.findMany({
           where: { accountId: user.accountId },
           select: { id: true }
-        }).then(list => list.map(s => s.id));
+        }).then((list: any[]) => list.map((s: any) => s.id));
         where.supplierId = { in: supplierIds };
       } else {
         const supplierIds = await prisma.supplier.findMany({
           where: { userId: authUser.userId },
           select: { id: true }
-        }).then(list => list.map(s => s.id));
+        }).then((list: any[]) => list.map((s: any) => s.id));
         if (supplierIds.length === 0) {
           res.json([]);
           return;
@@ -86,14 +86,14 @@ export const getOrderStatusStats = async (req: Request, res: Response) => {
              const supplierIds = await prisma.supplier.findMany({
                  where: { accountId: user.accountId },
                  select: { id: true }
-             }).then(list => list.map(s => s.id));
+             }).then((list: any[]) => list.map((s: any) => s.id));
              where.supplierId = { in: supplierIds };
         } else {
              // Supplier User
              const supplierIds = await prisma.supplier.findMany({
                  where: { userId: authUser.userId },
                  select: { id: true }
-             }).then(list => list.map(s => s.id));
+             }).then((list: any[]) => list.map((s: any) => s.id));
              
              if (supplierIds.length === 0) {
                  res.json({ ALL: 0, NEW: 0, SENT_TO_SUPPLIER: 0, SHIPPING: 0, DELIVERED: 0, CANCELLED: 0 });
@@ -137,7 +137,7 @@ export const exportOrdersCsv = async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' }
     });
     const header = ['id','customerName','status','totalAmount','itemsCount','createdAt'].join(',');
-    const rows = orders.map(o => {
+    const rows = orders.map((o: any) => {
       const cols = [
         o.id,
         o.customerName || '',
@@ -163,7 +163,7 @@ export const createOrder = async (req: Request, res: Response) => {
   // items should be an array of { productId, quantity, price }
 
   try {
-    const order = await prisma.$transaction(async (tx) => {
+    const order = await prisma.$transaction(async (tx: any) => {
         let orderSupplierId: string | null = null;
         let orderCommissionRate = 0;
 
@@ -337,7 +337,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
                     const suppliers = await prisma.productSupplier.findMany({
                         where: { productId: item.productId }
                     });
-                    const totalAvailable = suppliers.reduce((sum, s) => {
+                    const totalAvailable = suppliers.reduce((sum: number, s: any) => {
                         const available = Math.max(0, s.virtualStock - s.safetyStock);
                         return sum + available;
                     }, 0);
