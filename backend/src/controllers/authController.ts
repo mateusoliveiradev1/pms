@@ -30,10 +30,44 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
     let accountStatus = user.account?.onboardingStatus;
     let accountType = user.account?.type;
 
-    // Determine Context & ID based on Role
-    // SELLER can be linked to a supplier if that legacy structure persists,
-    // but in new model, they are just users in an account.
-    // For now, keeping logic if schema supports it, but Role is strict.
+    // --- SELF-HEALING LOGIC FOR LEGACY ACCOUNTS ---
+    // If user has an account but no default supplier (Legacy issue), fix it now.
+    if (user.account && user.account.id) {
+        let defaultSupplier = await prisma.supplier.findFirst({
+            where: { accountId: user.account.id, isDefault: true },
+            select: { id: true }
+        });
+
+        if (!defaultSupplier) {
+            console.log(`[Auth] Self-Healing: Creating default supplier for user ${user.email}`);
+            try {
+                defaultSupplier = await prisma.supplier.create({
+                    data: {
+                        name: user.account.name || user.name || "Minha Loja",
+                        type: user.account.type === AccountType.INDIVIDUAL ? 'INDIVIDUAL' : 'BUSINESS',
+                        supplierType: 'INTERNAL',
+                        integrationType: 'MANUAL',
+                        status: 'ACTIVE',
+                        active: true,
+                        accountId: user.account.id,
+                        isDefault: true,
+                        planId: user.account.planId || 'basic',
+                        userId: user.id,
+                        financialStatus: 'ACTIVE',
+                        verificationStatus: 'VERIFIED'
+                    },
+                    select: { id: true }
+                });
+            } catch (e) {
+                console.error(`[Auth] Self-Healing Failed:`, e);
+            }
+        }
+        
+        if (defaultSupplier) {
+            activeSupplierId = defaultSupplier.id;
+        }
+    }
+    // ---------------------------------------------
 
     // Normalize Onboarding Status
     if (user.role === Role.SYSTEM_ADMIN) {
