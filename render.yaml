@@ -30,4 +30,4 @@ services:
         value: 12345678901234567890123456789012
       - key: WEBHOOK_SECRET
         value: local-webhook-secret-123
-    autoDeploy: false
+    autoDeploy: true
