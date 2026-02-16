@@ -49,8 +49,8 @@ export const paySubscription = async (req: Request, res: Response) => {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
-      if (user.role === 'SUPPLIER' && supplier.userId !== authUser.userId) {
-        res.status(403).json({ message: 'Forbidden' });
+      if (user.role === 'SELLER' && supplier.userId !== authUser.userId) {
+        res.status(403).json({ error: 'Forbidden' });
         return;
       }
     }
@@ -98,7 +98,7 @@ export const getLedger = async (req: Request, res: Response) => {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
-      if (user.role === 'SUPPLIER' && supplier.userId !== authUser.userId) {
+      if (user.role === 'SELLER' && supplier.userId !== authUser.userId) {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
@@ -118,7 +118,7 @@ export const getLedger = async (req: Request, res: Response) => {
       }
 
       const suppliers =
-        user.role === 'SUPPLIER'
+        user.role === 'SELLER'
           ? await prisma.supplier.findMany({ where: { userId: authUser.userId }, select: { id: true } })
           : await prisma.supplier.findMany({ where: { accountId: user.accountId }, select: { id: true } });
 
@@ -169,7 +169,7 @@ export const getSupplierFinancials = async (req: Request, res: Response) => {
                  res.status(403).json({ message: 'Forbidden' });
                  return;
              }
-             if (user.role === 'SUPPLIER' && supplierCheck.userId !== authUser.userId) {
+             if (user.role === 'SELLER' && supplierCheck.userId !== authUser.userId) {
                  res.status(403).json({ message: 'Forbidden' });
                  return;
              }
@@ -213,7 +213,7 @@ export const withdrawFunds = async (req: Request, res: Response) => {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
-      if (user.role === 'SUPPLIER' && supplier.userId !== authUser.userId) {
+      if (user.role === 'SELLER' && supplier.userId !== authUser.userId) {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
@@ -261,7 +261,7 @@ export const changePlan = async (req: Request, res: Response) => {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
-      if (user.role === 'SUPPLIER' && supplier.userId !== authUser.userId) {
+      if (user.role === 'SELLER' && supplier.userId !== authUser.userId) {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
@@ -306,7 +306,7 @@ export const updateBillingInfo = async (req: Request, res: Response) => {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }
-      if (user.role === 'SUPPLIER' && supplier.userId !== authUser.userId) {
+      if (user.role === 'SELLER' && supplier.userId !== authUser.userId) {
         res.status(403).json({ message: 'Forbidden' });
         return;
       }

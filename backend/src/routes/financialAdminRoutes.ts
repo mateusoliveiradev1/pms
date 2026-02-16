@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { 
-    getSystemFinancialOverview, 
+    getFinancialOverview as getSystemFinancialOverview, 
     listAllWithdrawals, 
     processWithdrawal, 
     updateGlobalSettings 

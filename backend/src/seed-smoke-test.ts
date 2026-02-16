@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, AccountType } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -41,7 +41,7 @@ async function main() {
   const accountA_real = await prisma.account.create({
     data: {
       name: 'Minha Loja Principal (Conta A)',
-      type: 'COMPANY',
+      type: AccountType.BUSINESS,
       planId: plan.id
     }
   });
@@ -49,7 +49,7 @@ async function main() {
   const accountB_real = await prisma.account.create({
     data: {
       name: 'Loja Concorrente (Conta B)',
-      type: 'COMPANY',
+      type: AccountType.BUSINESS,
       planId: plan.id
     }
   });

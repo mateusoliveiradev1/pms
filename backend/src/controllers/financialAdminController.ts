@@ -342,7 +342,7 @@ export const listAllWithdrawals = async (req: Request, res: Response) => {
             where,
             include: {
                 supplier: {
-                    select: { name: true, email: true } // Assuming email is on User, but here simpler
+                    select: { name: true }
                 }
             },
             orderBy: { requestedAt: 'desc' }

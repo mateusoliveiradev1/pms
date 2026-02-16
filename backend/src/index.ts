@@ -170,10 +170,10 @@ app.use(globalErrorHandler);
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT} in ${env.APP_ENV} mode`);
-  logger.info('Server started immediately, seeding in background...');
+  logger.info({ action: 'STARTUP', message: 'Server started immediately, seeding in background...' });
   
   // Seed Admin on Start
-  ensureAdminUser().catch(err => logger.error('Admin seed failed', err));
+  ensureAdminUser().catch(err => logger.error({ action: 'ADMIN_SEED_FAIL', message: 'Admin seed failed', metadata: err }));
 });
 
 // Keep-alive to prevent premature exit in dev environment

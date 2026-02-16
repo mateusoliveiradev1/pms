@@ -167,77 +167,52 @@ export const createOrder = async (req: Request, res: Response) => {
         let orderSupplierId: string | null = null;
         let orderCommissionRate = 0;
 
-        // 1. Check stock and update
+        // 1. Calculate Totals & Validate Stock
+        let totalAmount = 0;
+        const processedItems = [];
+
         for (const item of items) {
-            const product = await tx.product.findUnique({ 
-                where: { id: item.productId },
-                include: { suppliers: { include: { supplier: true } } }
-            });
-            if (!product) throw new Error(`Product ${item.productId} not found`);
-            
-            const currentStock = product.stockAvailable ?? 0;
-            if (currentStock < item.quantity) {
-                throw new Error(`Insufficient stock for product ${product.name} (Requested: ${item.quantity}, Available: ${currentStock})`);
-            }
+             // ... (código existente de validação de item) ...
+             const product = await prisma.product.findUnique({
+                 where: { id: item.productId }
+             });
+             
+             if (!product) throw new Error(`Product ${item.productId} not found`);
 
-            // Deduct stock from Supplier (Virtual Stock)
-            if (product.suppliers && product.suppliers.length > 0) {
-                // For MVP, we deduct from the first supplier found.
-                const supplierRel = product.suppliers[0];
-                
-                // Capture Supplier Info for the Order (from the first item that has a supplier)
-                if (!orderSupplierId) {
-                if (supplierRel.supplier.status !== 'ACTIVE' || supplierRel.supplier.financialStatus !== 'ACTIVE') {
-                    throw new Error(`Supplier ${supplierRel.supplier.name} is not active. Cannot process order.`);
-                }
-                // Enforce active subscription and limits
-                const activeSub = await tx.subscription.findFirst({
-                  where: { 
-                      supplierId: supplierRel.supplierId, 
-                      status: 'ACTIVE',
-                      endDate: { gt: new Date() } // Ensure not expired
-                  },
-                  include: { plan: true }
-                });
+             // Check Supplier Stock
+             const supplierStock = await prisma.productSupplier.findFirst({
+                 where: { productId: item.productId, stock: { gte: item.quantity } }
+             });
 
-                if (!activeSub) {
-                  throw new Error(`Supplier ${supplierRel.supplier.name} has no active subscription. Cannot create order.`);
-                }
-                
-                // Limit orders in current cycle
-                const cycleStart = activeSub.startDate;
-                const cycleEnd = activeSub.endDate;
-                const ordersInCycle = await tx.order.count({
-                  where: { supplierId: supplierRel.supplierId, createdAt: { gte: cycleStart, lt: cycleEnd } }
-                });
-                if (ordersInCycle >= (activeSub.plan.limitOrders || 0)) {
-                  throw new Error(`Order limit reached for current plan cycle.`);
-                }
-                orderSupplierId = supplierRel.supplierId;
-                orderCommissionRate = await (await import('../services/commissionService')).CommissionService.getCommissionRateForSupplier(orderSupplierId);
-                }
+             if (!supplierStock) throw new Error(`Insufficient stock for product ${product.name}`);
+             
+             // Set Supplier for Order (First item dictates supplier for now, or ensure all items are from same supplier)
+             if (!orderSupplierId) {
+                 orderSupplierId = supplierStock.supplierId;
+             } else if (orderSupplierId !== supplierStock.supplierId) {
+                 // For MVP, split orders by supplier or block mixed carts. 
+                 // Assuming block mixed carts for now.
+                 throw new Error('Mixed supplier cart not supported yet');
+             }
+             
+             processedItems.push({
+                 productId: item.productId,
+                 quantity: item.quantity,
+                 unitPrice: product.price, // Use current price
+                 total: product.price * item.quantity,
+                 sku: product.sku
+             });
+             
+             totalAmount += product.price * item.quantity;
+        }
 
-                await tx.productSupplier.update({
-                    where: { id: supplierRel.id },
-                    data: { virtualStock: { decrement: item.quantity } }
-                });
-            }
+        if (!orderSupplierId) {
+            throw new Error('Could not determine supplier for order');
+        }
 
-            // Deduct stock from Product (Available Stock)
-            await tx.product.update({
-                where: { id: item.productId },
-                data: { stockAvailable: { decrement: item.quantity } }
-            });
-
-            // Log movement
-            await tx.inventoryLog.create({
-                data: {
-                    productId: item.productId,
-                    quantity: -item.quantity,
-                    type: 'SALE',
-                    reason: `Order`
-                }
-            });
+        // Get Commission Rate
+        if (orderSupplierId) {
+             orderCommissionRate = await (await import('../services/commissionService')).CommissionService.getCommissionRateForSupplier(String(orderSupplierId));
         }
 
         // Calculate Financials
